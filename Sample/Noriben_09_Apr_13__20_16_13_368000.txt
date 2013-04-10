@@ -1,0 +1,220 @@
+Processes Created:
+==================
+[CreateProcess] Explorer.EXE:1432 > "C:\Documents and Settings\Administrator\Desktop\hehda.exe"	[Child PID: 2520]
+[CreateProcess] hehda.exe:2520 > "C:\WINDOWS\system32\cmd.exe"	[Child PID: 3444]
+[CreateProcess] services.exe:680 > "C:\WINDOWS\System32\svchost.exe -k HTTPFilter"	[Child PID: 3512]
+
+File Activity:
+==================
+[New Folder] hehda.exe:2520 > C:\RECYCLER\S-1-5-21-861567501-412668190-725345543-500\$fab110457830839344b58457ddd1f357
+[New Folder] hehda.exe:2520 > C:\RECYCLER\S-1-5-21-861567501-412668190-725345543-500\$fab110457830839344b58457ddd1f357\L
+[New Folder] hehda.exe:2520 > C:\RECYCLER\S-1-5-21-861567501-412668190-725345543-500\$fab110457830839344b58457ddd1f357\U
+[CreateFile] hehda.exe:2520 > C:\RECYCLER\S-1-5-21-861567501-412668190-725345543-500\$fab110457830839344b58457ddd1f357\@	[MD5: 1a2bb299acc354c42a8f05307e6de78c]
+[CreateFile] hehda.exe:2520 > C:\RECYCLER\S-1-5-21-861567501-412668190-725345543-500\$fab110457830839344b58457ddd1f357\n	[MD5: cfaddbb43ba973f8d15d7d2e50c63476]
+[New Folder] hehda.exe:2520 > C:\RECYCLER\S-1-5-18
+[New Folder] hehda.exe:2520 > C:\RECYCLER\S-1-5-18\$fab110457830839344b58457ddd1f357
+[New Folder] hehda.exe:2520 > C:\RECYCLER\S-1-5-18\$fab110457830839344b58457ddd1f357\L
+[New Folder] hehda.exe:2520 > C:\RECYCLER\S-1-5-18\$fab110457830839344b58457ddd1f357\U
+[CreateFile] hehda.exe:2520 > C:\RECYCLER\S-1-5-18\$fab110457830839344b58457ddd1f357\@	[MD5: 1a2bb299acc354c42a8f05307e6de78c]
+[CreateFile] hehda.exe:2520 > C:\RECYCLER\S-1-5-18\$fab110457830839344b58457ddd1f357\n	[MD5: cfaddbb43ba973f8d15d7d2e50c63476]
+[CreateFile] services.exe:680 > C:\RECYCLER\S-1-5-18\$fab110457830839344b58457ddd1f357\@	[MD5: 1a2bb299acc354c42a8f05307e6de78c]
+[New Folder] services.exe:680 > C:\RECYCLER\S-1-5-18\$fab110457830839344b58457ddd1f357\U
+[CreateFile] hehda.exe:2520 > C:\Documents and Settings\Administrator\Desktop\hehda.exe	[File no longer exists]
+[DeleteFile] cmd.exe:3444 > C:\Documents and Settings\Administrator\Desktop\hehda.exe
+[New Folder] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files
+[New Folder] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\History
+[New Folder] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\index.dat	[File no longer exists]
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\index.dat	[File no longer exists]
+[New Folder] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\C7S1Y1S5	[File no longer exists]
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\C7S1Y1S5	[File no longer exists]
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\C7S1Y1S5\desktop.ini	[File no longer exists]
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\C7S1Y1S5\desktop.ini	[File no longer exists]
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\MNSPC5SB	[File no longer exists]
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\MNSPC5SB	[File no longer exists]
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\MNSPC5SB\desktop.ini	[File no longer exists]
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\MNSPC5SB\desktop.ini	[File no longer exists]
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\WLSD0X4N	[File no longer exists]
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\WLSD0X4N	[File no longer exists]
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\WLSD0X4N\desktop.ini	[File no longer exists]
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\WLSD0X4N\desktop.ini	[File no longer exists]
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\KBC5ABCF	[File no longer exists]
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\KBC5ABCF	[File no longer exists]
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\KBC5ABCF\desktop.ini	[File no longer exists]
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\KBC5ABCF\desktop.ini	[File no longer exists]
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\IYYZK06E\desktop.ini	[MD5: 4a3deb274bb5f0212c2419d3d8d08612]
+[DeleteFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\IYYZK06E\desktop.ini
+[New Folder] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\IYYZK06E
+[DeleteFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\IYYZK06E
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\U4XVUSJZ\desktop.ini	[MD5: 4a3deb274bb5f0212c2419d3d8d08612]
+[DeleteFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\U4XVUSJZ\desktop.ini
+[New Folder] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\U4XVUSJZ
+[DeleteFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\U4XVUSJZ
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\XPZVPHW0\desktop.ini	[MD5: 4a3deb274bb5f0212c2419d3d8d08612]
+[DeleteFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\XPZVPHW0\desktop.ini
+[New Folder] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\XPZVPHW0
+[DeleteFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\XPZVPHW0
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\XXZZYQ9C\desktop.ini	[MD5: 4a3deb274bb5f0212c2419d3d8d08612]
+[DeleteFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\XXZZYQ9C\desktop.ini
+[New Folder] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\XXZZYQ9C
+[DeleteFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\XXZZYQ9C
+[New Folder] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Cookies
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Cookies\index.dat	[File no longer exists]
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Cookies\index.dat	[File no longer exists]
+[New Folder] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\History\History.IE5
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\History\History.IE5\index.dat	[File no longer exists]
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\History\History.IE5\index.dat	[File no longer exists]
+[New Folder] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5
+[New Folder] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\History\History.IE5
+[CreateFile] svchost.exe:1032 > C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\index.dat	[File no longer exists]
+
+Registry Activity:
+==================
+[CreateKey] Explorer.EXE:1432 > HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartPage
+[Set Value] Explorer.EXE:1432 > HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartPage\ProgramsCache  =  09 00 00 00 0B 00 56 00 00 00 54 00 31 00 00 00 ...
+[CreateKey] hehda.exe:2520 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] hehda.exe:2520 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] hehda.exe:2520 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] hehda.exe:2520 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] hehda.exe:2520 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] hehda.exe:2520 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] hehda.exe:2520 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] hehda.exe:2520 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] hehda.exe:2520 > HKCU\Software\Classes\clsid
+[CreateKey] hehda.exe:2520 > HKCU\Software\Classes\CLSID\{fbeb8a05-beee-4442-804e-409d6c4515e9}
+[CreateKey] hehda.exe:2520 > HKCU\Software\Classes\CLSID\{fbeb8a05-beee-4442-804e-409d6c4515e9}\InprocServer32
+[Set Value] hehda.exe:2520 > HKCU\Software\Classes\CLSID\{fbeb8a05-beee-4442-804e-409d6c4515e9}\InprocServer32\ThreadingModel  =  Both
+[Set Value] hehda.exe:2520 > HKCU\Software\Classes\CLSID\{fbeb8a05-beee-4442-804e-409d6c4515e9}\InprocServer32\(Default)  =  C:\RECYCLER\S-1-5-21-861567501-412668190-725345543-500\$fab110457830839344b58457ddd1f357\n.
+[Set Value] svchost.exe:1032 > HKLM\System\CurrentControlSet\Services\SharedAccess\Epoch\Epoch  =  404
+[CreateKey] svchost.exe:1204 > HKLM\SYSTEM\CurrentControlSet\Services\SharedAccess\Epoch
+[CreateKey] svchost.exe:1032 > HKLM\SYSTEM\CurrentControlSet\Services\SharedAccess\Epoch
+[CreateKey] svchost.exe:1032 > HKLM\SYSTEM\CurrentControlSet\Services\SharedAccess\Epoch
+[CreateKey] svchost.exe:1032 > HKLM\SYSTEM\CurrentControlSet\Services\SharedAccess\Epoch
+[Set Value] services.exe:680 > HKLM\System\CurrentControlSet\Services\SharedAccess\Type  =  32
+[Set Value] services.exe:680 > HKLM\System\CurrentControlSet\Services\SharedAccess\Start  =  4
+[Set Value] services.exe:680 > HKLM\System\CurrentControlSet\Services\SharedAccess\ErrorControl  =  0
+[Set Value] services.exe:680 > HKLM\System\CurrentControlSet\Services\SharedAccess\DeleteFlag  =  1
+[Set Value] services.exe:680 > HKLM\System\CurrentControlSet\Services\SharedAccess\Start  =  4
+[CreateKey] services.exe:680 > HKLM\System\CurrentControlSet\Control\Class\{8ECC055D-047F-11D1-A537-0000F8753ED1}\0000
+[CreateKey] services.exe:680 > HKLM\System\CurrentControlSet\Services\SharedAccess\Enum
+[Set Value] services.exe:680 > HKLM\System\CurrentControlSet\Services\SharedAccess\Enum\Count  =  0
+[Set Value] services.exe:680 > HKLM\System\CurrentControlSet\Services\SharedAccess\Enum\NextInstance  =  0
+[Set Value] services.exe:680 > HKLM\System\CurrentControlSet\Services\wscsvc\Type  =  32
+[Set Value] services.exe:680 > HKLM\System\CurrentControlSet\Services\wscsvc\Start  =  4
+[Set Value] services.exe:680 > HKLM\System\CurrentControlSet\Services\wscsvc\ErrorControl  =  0
+[CreateKey] svchost.exe:1204 > HKLM\SYSTEM
+[CreateKey] svchost.exe:1204 > HKLM\SYSTEM\CurrentControlSet
+[CreateKey] svchost.exe:1204 > HKLM\System\CurrentControlSet\Services
+[CreateKey] svchost.exe:1032 > HKLM\SYSTEM
+[CreateKey] svchost.exe:1032 > HKLM\SYSTEM\CurrentControlSet
+[CreateKey] svchost.exe:1032 > HKLM\SYSTEM
+[CreateKey] svchost.exe:1032 > HKLM\SYSTEM\CurrentControlSet
+[Set Value] services.exe:680 > HKLM\System\CurrentControlSet\Services\wscsvc\DeleteFlag  =  1
+[Set Value] services.exe:680 > HKLM\System\CurrentControlSet\Services\wscsvc\Start  =  4
+[CreateKey] svchost.exe:1032 > HKLM\System\CurrentControlSet\Services
+[CreateKey] svchost.exe:1032 > HKLM\System\CurrentControlSet\Services
+[CreateKey] svchost.exe:1032 > HKLM\System\CurrentControlSet\Services\SharedAccess
+[CreateKey] svchost.exe:1032 > HKLM\System\CurrentControlSet\Services\SharedAccess\Epoch
+[CreateKey] svchost.exe:1032 > HKLM\System\CurrentControlSet\Services\SharedAccess
+[CreateKey] svchost.exe:1032 > HKLM\System\CurrentControlSet\Services\SharedAccess\Epoch
+[CreateKey] svchost.exe:1032 > HKLM\SYSTEM\CurrentControlSet\Services\SharedAccess\Epoch
+[CreateKey] svchost.exe:1032 > HKCU\Software\Microsoft\Windows NT\CurrentVersion\Winlogon
+[CreateKey] svchost.exe:1032 > HKLM\System\CurrentControlSet\Control\Network\{4D36E972-E325-11CE-BFC1-08002BE10318}\{D83D4666-172B-44E4-A469-B21B904CD7B9}\Connection
+[Set Value] svchost.exe:1032 > HKLM\System\CurrentControlSet\Control\Network\{4D36E972-E325-11CE-BFC1-08002BE10318}\{D83D4666-172B-44E4-A469-B21B904CD7B9}\Connection\PnpInstanceID  =  PCI\VEN_1022&DEV_2000&SUBSYS_20001022&REV_10\4&47B7341&0&0088
+[Set Value] hehda.exe:2520 > HKCR\CLSID\{5839FCA9-774D-42A1-ACDA-D6A79037F57F}\InprocServer32\(Default)  =  C:\RECYCLER\S-1-5-18\$fab110457830839344b58457ddd1f357\n.
+[CreateKey] winlogon.exe:636 > HKLM\Software\Microsoft\Windows NT\CurrentVersion\ProfileList\S-1-5-19
+[Set Value] winlogon.exe:636 > HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\S-1-5-19\RefCount  =  1
+[CreateKey] services.exe:680 > HKLM\System\CurrentControlSet\Control\Class\{8ECC055D-047F-11D1-A537-0000F8753ED1}\0000
+[CreateKey] services.exe:680 > HKLM\System\CurrentControlSet\Services\wscsvc\Enum
+[Set Value] services.exe:680 > HKLM\System\CurrentControlSet\Services\wscsvc\Enum\Count  =  0
+[Set Value] services.exe:680 > HKLM\System\CurrentControlSet\Services\wscsvc\Enum\NextInstance  =  0
+[CreateKey] wscntfy.exe:4052 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] wscntfy.exe:4052 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] wscntfy.exe:4052 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] svchost.exe:1032 > HKCU\Software\Microsoft\Windows NT\CurrentVersion\Winlogon
+[CreateKey] wscntfy.exe:4052 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] wscntfy.exe:4052 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] wscntfy.exe:4052 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] wscntfy.exe:4052 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] wscntfy.exe:4052 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] svchost.exe:1032 > HKLM\Software\Microsoft\RAS AutoDial
+[CreateKey] svchost.exe:1032 > HKLM\SOFTWARE\Microsoft\RAS AutoDial\Default
+[CreateKey] cmd.exe:3444 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[Set Value] svchost.exe:1032 > HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\Directory  =  C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5
+[Set Value] svchost.exe:1032 > HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\Paths  =  4
+[Set Value] svchost.exe:1032 > HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\path1\CachePath  =  C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\Cache1
+[Set Value] svchost.exe:1032 > HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\path2\CachePath  =  C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\Cache2
+[Set Value] svchost.exe:1032 > HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\path3\CachePath  =  C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\Cache3
+[Set Value] svchost.exe:1032 > HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\path4\CachePath  =  C:\Documents and Settings\NetworkService\Local Settings\Temporary Internet Files\Content.IE5\Cache4
+[Set Value] svchost.exe:1032 > HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\path1\CacheLimit  =  327603
+[Set Value] svchost.exe:1032 > HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\path2\CacheLimit  =  327603
+[Set Value] svchost.exe:1032 > HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\path3\CacheLimit  =  327603
+[Set Value] svchost.exe:1032 > HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\path4\CacheLimit  =  327603
+[Set Value] svchost.exe:1032 > HKU\.DEFAULT\Software\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\ProxyBypass  =  1
+[Set Value] svchost.exe:1032 > HKU\.DEFAULT\Software\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\IntranetName  =  1
+[Set Value] svchost.exe:1032 > HKU\.DEFAULT\Software\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\UNCAsIntranet  =  1
+[Set Value] svchost.exe:1032 > HKU\.DEFAULT\Software\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\ProxyBypass  =  1
+[Set Value] svchost.exe:1032 > HKU\.DEFAULT\Software\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\IntranetName  =  1
+[Set Value] svchost.exe:1032 > HKU\.DEFAULT\Software\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\UNCAsIntranet  =  1
+[CreateKey] services.exe:680 > HKLM\System\CurrentControlSet\Services\HTTPFilter\Enum
+[Set Value] services.exe:680 > HKLM\System\CurrentControlSet\Services\HTTPFilter\Enum\0  =  Root\LEGACY_HTTPFILTER\0000
+[Set Value] services.exe:680 > HKLM\System\CurrentControlSet\Services\HTTPFilter\Enum\Count  =  1
+[Set Value] services.exe:680 > HKLM\System\CurrentControlSet\Services\HTTPFilter\Enum\NextInstance  =  1
+[Set Value] services.exe:680 > HKLM\System\CurrentControlSet\Control\ServiceCurrent\(Default)  =  15
+[CreateKey] svchost.exe:3512 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] svchost.exe:3512 > HKU\.DEFAULT\Software\Microsoft\Multimedia\Audio
+[CreateKey] svchost.exe:3512 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] svchost.exe:3512 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] svchost.exe:3512 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] svchost.exe:3512 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] svchost.exe:3512 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] svchost.exe:3512 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] svchost.exe:3512 > HKLM\SOFTWARE\Microsoft\Cryptography\RNG
+[CreateKey] svchost.exe:3512 > HKLM\System\CurrentControlSet\Services\HTTP\Parameters\SslBindingInfo
+[CreateKey] svchost.exe:3512 > HKLM\System\CurrentControlSet\Services\HTTP\Parameters\Synchronize
+[CreateKey] svchost.exe:3512 > HKLM\System\CurrentControlSet\Services\HTTP\Parameters\UrlAclInfo
+
+Network Traffic:
+==================
+[UDP] hehda.exe:2520 > google-public-dns-a.google.com:53
+[UDP] google-public-dns-a.google.com:53 > hehda.exe:2520
+[TCP] hehda.exe:2520 > 50.22.196.70-static.reverse.softlayer.com:80
+[TCP] 50.22.196.70-static.reverse.softlayer.com:80 > hehda.exe:2520
+[UDP] hehda.exe:2520 > 83.133.123.20:53
+[UDP] svchost.exe:1032 > 239.255.255.250:1900
+[UDP] localhost:1243 > svchost.exe:1204
+[UDP] services.exe:680 > 206.254.253.254:16471
+[UDP] services.exe:680 > 190.254.253.254:16471
+[UDP] localhost:1253 > svchost.exe:1032
+[UDP] svchost.exe:1032 > localhost:1253
+[UDP] services.exe:680 > 182.254.253.254:16471
+[UDP] services.exe:680 > 180.254.253.254:16471
+[UDP] services.exe:680 > 135.254.253.254:16471
+[UDP] services.exe:680 > 134.254.253.254:16471
+[UDP] services.exe:680 > 117.254.253.254:16471
+[UDP] services.exe:680 > 115.254.253.254:16471
+[UDP] services.exe:680 > 92.254.253.254:16471
+[UDP] svchost.exe:1032 > localhost:1242
+[UDP] localhost:1243 > svchost.exe:1032
+[UDP] svchost.exe:1032 > localhost:1243
+[UDP] services.exe:680 > 88.254.253.254.dynamic.ttnet.com.tr:16471
+[UDP] services.exe:680 > 254.253.254.87.dynamic.monaco.mc:16471
+
+Unique Hosts:
+==================
+115.254.253.254
+117.254.253.254
+134.254.253.254
+135.254.253.254
+180.254.253.254
+182.254.253.254
+190.254.253.254
+206.254.253.254
+239.255.255.250
+254.253.254.87.dynamic.monaco.mc
+50.22.196.70-static.reverse.softlayer.com
+83.133.123.20
+88.254.253.254.dynamic.ttnet.com.tr
+92.254.253.254
+google-public-dns-a.google.com
