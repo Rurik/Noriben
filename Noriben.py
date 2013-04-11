@@ -1,7 +1,7 @@
 # Noriben Malware Analysis Sandbox
 # Version 1.0 - 10 Apr 13 - @bbaskin
 #
-# Gracious edits, revisions, and corrections by Daniel Rayzoga
+# Gracious edits, revisions, and corrections by Daniel Raygoza
 #
 # Directions:
 # Just copy Noriben.py to a Windows-based VM alongside the Sysinternals Procmon.exe
