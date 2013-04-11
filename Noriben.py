@@ -38,6 +38,7 @@ file_blacklist = ["C:\\Documents and Settings\\Administrator\\Recent\\",
                   "C:\\Documents and Settings\\Administrator\\Application Data\\Microsoft\\Templates",
                   "C:\\Documents and Settings\\Administrator\\Application Data\\Microsoft\\Proof",
                   "C:\\Documents and Settings\\All Users\\Application Data\\Microsoft\\OFFICE\\DATA",
+                  "C:\\Python",
                   "C:\\WINDOWS\\assembly",
                   "C:\\WINDOWS\\system32\\wbem\\Logs\\"]
 
@@ -49,6 +50,8 @@ reg_blacklist = ["HKLM\System\CurrentControlSet\Services\Tcpip\Parameters",
                  "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Shell Extensions",
                  "HKLM\\System\\CurrentControlSet\\Services\\WinSock2\\Parameters",
                  "HKLM\\System\\CurrentControlSet\\Control\\DeviceClasses",
+                 "HKLM\\Software\\Microsoft\\WBEM\\WDM",
+                 "HKCU\\Software\\Microsoft\\Windows\\Shell",
                  "HKCU\\Software\\Microsoft\\Multimedia\\Audio",
                  "HKCU\\Software\\Microsoft\\Shared Tools",
                  "HKCU\\Software\\Microsoft\\Windows\\ShellNoRoam\\MUICache",
@@ -155,10 +158,10 @@ def parse_csv(txt_file, csv_file, debug):
     output.append('==================')
 
     for line in data:
-        line = line.strip('"').strip().strip('"')
-        field = line.strip().split('","')
-        if line[0] == '\t':  # Ignore lines that begin with Tab. Procmon broke CSV with this
+        if line[0] != '"':  # Ignore lines that begin with Tab. Sysinternals breaks CSV with new processes
             continue
+        line = line.strip(whitespace + '"')
+        field = line.strip().split('","')
         try:
             if field[3] in ["Process Create"] and field[5] == "SUCCESS":
                 cmdline = field[6].split("Command line: ")[1]
@@ -176,9 +179,9 @@ def parse_csv(txt_file, csv_file, debug):
     output.append('==================')
 
     for line in data:
-        line = line.strip(whitespace + '"')
-        if line[0] == '\t':  # Ignore lines that begin with Tab. Procmon broke CSV with this
+        if line[0] != '"':  # Ignore lines that begin with Tab. Sysinternals breaks CSV with new processes
             continue
+        line = line.strip(whitespace + '"')
         field = line.split('","')
         try:
             if field[3] == "CreateFile" and field[5] == "SUCCESS":
@@ -210,9 +213,9 @@ def parse_csv(txt_file, csv_file, debug):
     output.append('==================')
 
     for line in data:
-        line = line.strip(whitespace + '"')
-        if line[0] == "\t":  # Ignore lines that begin with Tab. Sysinternals breaks CSV with new processes
+        if line[0] != '"':  # Ignore lines that begin with Tab. Sysinternals breaks CSV with new processes
             continue
+        line = line.strip(whitespace + '"')
         field = line.split('","')
         if field[3] == "RegCreateKey" and field[5] == "SUCCESS":
             if not blacklist_scan(reg_blacklist, field):
@@ -240,9 +243,9 @@ def parse_csv(txt_file, csv_file, debug):
         # Now, make sure entry doesn't exist in list before writing it to output
         output_line = ''
         server = ''
-        line = line.strip(whitespace + '"')
-        if line[0] == '\t':  # Ignore lines that begin with Tab. Sysinternals breaks CSV with this
+        if line[0] != '"':  # Ignore lines that begin with Tab. Sysinternals breaks CSV with new processes
             continue
+        line = line.strip(whitespace + '"')
         field = line.split('","')
         try:
             if field[3] == "UDP Send" and field[5] == "SUCCESS":
