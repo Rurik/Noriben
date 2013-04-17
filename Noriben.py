@@ -31,7 +31,7 @@ cmd_blacklist = ["C:\\WINDOWS\\system32\\wbem\\wmiprvse.exe -Embedding",
                  "Procmon.exe  /Terminate",
                  "C:\\WINDOWS\\system32\\wscntfy.exe"]
 
-file_blacklist = ["C:\\Documents and Settings\\Administrator\\Recent\\",
+file_blacklist = ["C:\\Documents and Settings\\Administrator\\Recent\\",  # These will eventually be parsed to %UserProfile% in future version
                   "C:\\Documents and Settings\\Administrator\\Application Data\\Microsoft\\Proof\\",
                   "C:\\Documents and Settings\\Administrator\\Local Settings\\History\\History.IE5",
                   "C:\\Documents and Settings\\Administrator\\Application Data\\Microsoft\\Office",
@@ -40,7 +40,9 @@ file_blacklist = ["C:\\Documents and Settings\\Administrator\\Recent\\",
                   "C:\\Documents and Settings\\All Users\\Application Data\\Microsoft\\OFFICE\\DATA",
                   "C:\\Python",
                   "C:\\WINDOWS\\assembly",
-                  "C:\\WINDOWS\\system32\\wbem\\Logs\\"]
+                  "C:\\WINDOWS\\system32\\wbem\\Logs\\",
+                  "wmiprvse.exe",
+                  "Read Data/List Directory"]  # Should reduce large number of false "New Folders"
 
 reg_blacklist = ["HKLM\System\CurrentControlSet\Services\Tcpip\Parameters",
                  "HKLM\\System\\CurrentControlSet\\Enum\\",
