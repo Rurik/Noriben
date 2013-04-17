@@ -28,7 +28,7 @@ from time import sleep
 __VERSION__ = "1.0"
 
 cmd_blacklist = ["C:\\WINDOWS\\system32\\wbem\\wmiprvse.exe -Embedding",
-                 "Procmon.exe  /Terminate",
+                 "procmon.exe /Terminate",
                  "C:\\WINDOWS\\system32\\wscntfy.exe"]
 
 file_blacklist = ["C:\\Documents and Settings\\Administrator\\Recent\\",  # These will eventually be parsed to %UserProfile% in future version
