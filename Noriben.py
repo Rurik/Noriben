@@ -28,10 +28,23 @@ from time import sleep
 __VERSION__ = "1.0"
 
 cmd_blacklist = ["C:\\WINDOWS\\system32\\wbem\\wmiprvse.exe -Embedding",
-                 "procmon.exe /Terminate",
-                 "C:\\WINDOWS\\system32\\wscntfy.exe"]
+                 "C:\\WINDOWS\\system32\\wscntfy.exe",
+                 "procmon.exe",
+                 "wuauclt.exe",
+                 "jqs.exe",
+                 "TCPView.exe"]
 
-file_blacklist = ["C:\\Documents and Settings\\Administrator\\Recent\\",  # These will eventually be parsed to %UserProfile% in future version
+file_blacklist = ["procmon.exe",
+                  "Desired Access: Execute/Traverse",
+                  "Desired Access: Synchronize",
+                  "Desired Access: Generic Read/Execute",
+                  "Desired Access: Read EA",
+                  "Desired Access: Read Data/List",
+                  "Desired Access: Generic Read",
+                  "Desired Access: Read Attributes",
+                  "wuauclt.exe",
+                  "wmiprvse.exe",
+                  "C:\\Documents and Settings\\Administrator\\Recent\\",  # These will eventually be parsed to %UserProfile% in future version
                   "C:\\Documents and Settings\\Administrator\\Application Data\\Microsoft\\Proof\\",
                   "C:\\Documents and Settings\\Administrator\\Local Settings\\History\\History.IE5",
                   "C:\\Documents and Settings\\Administrator\\Application Data\\Microsoft\\Office",
@@ -41,10 +54,12 @@ file_blacklist = ["C:\\Documents and Settings\\Administrator\\Recent\\",  # Thes
                   "C:\\Python",
                   "C:\\WINDOWS\\assembly",
                   "C:\\WINDOWS\\system32\\wbem\\Logs\\",
-                  "wmiprvse.exe",
-                  "Read Data/List Directory"]  # Should reduce large number of false "New Folders"
+                  "wmiprvse.exe"]
 
-reg_blacklist = ["HKLM\System\CurrentControlSet\Services\Tcpip\Parameters",
+reg_blacklist = ["procmon.exe",
+                 "wuauclt.exe",
+                 "wmiprvse.exe",
+                 "HKLM\System\CurrentControlSet\Services\Tcpip\Parameters",
                  "HKLM\\System\\CurrentControlSet\\Enum\\",
                  "HKLM\\SOFTWARE\\Microsoft\\WBEM",
                  "HKLM\\System\\CurrentControlSet\\Control\\MediaProperties",
@@ -141,7 +156,7 @@ def blacklist_scan(blacklist, data):
 ##########################################################
     for event in data:
         for bad in blacklist:
-            if bad in event:
+            if bad.upper() in event.upper():
                 return True
     return False
 
