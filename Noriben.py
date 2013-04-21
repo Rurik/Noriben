@@ -1,5 +1,6 @@
 # Noriben Malware Analysis Sandbox
 # Version 1.0 - 10 Apr 13 - @bbaskin
+# Version 1.1 - 21 Apr 13 - Much improved filters and filter parsing.
 #
 # Gracious edits, revisions, and corrections by Daniel Raygoza
 #
@@ -18,6 +19,7 @@ import os
 import subprocess
 import sys
 import hashlib
+import re
 from string import whitespace
 from datetime import datetime
 from argparse import ArgumentParser
@@ -25,10 +27,10 @@ from traceback import format_exc
 from time import sleep
 
 
-__VERSION__ = "1.0"
+__VERSION__ = "1.1"
 
-cmd_blacklist = ["C:\\WINDOWS\\system32\\wbem\\wmiprvse.exe -Embedding",
-                 "C:\\WINDOWS\\system32\\wscntfy.exe",
+cmd_blacklist = ["%SystemRoot%\\system32\\wbem\\wmiprvse.exe",
+                 "%SystemRoot%\\system32\\wscntfy.exe",
                  "procmon.exe",
                  "wuauclt.exe",
                  "jqs.exe",
@@ -44,22 +46,23 @@ file_blacklist = ["procmon.exe",
                   "Desired Access: Read Attributes",
                   "wuauclt.exe",
                   "wmiprvse.exe",
-                  "C:\\Documents and Settings\\Administrator\\Recent\\",  # These will eventually be parsed to %UserProfile% in future version
-                  "C:\\Documents and Settings\\Administrator\\Application Data\\Microsoft\\Proof\\",
-                  "C:\\Documents and Settings\\Administrator\\Local Settings\\History\\History.IE5",
-                  "C:\\Documents and Settings\\Administrator\\Application Data\\Microsoft\\Office",
-                  "C:\\Documents and Settings\\Administrator\\Application Data\\Microsoft\\Templates",
-                  "C:\\Documents and Settings\\Administrator\\Application Data\\Microsoft\\Proof",
-                  "C:\\Documents and Settings\\All Users\\Application Data\\Microsoft\\OFFICE\\DATA",
-                  "C:\\Python",
-                  "C:\\WINDOWS\\assembly",
-                  "C:\\WINDOWS\\system32\\wbem\\Logs\\",
+                  "%UserProfile%\\Recent\\",
+                  "%AllUsersProfile%\\Application Data\\Microsoft\\OFFICE\\DATA",
+                  "%AppData%\\Microsoft\\Proof\\",
+                  "%AppData%\\Microsoft\\Office",
+                  "%AppData%\\Microsoft\\Templates\\",
+                  "%UserProfile%\\Local Settings\\History\\History.IE5\\",
+                  "%SystemDrive%\\Python",
+                  "%SystemRoot%\\assembly",
+                  "%SystemRoot%\\system32\\wbem\\Logs\\",
+                  "%SystemRoot%\\Prefetch\\",
                   "wmiprvse.exe"]
 
 reg_blacklist = ["procmon.exe",
                  "wuauclt.exe",
                  "wmiprvse.exe",
-                 "HKLM\System\CurrentControlSet\Services\Tcpip\Parameters",
+                 "wscntfy.exe",
+                 "HKLM\\System\\CurrentControlSet\\Services\\Tcpip\\Parameters",
                  "HKLM\\System\\CurrentControlSet\\Enum\\",
                  "HKLM\\SOFTWARE\\Microsoft\\WBEM",
                  "HKLM\\System\\CurrentControlSet\\Control\\MediaProperties",
@@ -68,6 +71,8 @@ reg_blacklist = ["procmon.exe",
                  "HKLM\\System\\CurrentControlSet\\Services\\WinSock2\\Parameters",
                  "HKLM\\System\\CurrentControlSet\\Control\\DeviceClasses",
                  "HKLM\\Software\\Microsoft\\WBEM\\WDM",
+                 "HKLM\\System\\CurrentControlSet\\Services\\CaptureRegistryMonitor",
+                 "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\MountPoints2",
                  "HKCU\\Software\\Microsoft\\Windows\\Shell",
                  "HKCU\\Software\\Microsoft\\Multimedia\\Audio",
                  "HKCU\\Software\\Microsoft\\Shared Tools",
@@ -87,7 +92,8 @@ reg_blacklist = ["procmon.exe",
                  "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\MenuOrder",
                  "Software\\Microsoft\\Windows\\ShellNoRoam\\Bags",
                  "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\.doc",
-                 "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\RecentDocs"]
+                 "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\RecentDocs",
+                 "LEGACY_CAPTUREREGISTRYMONITOR"]
 
 net_blacklist = ["hasplms.exe"]  # Hasp dongle beacons
                  #"192.168.2.", # Particular to my network
@@ -110,7 +116,7 @@ def check_procmon():
 ##########################################################
 # Finds the local path to Procmon
 ##########################################################
-    procmon = "procmon.exe"
+    procmon = "procmon.exe"  # Change this if you have a renamed procmon.exe
 
     def file_there(fname):
         return os.path.exists(fname) and os.access(fname, os.X_OK)
@@ -156,8 +162,16 @@ def blacklist_scan(blacklist, data):
 ##########################################################
     for event in data:
         for bad in blacklist:
-            if bad.upper() in event.upper():
-                return True
+            bad = re.escape(os.path.expandvars(bad))
+            event = os.path.expandvars(event)
+            try:
+#                if os.path.expandvars(bad).upper() in os.path.expandvars(event).upper():  # Old way
+                if re.search(bad, event, flags=re.IGNORECASE):
+                    return True
+            except re.error:
+                print "Error found while processing filters.\nFilter:\t%s\nEvent:\t%s" % (bad, event)
+                print >> sys.stderr, format_exc()
+                return False
     return False
 
 
@@ -236,7 +250,9 @@ def parse_csv(txt_file, csv_file, debug):
         field = line.split('","')
         if field[3] == "RegCreateKey" and field[5] == "SUCCESS":
             if not blacklist_scan(reg_blacklist, field):
-                output.append("[CreateKey] %s:%s > %s" % (field[1], field[2], field[4]))
+                outputtext = "[CreateKey] %s:%s > %s" % (field[1], field[2], field[4])
+                if not outputtext in output:  # Ignore multiple CreateKeys. Only log the first.
+                    output.append("[CreateKey] %s:%s > %s" % (field[1], field[2], field[4]))
         elif field[3] == "RegSetValue" and field[5] == "SUCCESS":
             if not blacklist_scan(reg_blacklist, field):
                 data_field = field[6].split("Data:")[1].strip(whitespace + '"')
