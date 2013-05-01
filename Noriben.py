@@ -29,76 +29,83 @@ from time import sleep
 
 __VERSION__ = "1.1"
 
-cmd_blacklist = ["%SystemRoot%\\system32\\wbem\\wmiprvse.exe",
-                 "%SystemRoot%\\system32\\wscntfy.exe",
-                 "procmon.exe",
-                 "wuauclt.exe",
-                 "jqs.exe",
-                 "TCPView.exe"]
+# Rules for creating rules:
+# 1. Every rule string must begin with the `r` for regular expressions to work.
+# 1.a. This signifies a "raw" string.
+# 2. No backslashes at the end of a filter. Either:
+# 2.a. truncate the backslash, or 
+# 2.b. use "\*" to signify "zero or more slashes".
+# 3. To find a list of available "%%" variables, type `set` from a command prompt
 
-file_blacklist = ["procmon.exe",
-                  "Desired Access: Execute/Traverse",
-                  "Desired Access: Synchronize",
-                  "Desired Access: Generic Read/Execute",
-                  "Desired Access: Read EA",
-                  "Desired Access: Read Data/List",
-                  "Desired Access: Generic Read, ",
-                  "Desired Access: Read Attributes",
-                  "wuauclt.exe",
-                  "wmiprvse.exe",
-                  "%UserProfile%\\Recent\\",
-                  "%AllUsersProfile%\\Application Data\\Microsoft\\OFFICE\\DATA",
-                  "%AppData%\\Microsoft\\Proof\\",
-                  "%AppData%\\Microsoft\\Office",
-                  "%AppData%\\Microsoft\\Templates\\",
-                  "%UserProfile%\\Local Settings\\History\\History.IE5\\",
-                  "%SystemDrive%\\Python",
-                  "%SystemRoot%\\assembly",
-                  "%SystemRoot%\\system32\\wbem\\Logs\\",
-                  "%SystemRoot%\\Prefetch\\",
-                  "wmiprvse.exe"]
+cmd_blacklist = [r"%SystemRoot%\system32\wbem\wmiprvse.exe",
+                 r"%SystemRoot%\system32\wscntfy.exe",
+                 r"procmon.exe",
+                 r"wuauclt.exe",
+                 r"jqs.exe",
+                 r"TCPView.exe"]
 
-reg_blacklist = ["procmon.exe",
-                 "wuauclt.exe",
-                 "wmiprvse.exe",
-                 "wscntfy.exe",
-                 "verclsid.exe",
-                 "HKLM\\System\\CurrentControlSet\\Services\\Tcpip\\Parameters",
-                 "HKLM\\System\\CurrentControlSet\\Enum\\",
-                 "HKLM\\SOFTWARE\\Microsoft\\WBEM",
-                 "HKLM\\System\\CurrentControlSet\\Control\\MediaProperties",
-                 "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData\\S-1-5-18\\Products",
-                 "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Shell Extensions",
-                 "HKLM\\System\\CurrentControlSet\\Services\\WinSock2\\Parameters",
-                 "HKLM\\System\\CurrentControlSet\\Control\\DeviceClasses",
-                 "HKLM\\Software\\Microsoft\\WBEM\\WDM",
-                 "HKLM\\System\\CurrentControlSet\\Services\\CaptureRegistryMonitor",
-                 "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\MountPoints2",
-                 "HKCU\\Software\\Microsoft\\Windows\\Shell",
-                 "HKCU\\Software\\Microsoft\\Multimedia\\Audio",
-                 "HKCU\\Software\\Microsoft\\Shared Tools",
-                 "HKCU\\Software\\Microsoft\\Windows\\ShellNoRoam\\MUICache",
-                 "HKCU\\Software\\Microsoft\\Multimedia\\Audio",
-                 "HKCU\\Software\\Microsoft\\Office",
-                 "HKCU\\Printers\\DevModePerUser",
-                 "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Applets",
-                 "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Group Policy",
-                 "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\SessionInfo",
-                 "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\MountPoints2",
-                 "HKCR\\AllFilesystemObjects\\shell",
-                 "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders",
-                 "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders",
-                 "Software\\Microsoft\\Multimedia\\Audio Compression Manager",
-                 "Software\\Microsoft\\Windows\\ShellNoRoam\\BagMRU",
-                 "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\MenuOrder",
-                 "Software\\Microsoft\\Windows\\ShellNoRoam\\Bags",
-                 "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\.doc",
-                 "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\RecentDocs",
-                 "LEGACY_CAPTUREREGISTRYMONITOR"]
+file_blacklist = [r"procmon.exe",
+                  r"Desired Access: Execute/Traverse",
+                  r"Desired Access: Synchronize",
+                  r"Desired Access: Generic Read/Execute",
+                  r"Desired Access: Read EA",
+                  r"Desired Access: Read Data/List",
+                  r"Desired Access: Generic Read, ",
+                  r"Desired Access: Read Attributes",
+                  r"wuauclt.exe",
+                  r"wmiprvse.exe",
+                  r"%UserProfile%\Recent\*",
+                  r"%AllUsersProfile%\Application Data\Microsoft\OFFICE\DATA",
+                  r"%AppData%\Microsoft\Proof\*",
+                  r"%AppData%\Microsoft\Office",
+                  r"%AppData%\Microsoft\Templates\*",
+                  r"%UserProfile%\Local Settings\History\History.IE5\*",
+                  r"%SystemDrive%\Python",
+                  r"%SystemRoot%\assembly",
+                  r"%SystemRoot%\system32\wbem\Logs\*",
+                  r"%SystemRoot%\Prefetch\*"]
 
-net_blacklist = ["hasplms.exe"]  # Hasp dongle beacons
-                 #"192.168.2.", # Particular to my network
-                 #"Verizon_router.home"]  # Particular to my network
+reg_blacklist = [r"procmon.exe",
+                 r"wuauclt.exe",
+                 r"wmiprvse.exe",
+                 r"wscntfy.exe",
+                 r"verclsid.exe",
+                 r"HKCU\Printers\DevModePerUser",
+                 r"HKLM\System\CurrentControlSet\Services\Tcpip\Parameters",
+                 r"HKLM\System\CurrentControlSet\Enum\*",
+                 r"HKLM\SOFTWARE\Microsoft\WBEM",
+                 r"HKLM\System\CurrentControlSet\Control\MediaProperties",
+                 r"HKLM\Software\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products",
+                 r"HKLM\Software\Microsoft\Windows\CurrentVersion\Shell Extensions",
+                 r"HKLM\System\CurrentControlSet\Services\WinSock2\Parameters",
+                 r"HKLM\System\CurrentControlSet\Control\DeviceClasses",
+                 r"HKLM\Software\Microsoft\WBEM\WDM",
+                 r"HKLM\System\CurrentControlSet\Services\CaptureRegistryMonitor",
+                 r"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2",
+                 r"HKCU\Software\Microsoft\Windows\Shell",
+                 r"HKCU\Software\Microsoft\Multimedia\Audio",
+                 r"HKCU\Software\Microsoft\Shared Tools",
+                 r"HKCU\Software\Microsoft\Windows\ShellNoRoam\MUICache",
+                 r"HKCU\Software\Microsoft\Multimedia\Audio",
+                 r"HKCU\Software\Microsoft\Office",
+                 r"HKCU\Software\Microsoft\Windows\CurrentVersion\Applets",
+                 r"HKCU\Software\Microsoft\Windows\CurrentVersion\Group Policy",
+                 r"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo",
+                 r"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2",
+                 r"HKCR\AllFilesystemObjects\shell",
+                 r"Software\Microsoft\Multimedia\Audio Compression Manager",
+                 r"Software\Microsoft\Windows\CurrentVersion\Explorer\MenuOrder",
+                 r"Software\Microsoft\Windows\ShellNoRoam\Bags",
+                 r"Software\Microsoft\Windows\ShellNoRoam\BagMRU",
+                 r"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.doc",
+                 r"Software\Microsoft\Windows\CurrentVersion\Explorer\RecentDocs",
+                 r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders",
+                 r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders",
+                 r"LEGACY_CAPTUREREGISTRYMONITOR"]
+
+net_blacklist = [r"hasplms.exe"]  # Hasp dongle beacons
+                 #r"192.168.2.", # Particular to my network
+                 #r"Verizon_router.home"]  # Particular to my network
 
 
 def open_file_with_assoc(fname):
@@ -163,8 +170,7 @@ def blacklist_scan(blacklist, data):
 ##########################################################
     for event in data:
         for bad in blacklist:
-            bad = re.escape(os.path.expandvars(bad))
-            event = os.path.expandvars(event)
+            bad = os.path.expandvars(bad).replace("\\", "\\\\")
             try:
 #                if os.path.expandvars(bad).upper() in os.path.expandvars(event).upper():  # Old way
                 if re.search(bad, event, flags=re.IGNORECASE):
