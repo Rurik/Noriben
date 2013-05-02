@@ -1,13 +1,14 @@
 # Noriben Malware Analysis Sandbox
 # Version 1.0 - 10 Apr 13 - @bbaskin
 # Version 1.1 - 21 Apr 13 - Much improved filters and filter parsing.
+# Version 1.1a - 1 May 13 - Revamped regular expression support. Added Python 3.x forward compatibility.
 #
 # Gracious edits, revisions, and corrections by Daniel Raygoza
 #
 # Directions:
 # Just copy Noriben.py to a Windows-based VM alongside the Sysinternals Procmon.exe
 # Run Noriben.py, then run your malware.
-# When then malware has completed its processing, stop Noriben and you'll have a clean, text report
+# When the malware has completed its processing, stop Noriben and you'll have a clean text report
 #
 # TODO:
 # * parse directly from a given .PML database
@@ -15,17 +16,19 @@
 # * create a GUI interface with real, actual buttons to push
 # * Compartmentalize each activity section, possibly remove dupes from each?
 
+# Forward compatibility for Python 3.x
+from __future__ import print_function
 import os
 import subprocess
 import sys
 import hashlib
 import re
+import codecs  # Needed to open text files as UTF-8 in Python 2.7 and 3.3
 from string import whitespace
 from datetime import datetime
 from argparse import ArgumentParser
 from traceback import format_exc
 from time import sleep
-
 
 __VERSION__ = "1.1"
 
@@ -141,7 +144,7 @@ def md5_file(fname):
 ##########################################################
 # Given a filename, returns the hex MD5 value
 ##########################################################
-    return hashlib.md5(open(fname, 'rb').read()).hexdigest()
+    return hashlib.md5(codecs.open(fname, 'rb').read()).hexdigest()
 
 
 def get_session_name():
@@ -176,8 +179,8 @@ def blacklist_scan(blacklist, data):
                 if re.search(bad, event, flags=re.IGNORECASE):
                     return True
             except re.error:
-                print "Error found while processing filters.\nFilter:\t%s\nEvent:\t%s" % (bad, event)
-                print >> sys.stderr, format_exc()
+                print("Error found while processing filters.\r\nFilter:\t%s\r\nEvent:\t%s" % (bad, event))
+                sys.stderr.write(format_exc())
                 return False
     return False
 
@@ -188,8 +191,8 @@ def parse_csv(txt_file, csv_file, debug):
 # Given the location of CSV and TXT files,
 # parse the CSV for notable items
 ##########################################################
-    print "[*] Parsing CSV to text file: %s" % (txt_file,)
-    data = open(csv_file, 'r').readlines()
+    print("[*] Parsing CSV to text file: %s" % txt_file)
+    data = codecs.open(csv_file, 'r', "utf-8").readlines()
 
     output = list()
     output.append('Processes Created:')
@@ -209,7 +212,7 @@ def parse_csv(txt_file, csv_file, debug):
                         field[1], field[2], cmdline.replace('"', ''), child_pid))
         except IndexError:
             if debug:
-                print >> sys.stderr, format_exc()
+                sys.stderr.write(format_exc())
             continue
 
     output.append('')
@@ -242,8 +245,8 @@ def parse_csv(txt_file, csv_file, debug):
                     output.append("[RenameFile] %s:%s > %s => %s" % (field[1], field[2], field[4], to_file))
         except IndexError:
             if debug:
-                print >> sys.stderr, line
-                print >> sys.stderr, format_exc()
+                sys.stderr.write(line)
+                sys.stderr.write(format_exc())
         continue
 
     output.append('')
@@ -312,8 +315,8 @@ def parse_csv(txt_file, csv_file, debug):
                     output_line = "[UDP] %s > %s:%s" % (protocol_replace(server), field[1], field[2])
         except IndexError:
             if debug:
-                print >> sys.stderr, line
-                print >> sys.stderr, format_exc()
+                sys.stderr.write(line)
+                sys.stderr.write(format_exc())
             continue
         if output_line and not output_line in output:
             output.append(output_line)
@@ -328,7 +331,7 @@ def parse_csv(txt_file, csv_file, debug):
     for server in sorted(remote_servers):
         output.append(protocol_replace(server).strip())
 
-    open(txt_file, 'w').write('\n'.join(output))
+    codecs.open(txt_file, 'w', "utf-8").write('\r\n'.join(output))
     open_file_with_assoc(txt_file)
 
 
@@ -336,9 +339,8 @@ def main():
 ##########################################################
 # Main routine, parses arguments and calls other routines
 ##########################################################
-    print "--===[ Noriben v%s ]===--" % __VERSION__
-    print "--===[   @bbaskin   ]===--"
-    print ""
+    print("--===[ Noriben v%s ]===--" % __VERSION__)
+    print("--===[   @bbaskin   ]===--\r\n")
 
     parser = ArgumentParser()
     parser.add_argument('-r', dest='read_csv', action='store_true',
@@ -360,10 +362,10 @@ def main():
 
     procmonexe = check_procmon()
     if not procmonexe:
-        print "[!] Unable to find procmon.exe in path."
+        print("[!] Unable to find procmon.exe in path.")
         sys.exit(1)
 
-    print "[*] Using procmon EXE: %s" % procmonexe
+    print("[*] Using procmon EXE: %s" % procmonexe)
     session_id = get_session_name()
     pml_file = "Noriben_%s.pml" % session_id
     csv_file = "Noriben_%s.csv" % session_id
@@ -371,20 +373,20 @@ def main():
     pmc_file = 'ProcmonConfiguration.PMC'
     if not os.path.exists(pmc_file):
         use_pmc = False
-        print "[!] ProcmonConfiguration.PMC not found. Continuing without filters."
+        print("[!] ProcmonConfiguration.PMC not found. Continuing without filters.")
     else:
         use_pmc = True
-        print "[*] Using PMC file: %s" % pmc_file
+        print("[*] Using PMC file: %s" % pmc_file)
 
-    print "[*] Procmon session saved to: %s" % pml_file
-    print "[*] Launching Procmon ..."
+    print("[*] Procmon session saved to: %s" % pml_file)
+    print("[*] Launching Procmon ...")
 
     cmdline = "%s /BackingFile %s /Quiet /Minimized" % (procmonexe, pml_file)
     if use_pmc:
         cmdline += " /LoadConfig %s" % pmc_file
     subprocess.Popen(cmdline)
-    print "[*] Procmon is running. Run your malware now."
-    print "[*] When runtime is complete, press CTRL+C to stop logging."
+    print("[*] Procmon is running. Run your malware now.")
+    print("[*] When runtime is complete, press CTRL+C to stop logging.")
 
     try:
         while True:
@@ -392,17 +394,17 @@ def main():
     except KeyboardInterrupt:
         pass
 
-    print "[*] Termination of Procmon commencing... please wait"
-    cmdline = "%s /Terminate" % (procmonexe,)
+    print("[*] Termination of Procmon commencing... please wait")
+    cmdline = "%s /Terminate" % procmonexe
     stdnull = subprocess.Popen(cmdline)
     stdnull.wait()
 
-    print "[*] Procmon terminated"
+    print("[*] Procmon terminated")
     if not os.path.exists(pml_file):
-        print "[!] Error creating PML file!"
+        print("[!] Error creating PML file!")
         sys.exit(1)
 
-    print "[*] Converting session to CSV: %s" % (csv_file,)
+    print("[*] Converting session to CSV: %s" % csv_file)
     cmdline = "%s /OpenLog %s /saveas %s" % (procmonexe, pml_file, csv_file)
     if use_pmc:
         cmdline += " /LoadConfig %s" % pmc_file
