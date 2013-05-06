@@ -212,6 +212,7 @@ def parse_csv(txt_file, csv_file, debug):
                         field[1], field[2], cmdline.replace('"', ''), child_pid))
         except IndexError:
             if debug:
+                sys.stderr.write(line)
                 sys.stderr.write(format_exc())
             continue
 
@@ -247,7 +248,7 @@ def parse_csv(txt_file, csv_file, debug):
             if debug:
                 sys.stderr.write(line)
                 sys.stderr.write(format_exc())
-        continue
+            continue
 
     output.append('')
     output.append('Registry Activity:')
@@ -258,23 +259,29 @@ def parse_csv(txt_file, csv_file, debug):
             continue
         line = line.strip(whitespace + '"')
         field = line.split('","')
-        if field[3] == "RegCreateKey" and field[5] == "SUCCESS":
-            if not blacklist_scan(reg_blacklist, field):
-                outputtext = "[CreateKey] %s:%s > %s" % (field[1], field[2], field[4])
-                if not outputtext in output:  # Ignore multiple CreateKeys. Only log the first.
-                    output.append("[CreateKey] %s:%s > %s" % (field[1], field[2], field[4]))
-        elif field[3] == "RegSetValue" and field[5] == "SUCCESS":
-            if not blacklist_scan(reg_blacklist, field):
-                data_field = field[6].split("Data:")[1].strip(whitespace + '"')
-                if len(data_field.split(" ")) == 16:
-                    data_field += " ..."
-                output.append('[Set Value] %s:%s > %s  =  %s' % (field[1], field[2], field[4], data_field))
-        elif field[3] == "RegDeleteValue" and field[5] == "SUCCESS":
-            if not blacklist_scan(reg_blacklist, field):
-                output.append('[DeleteValue] %s:%s > %s' % (field[1], field[2], field[4]))
-        elif field[3] == "RegDeleteKey" and field[5] == "SUCCESS":
-            if not blacklist_scan(reg_blacklist, field):
-                output.append('[DeleteKey] %s:%s > %s' % (field[1], field[2], field[4]))
+        try:
+            if field[3] == "RegCreateKey" and field[5] == "SUCCESS":
+                if not blacklist_scan(reg_blacklist, field):
+                    outputtext = "[CreateKey] %s:%s > %s" % (field[1], field[2], field[4])
+                    if not outputtext in output:  # Ignore multiple CreateKeys. Only log the first.
+                        output.append(outputtext)
+            elif field[3] == "RegSetValue" and field[5] == "SUCCESS":
+                if not blacklist_scan(reg_blacklist, field):
+                    data_field = field[6].split("Data:")[1].strip(whitespace + '"')
+                    if len(data_field.split(" ")) == 16:
+                        data_field += " ..."
+                    output.append('[Set Value] %s:%s > %s  =  %s' % (field[1], field[2], field[4], data_field))
+            elif field[3] == "RegDeleteValue" and field[5] == "SUCCESS":
+                if not blacklist_scan(reg_blacklist, field):
+                    output.append('[DeleteValue] %s:%s > %s' % (field[1], field[2], field[4]))
+            elif field[3] == "RegDeleteKey" and field[5] == "SUCCESS":
+                if not blacklist_scan(reg_blacklist, field):
+                    output.append('[DeleteKey] %s:%s > %s' % (field[1], field[2], field[4]))
+        except IndexError:
+            if debug:
+                sys.stderr.write(line)
+                sys.stderr.write(format_exc())
+            continue
 
     output.append('')
     output.append('Network Traffic:')
