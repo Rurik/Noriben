@@ -73,7 +73,6 @@ reg_blacklist = [r"procmon.exe",
                  r"wscntfy.exe",
                  r"verclsid.exe",
                  r"HKCU\Printers\DevModePerUser",
-                 r"HKCU\Software\Microsoft\Multimedia\Audio",
                  r"HKCU\Software\Microsoft\Office",
                  r"HKCU\Software\Microsoft\Shared Tools",
                  r"HKCU\Software\Microsoft\Windows\CurrentVersion\Applets",
@@ -100,7 +99,13 @@ reg_blacklist = [r"procmon.exe",
                  r"Software\Microsoft\Windows\CurrentVersion\Explorer\RecentDocs",
                  r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders",
                  r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders",
-                 r"LEGACY_CAPTUREREGISTRYMONITOR"]
+                 r"LEGACY_CAPTUREREGISTRYMONITOR",
+                 #Rules added 13 May 13:
+                 r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\*",
+                 r"Software\Microsoft\Multimedia\Audio$",
+                 r"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Prefetcher\*",
+                 r"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Tracing\*",
+                 r"HKLM\System\CurrentControlSet\Services\Eventlog\*"]
 
 net_blacklist = [r"hasplms.exe"]  # Hasp dongle beacons
                  #r"192.168.2.", # Particular to my network
