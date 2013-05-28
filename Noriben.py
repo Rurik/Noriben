@@ -2,14 +2,15 @@
 # Version 1.0 - 10 Apr 13 - @bbaskin
 # Version 1.1 - 21 Apr 13 - Much improved filters and filter parsing.
 # Version 1.1a - 1 May 13 - Revamped regular expression support. Added Python 3.x forward compatibility.
-# Version 1.2 - 25 May 13 - Now reads CSV files line-by-line to handle large files, keep unsuccessful 
-#                           registry deletes, compartmentalize sections, creates CSV timeline
+# Version 1.2 - 28 May 13 - Now reads CSV files line-by-line to handle large files, keep unsuccessful
+#                           registry deletes, compartmentalize sections, creates CSV timeline, can reparse PMLs,
+#                           can specify alternative PMC filters, changed command line arguments, added global blacklist
 #
 # Gracious edits, revisions, and corrections by Daniel Raygoza
 #
 # Directions:
-# Just copy Noriben.py to a Windows-based VM alongside the Sysinternals Procmon.exe
-# Procmon is a registered trademark of Microsoft Corporation
+# Just copy Noriben.py to a Windows-based VM alongside the Sysinternals Procmon.exe* 
+# * Procmon is a registered trademark of Microsoft Corporation
 #
 # Run Noriben.py, then run your malware.
 # When the malware has completed its processing, stop Noriben and you'll have a clean text report
@@ -44,12 +45,15 @@ procmon = "procmon.exe"  # Change this if you have a renamed procmon.exe
 # 2.b. use "\*" to signify "zero or more slashes".
 # 3. To find a list of available "%%" variables, type `set` from a command prompt
 
+# These entries are applied to all blacklists
+global_blacklist = [r"VMwareUser.exe"]
+
 cmd_blacklist = [r"%SystemRoot%\system32\wbem\wmiprvse.exe",
                  r"%SystemRoot%\system32\wscntfy.exe",
                  r"procmon.exe",
                  r"wuauclt.exe",
                  r"jqs.exe",
-                 r"TCPView.exe"]
+                 r"TCPView.exe"] + global_blacklist
 
 file_blacklist = [r"procmon.exe",
                   r"Desired Access: Execute/Traverse",
@@ -70,7 +74,7 @@ file_blacklist = [r"procmon.exe",
                   r"%SystemRoot%\Prefetch\*",
                   r"%SystemRoot%\system32\wbem\Logs\*",
                   r"%UserProfile%\Recent\*",
-                  r"%UserProfile%\Local Settings\History\History.IE5\*"]
+                  r"%UserProfile%\Local Settings\History\History.IE5\*"] + global_blacklist
 
 reg_blacklist = [r"procmon.exe",
                  r"wuauclt.exe",
@@ -78,6 +82,7 @@ reg_blacklist = [r"procmon.exe",
                  r"wscntfy.exe",
                  r"verclsid.exe",
                  r"HKCU\Printers\DevModePerUser",
+                 r"HKCU\SessionInformation\ProgramCount",
                  r"HKCU\Software\Microsoft\Office",
                  r"HKCU\Software\Microsoft\Shared Tools",
                  r"HKCU\Software\Microsoft\Windows\CurrentVersion\Applets",
@@ -105,14 +110,13 @@ reg_blacklist = [r"procmon.exe",
                  r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders",
                  r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders",
                  r"LEGACY_CAPTUREREGISTRYMONITOR",
-                 #Rules added 13 May 13:
                  r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\*",
                  r"Software\Microsoft\Multimedia\Audio$",
                  r"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Prefetcher\*",
                  r"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Tracing\*",
-                 r"HKLM\System\CurrentControlSet\Services\Eventlog\*"]
+                 r"HKLM\System\CurrentControlSet\Services\Eventlog\*"] + global_blacklist
 
-net_blacklist = [r"hasplms.exe"]  # Hasp dongle beacons
+net_blacklist = [r"hasplms.exe"] + global_blacklist  # Hasp dongle beacons
                  #r"192.168.2.", # Particular to my network
                  #r"Verizon_router.home"]  # Particular to my network
 
@@ -194,6 +198,7 @@ def blacklist_scan(blacklist, data):
                 return False
     return False
 
+
 def process_PML_to_CSV(procmonexe, pml_file, pmc_file, csv_file, use_pmc):
 ##########################################################
 # Uses Procmon to convert the PML to a CSV file
@@ -206,15 +211,33 @@ def process_PML_to_CSV(procmonexe, pml_file, pmc_file, csv_file, use_pmc):
     stdnull.wait()
 
 
-def parse_csv(txt_file, csv_file, report, timeline, debug):
-    import fileinput
+##########################################################
+# Launch Procmon to begin capturing data
+##########################################################
+def launch_procmon_capture(procmonexe, pml_file, use_pmc, pmc_file):
+    cmdline = "%s /BackingFile %s /Quiet /Minimized" % (procmonexe, pml_file)
+    if use_pmc:
+        cmdline += " /LoadConfig %s" % pmc_file
+    subprocess.Popen(cmdline)
+    sleep(3)
+
+
+##########################################################
+# Terminate Procmon cleanly
+##########################################################
+def terminate_procmon(procmonexe):
+    cmdline = "%s /Terminate" % procmonexe
+    stdnull = subprocess.Popen(cmdline)
+    stdnull.wait()
+
+
+def parse_csv(csv_file, report, timeline, debug):
 ##########################################################
 # Meat of the program:
 # Given the location of CSV and TXT files,
 # parse the CSV for notable items
 ##########################################################
-    print("[*] Parsing CSV to text file: %s" % txt_file)
-    #data = codecs.open(csv_file, 'r', "utf-8")#.readlines()
+    import fileinput
 
     process_output = list()
     file_output = list()
@@ -224,9 +247,8 @@ def parse_csv(txt_file, csv_file, report, timeline, debug):
     remote_servers = list()
 
     # Use fileinput.input() now to read data line-by-line
-    for original_line in fileinput.input(csv_file):
+    for original_line in fileinput.input(csv_file, openhook=fileinput.hook_encoded("iso-8859-1")):
         server = ''
-        outputtext = ''
         if original_line[0] != '"':  # Ignore lines that begin with Tab. Sysinternals breaks CSV with new processes
             continue
         line = original_line.strip(whitespace + '"')
@@ -238,7 +260,9 @@ def parse_csv(txt_file, csv_file, report, timeline, debug):
                     child_pid = field[6].split("PID: ")[1].split(",")[0]
                     outputtext = "[CreateProcess] %s:%s > \"%s\"\t[Child PID: %s]" % (
                         field[1], field[2], cmdline.replace('"', ''), child_pid)
-                    timelinetext = "%s,CreateProcess,%s,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2], cmdline.replace('"', ''), child_pid)
+                    timelinetext = "%s,Process,CreateProcess,%s,%s,%s,%s" % (field[0].split()[0].split(".")[0],
+                                                                             field[1], field[2],
+                                                                             cmdline.replace('"', ''), child_pid)
                     process_output.append(outputtext)
                     timeline.append(timelinetext)
 
@@ -246,26 +270,31 @@ def parse_csv(txt_file, csv_file, report, timeline, debug):
                 if not blacklist_scan(file_blacklist, field):
                     if os.path.isdir(field[4]):
                         outputtext = "[CreateFolder] %s:%s > %s" % (field[1], field[2], field[4])
-                        timelinetext = "%s,CreateFolder,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2], field[4])
+                        timelinetext = "%s,File,CreateFolder,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1],
+                                                                     field[2], field[4])
                         file_output.append(outputtext)
                         timeline.append(timelinetext)                    
                     else:
                         try:
                             md5 = md5_file(field[4])
                             outputtext = "[CreateFile] %s:%s > %s\t[MD5: %s]" % (field[1], field[2], field[4], md5)
-                            timelinetext = "%s,CreateFile,%s,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2], field[4], md5)
+                            timelinetext = "%s,File,CreateFile,%s,%s,%s,%s" % (field[0].split()[0].split(".")[0],
+                                                                               field[1], field[2], field[4], md5)
                             file_output.append(outputtext)
                             timeline.append(timelinetext) 
                         except (IndexError, IOError):
-                            outputtext = "[CreateFile] %s:%s > %s\t[File no longer exists]" % (field[1], field[2], field[4])
-                            timelinetext = "%s,CreateFile,%s,%s,%s,N/A" % (field[0].split()[0].split(".")[0], field[1], field[2], field[4])
+                            outputtext = "[CreateFile] %s:%s > %s\t[File no longer exists]" % (field[1], field[2],
+                                                                                               field[4])
+                            timelinetext = "%s,File,CreateFile,%s,%s,%s,N/A" % (field[0].split()[0].split(".")[0],
+                                                                                field[1], field[2], field[4])
                             file_output.append(outputtext)
                             timeline.append(timelinetext)
 
             elif field[3] == "SetDispositionInformationFile" and field[5] == "SUCCESS":
                 if not blacklist_scan(file_blacklist, field):
                     outputtext = "[DeleteFile] %s:%s > %s" % (field[1], field[2], field[4])
-                    timelinetext = "%s,DeleteFile,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2], field[4])
+                    timelinetext = "%s,File,DeleteFile,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1],
+                                                                    field[2], field[4])
                     file_output.append(outputtext)
                     timeline.append(timelinetext)
 
@@ -273,7 +302,8 @@ def parse_csv(txt_file, csv_file, report, timeline, debug):
                 if not blacklist_scan(file_blacklist, field):
                     to_file = field[6].split("FileName: ")[1].strip('"')
                     outputtext = "[RenameFile] %s:%s > %s => %s" % (field[1], field[2], field[4], to_file)
-                    timelinetext = "%s,RenameFile,%s,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2], field[4], to_file)
+                    timelinetext = "%s,File,RenameFile,%s,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1],
+                                                                       field[2], field[4], to_file)
                     file_output.append(outputtext)
                     timeline.append(timelinetext)
 
@@ -281,7 +311,8 @@ def parse_csv(txt_file, csv_file, report, timeline, debug):
                 if not blacklist_scan(reg_blacklist, field):
                     outputtext = "[RegCreateKey] %s:%s > %s" % (field[1], field[2], field[4])
                     if not outputtext in reg_output:  # Ignore multiple CreateKeys. Only log the first.
-                        timelinetext = "%s,RegCreateKey,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2], field[4])
+                        timelinetext = "%s,Registry,RegCreateKey,%s,%s,%s" % (field[0].split()[0].split(".")[0],
+                                                                              field[1], field[2], field[4])
                         reg_output.append(outputtext)
                         timeline.append(timelinetext)
 
@@ -291,23 +322,26 @@ def parse_csv(txt_file, csv_file, report, timeline, debug):
                     if len(data_field.split(" ")) == 16:
                         data_field += " ..."
                     outputtext = '[RegSetValue] %s:%s > %s  =  %s' % (field[1], field[2], field[4], data_field)
-                    timelinetext = "%s,RegSetValue,%s,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2], field[4], data_field)
+                    timelinetext = "%s,Registry,RegSetValue,%s,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1],
+                                                                            field[2], field[4], data_field)
                     reg_output.append(outputtext)
                     timeline.append(timelinetext)
 
-            elif field[3] == "RegDeleteValue":# and field[5] == "SUCCESS":
-                # SUCCESS if commented out. This allows us to see all attempted deltions, whether or not the value exists
+            elif field[3] == "RegDeleteValue":  # and field[5] == "SUCCESS":
+                # SUCCESS is commented out to allows all attempted deletions, whether or not the value exists
                 if not blacklist_scan(reg_blacklist, field):
                     outputtext = '[RegDeleteValue] %s:%s > %s' % (field[1], field[2], field[4])
-                    timelinetext = "%s,RegDeleteValue,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2], field[4])
+                    timelinetext = "%s,Registry,RegDeleteValue,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1],
+                                                                   field[2], field[4])
                     reg_output.append(outputtext)
                     timeline.append(timelinetext)
 
-            elif field[3] == "RegDeleteKey":# and field[5] == "SUCCESS":
-                # SUCCESS if commented out. This allows us to see all attempted deltions, whether or not the key exists                
+            elif field[3] == "RegDeleteKey":  # and field[5] == "SUCCESS":
+                # SUCCESS is commented out to allows all attempted deletions, whether or not the value exists
                 if not blacklist_scan(reg_blacklist, field):
                     outputtext = '[RegDeleteKey] %s:%s > %s' % (field[1], field[2], field[4])
-                    timelinetext = "%s,RegDeleteKey,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2], field[4])
+                    timelinetext = "%s,Registry,RegDeleteKey,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1],
+                                                                          field[2], field[4])
                     reg_output.append(outputtext)
                     timeline.append(timelinetext)
 
@@ -322,7 +356,8 @@ def parse_csv(txt_file, csv_file, report, timeline, debug):
                     """
                     outputtext = "[UDP] %s:%s > %s" % (field[1], field[2], protocol_replace(server))
                     if not outputtext in net_output:
-                        timelinetext = "%s,UDP Send,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2], protocol_replace(server))
+                        timelinetext = "%s,Network,UDP Send,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1],
+                                                                         field[2], protocol_replace(server))
                         net_output.append(outputtext)
                         timeline.append(timelinetext)
 
@@ -331,7 +366,8 @@ def parse_csv(txt_file, csv_file, report, timeline, debug):
                     server = field[4].split("-> ")[1]
                     outputtext = "[UDP] %s > %s:%s" % (protocol_replace(server), field[1], field[2])
                     if not outputtext in net_output:
-                        timelinetext = "%s,UDP Receive,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2])
+                        timelinetext = "%s,Network,UDP Receive,%s,%s" % (field[0].split()[0].split(".")[0], field[1],
+                                                                         field[2])
                         net_output.append(outputtext)
                         timeline.append(timelinetext)
 
@@ -340,7 +376,8 @@ def parse_csv(txt_file, csv_file, report, timeline, debug):
                     server = field[4].split("-> ")[1]
                     outputtext = "[TCP] %s:%s > %s" % (field[1], field[2], protocol_replace(server))
                     if not outputtext in net_output:
-                        timelinetext = "%s,TCP Send,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2], protocol_replace(server))
+                        timelinetext = "%s,Network,TCP Send,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1],
+                                                                         field[2], protocol_replace(server))
                         net_output.append(outputtext)
                         timeline.append(timelinetext)
 
@@ -349,7 +386,8 @@ def parse_csv(txt_file, csv_file, report, timeline, debug):
                     server = field[4].split("-> ")[1]
                     outputtext = "[TCP] %s > %s:%s" % (protocol_replace(server), field[1], field[2])
                     if not outputtext in net_output:
-                        timelinetext = "%s,TCP Receive,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2])
+                        timelinetext = "%s,Network,TCP Receive,%s,%s" % (field[0].split()[0].split(".")[0], field[1],
+                                                                         field[2])
                         net_output.append(outputtext)
                         timeline.append(timelinetext)
 
@@ -411,58 +449,96 @@ def main():
     print("--===[   @bbaskin   ]===--\r\n")
 
     parser = ArgumentParser()
-    parser.add_argument('-r', dest='read_csv', action='store_true',
-                        help='Re-analyze an existing Noriben CSV file [input file]')
-    parser.add_argument('input_file', default='', nargs='?',
-                        help='-r Noriben_<date>.CSV')
+    parser.add_argument('-c', '--csv', help='Re-analyze an existing Noriben CSV file [input file]', required=False)
+    parser.add_argument('-p', '--pml', help='Re-analyze an existing Noriben PML file [input file]', required=False)
+    parser.add_argument('-f', '--filter', help='Alernate Procmon Filter PMC [input file]', required=False)
     parser.add_argument('-d', dest='debug', action='store_true', help='Enable debug tracebacks')
     args = parser.parse_args()
     report = list()
     timeline = list()
+    pmc_file = ''
 
-    if args.read_csv:
-        if file_exists(args.input_file):
-            # Reparse an existing CSV
-            txt_file = os.path.splitext(args.input_file)[0] + '.txt'
-            timeline_file = os.path.splitext(args.input_file)[0] + '_timeline.csv'
-            parse_csv(txt_file, args.input_file, report, timeline, args.debug)
+    # First check for a valid filter file
+    if args.filter:
+        if file_exists(args.filter):
+            pmc_file = args.filter
+        else:
+            pmc_file = 'ProcmonConfiguration.PMC'
+    else:
+        pmc_file = 'ProcmonConfiguration.PMC'
+
+    if not file_exists(pmc_file):
+        use_pmc = False
+        print("[!] Filter file %s not found. Continuing without filters." % pmc_file)
+    else:
+        use_pmc = True
+        print("[*] Using filter file: %s" % pmc_file)
+
+    # Find a valid procmon executable.
+    procmonexe = check_procmon()
+    if not procmonexe:
+        print("[!] Unable to find Procmon (%s) in path." % procmon)
+        sys.exit(1)
+
+    # Check if user-specified to rescan a PML
+    if args.pml:
+        if file_exists(args.pml):
+            # Reparse an existing PML
+            csv_file = os.path.splitext(args.pml)[0] + '.csv'
+            txt_file = os.path.splitext(args.pml)[0] + '.txt'
+            timeline_file = os.path.splitext(args.pml)[0] + '_timeline.csv'
+
+            process_PML_to_CSV(procmonexe, args.pml, pmc_file, csv_file, use_pmc)
+            if not file_exists(csv_file):
+                print("[!] Error detected. Could not create CSV file: %s" % csv_file)
+                sys.exit()
+
+            parse_csv(csv_file, report, timeline, args.debug)
+
+            print("[*] Saving report to: %s" % txt_file)
             codecs.open(txt_file, 'w', "utf-8").write('\r\n'.join(report))
+
+            print("[*] Saving timeline to: %s" % timeline_file)
             codecs.open(timeline_file, 'w', "utf-8").write('\r\n'.join(timeline))
+
             open_file_with_assoc(txt_file)
             sys.exit()
         else:
             parser.print_usage()
             sys.exit(1)
 
+    # Check if user-specified to rescan a CSV
+    if args.csv:
+        if file_exists(args.csv):
+            # Reparse an existing CSV
+            txt_file = os.path.splitext(args.csv)[0] + '.txt'
+            timeline_file = os.path.splitext(args.csv)[0] + '_timeline.csv'
+            parse_csv(args.csv, report, timeline, args.debug)
 
-    procmonexe = check_procmon()
-    if not procmonexe:
-        print("[!] Unable to find procmon.exe in path.")
-        sys.exit(1)
+            print("[*] Saving report to: %s" % txt_file)
+            codecs.open(txt_file, 'w', "utf-8").write('\r\n'.join(report))
 
+            print("[*] Saving timeline to: %s" % timeline_file)
+            codecs.open(timeline_file, 'w', "utf-8").write('\r\n'.join(timeline))
+
+            open_file_with_assoc(txt_file)
+            sys.exit()
+        else:
+            parser.print_usage()
+            sys.exit(1)
+
+    # Start main data collection and processing
     print("[*] Using procmon EXE: %s" % procmonexe)
     session_id = get_session_name()
     pml_file = "Noriben_%s.pml" % session_id
     csv_file = "Noriben_%s.csv" % session_id
     txt_file = "Noriben_%s.txt" % session_id
-    pmc_file = 'ProcmonConfiguration.PMC'
-
-
-    if not file_exists(pmc_file):
-        use_pmc = False
-        print("[!] ProcmonConfiguration.PMC not found. Continuing without filters.")
-    else:
-        use_pmc = True
-        print("[*] Using PMC file: %s" % pmc_file)
-
+    timeline_file = "Noriben_%s_timeline.csv" % session_id
     print("[*] Procmon session saved to: %s" % pml_file)
-    print("[*] Launching Procmon ...")
 
-    cmdline = "%s /BackingFile %s /Quiet /Minimized" % (procmonexe, pml_file)
-    if use_pmc:
-        cmdline += " /LoadConfig %s" % pmc_file
-    subprocess.Popen(cmdline)
-    sleep(3)
+    print("[*] Launching Procmon ...")
+    launch_procmon_capture(procmonexe, pml_file, use_pmc, pmc_file)
+
     print("[*] Procmon is running. Run your malware now.")
     print("[*] When runtime is complete, press CTRL+C to stop logging.")
 
@@ -473,9 +549,7 @@ def main():
         pass
 
     print("[*] Termination of Procmon commencing... please wait")
-    cmdline = "%s /Terminate" % procmonexe
-    stdnull = subprocess.Popen(cmdline)
-    stdnull.wait()
+    terminate_procmon(procmonexe)
 
     print("[*] Procmon terminated")
     if not file_exists(pml_file):
@@ -489,11 +563,15 @@ def main():
         sys.exit()
 
     # Process CSV file, results in "report" and "timeline" output lists
-    parse_csv(txt_file, csv_file, report, timeline, args.debug)   
+    parse_csv(csv_file, report, timeline, args.debug)
+    print("[*] Saving report to: %s" % txt_file)
     codecs.open(txt_file, 'w', "utf-8").write('\r\n'.join(report))
-    
-    open_file_with_assoc(txt_file)
 
+    print("[*] Saving timeline to: %s" % timeline_file)
+    codecs.open(timeline_file, 'w', "utf-8").write('\r\n'.join(timeline))
+
+    open_file_with_assoc(txt_file)
+    # End of main()
 
 if __name__ == "__main__":
     main()
