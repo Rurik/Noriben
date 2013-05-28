@@ -2,11 +2,15 @@
 # Version 1.0 - 10 Apr 13 - @bbaskin
 # Version 1.1 - 21 Apr 13 - Much improved filters and filter parsing.
 # Version 1.1a - 1 May 13 - Revamped regular expression support. Added Python 3.x forward compatibility.
+# Version 1.2 - 25 May 13 - Now reads CSV files line-by-line to handle large files, keep unsuccessful 
+#                           registry deletes, compartmentalize sections, creates CSV timeline
 #
 # Gracious edits, revisions, and corrections by Daniel Raygoza
 #
 # Directions:
 # Just copy Noriben.py to a Windows-based VM alongside the Sysinternals Procmon.exe
+# Procmon is a registered trademark of Microsoft Corporation
+#
 # Run Noriben.py, then run your malware.
 # When the malware has completed its processing, stop Noriben and you'll have a clean text report
 #
@@ -14,7 +18,6 @@
 # * parse directly from a given .PML database
 # * extract data directly from registry? (requires python-registry - http://www.williballenthin.com/registry/)
 # * create a GUI interface with real, actual buttons to push
-# * Compartmentalize each activity section, possibly remove dupes from each?
 
 from __future__ import print_function
 import os
@@ -29,7 +32,9 @@ from argparse import ArgumentParser
 from traceback import format_exc
 from time import sleep
 
-__VERSION__ = "1.1"
+__VERSION__ = "1.2"
+enable_timeline = True
+procmon = "procmon.exe"  # Change this if you have a renamed procmon.exe
 
 # Rules for creating rules:
 # 1. Every rule string must begin with the `r` for regular expressions to work.
@@ -121,23 +126,27 @@ def open_file_with_assoc(fname):
     elif os.name == 'nt':
         os.startfile(fname)
     elif os.name == 'posix':
-        subprocess.call(('xdg-open', fname))
+        subprocess.call(('open', fname))
+
+
+def file_exists(fname):
+##########################################################
+# Determine if a file exists
+##########################################################
+    return os.path.exists(fname) and os.access(fname, os.X_OK)
 
 
 def check_procmon():
 ##########################################################
 # Finds the local path to Procmon
 ##########################################################
-    procmon = "procmon.exe"  # Change this if you have a renamed procmon.exe
+    global procmon
 
-    def file_there(fname):
-        return os.path.exists(fname) and os.access(fname, os.X_OK)
-
-    if file_there(procmon):
+    if file_exists(procmon):
         return procmon
     else:
         for path in os.environ["PATH"].split(os.pathsep):
-            if file_there(os.path.join(path.strip('"'), procmon)):
+            if file_exists(os.path.join(path.strip('"'), procmon)):
                 return os.path.join(path, procmon)
 
 
@@ -185,121 +194,124 @@ def blacklist_scan(blacklist, data):
                 return False
     return False
 
+def process_PML_to_CSV(procmonexe, pml_file, pmc_file, csv_file, use_pmc):
+##########################################################
+# Uses Procmon to convert the PML to a CSV file
+##########################################################
+    print("[*] Converting session to CSV: %s" % csv_file)
+    cmdline = "%s /OpenLog %s /saveas %s" % (procmonexe, pml_file, csv_file)
+    if use_pmc:
+        cmdline += " /LoadConfig %s" % pmc_file
+    stdnull = subprocess.Popen(cmdline)
+    stdnull.wait()
 
-def parse_csv(txt_file, csv_file, debug):
+
+def parse_csv(txt_file, csv_file, report, timeline, debug):
+    import fileinput
 ##########################################################
 # Meat of the program:
 # Given the location of CSV and TXT files,
 # parse the CSV for notable items
 ##########################################################
     print("[*] Parsing CSV to text file: %s" % txt_file)
-    data = codecs.open(csv_file, 'r', "utf-8").readlines()
+    #data = codecs.open(csv_file, 'r', "utf-8")#.readlines()
 
-    output = list()
-    output.append('Processes Created:')
-    output.append('==================')
+    process_output = list()
+    file_output = list()
+    reg_output = list()
+    net_output = list()
+    error_output = list()
+    remote_servers = list()
 
-    for line in data:
-        if line[0] != '"':  # Ignore lines that begin with Tab. Sysinternals breaks CSV with new processes
+    # Use fileinput.input() now to read data line-by-line
+    for original_line in fileinput.input(csv_file):
+        server = ''
+        outputtext = ''
+        if original_line[0] != '"':  # Ignore lines that begin with Tab. Sysinternals breaks CSV with new processes
             continue
-        line = line.strip(whitespace + '"')
+        line = original_line.strip(whitespace + '"')
         field = line.strip().split('","')
         try:
             if field[3] in ["Process Create"] and field[5] == "SUCCESS":
                 cmdline = field[6].split("Command line: ")[1]
                 if not blacklist_scan(cmd_blacklist, field):
                     child_pid = field[6].split("PID: ")[1].split(",")[0]
-                    output.append("[CreateProcess] %s:%s > \"%s\"\t[Child PID: %s]" % (
-                        field[1], field[2], cmdline.replace('"', ''), child_pid))
-        except IndexError:
-            if debug:
-                sys.stderr.write(line)
-                sys.stderr.write(format_exc())
-            continue
+                    outputtext = "[CreateProcess] %s:%s > \"%s\"\t[Child PID: %s]" % (
+                        field[1], field[2], cmdline.replace('"', ''), child_pid)
+                    timelinetext = "%s,CreateProcess,%s,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2], cmdline.replace('"', ''), child_pid)
+                    process_output.append(outputtext)
+                    timeline.append(timelinetext)
 
-    output.append('')
-    output.append('File Activity:')
-    output.append('==================')
-
-    for line in data:
-        if line[0] != '"':  # Ignore lines that begin with Tab. Sysinternals breaks CSV with new processes
-            continue
-        line = line.strip(whitespace + '"')
-        field = line.split('","')
-        try:
-            if field[3] == "CreateFile" and field[5] == "SUCCESS":
+            elif field[3] == "CreateFile" and field[5] == "SUCCESS":
                 if not blacklist_scan(file_blacklist, field):
                     if os.path.isdir(field[4]):
-                        output.append("[New Folder] %s:%s > %s" % (field[1], field[2], field[4]))
+                        outputtext = "[CreateFolder] %s:%s > %s" % (field[1], field[2], field[4])
+                        timelinetext = "%s,CreateFolder,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2], field[4])
+                        file_output.append(outputtext)
+                        timeline.append(timelinetext)                    
                     else:
                         try:
                             md5 = md5_file(field[4])
-                            output.append("[CreateFile] %s:%s > %s\t[MD5: %s]" % (field[1], field[2], field[4], md5))
+                            outputtext = "[CreateFile] %s:%s > %s\t[MD5: %s]" % (field[1], field[2], field[4], md5)
+                            timelinetext = "%s,CreateFile,%s,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2], field[4], md5)
+                            file_output.append(outputtext)
+                            timeline.append(timelinetext) 
                         except (IndexError, IOError):
-                            output.append("[CreateFile] %s:%s > %s\t[File no longer exists]" %
-                                          (field[1], field[2], field[4]))
+                            outputtext = "[CreateFile] %s:%s > %s\t[File no longer exists]" % (field[1], field[2], field[4])
+                            timelinetext = "%s,CreateFile,%s,%s,%s,N/A" % (field[0].split()[0].split(".")[0], field[1], field[2], field[4])
+                            file_output.append(outputtext)
+                            timeline.append(timelinetext)
+
             elif field[3] == "SetDispositionInformationFile" and field[5] == "SUCCESS":
                 if not blacklist_scan(file_blacklist, field):
-                    output.append("[DeleteFile] %s:%s > %s" % (field[1], field[2], field[4]))
+                    outputtext = "[DeleteFile] %s:%s > %s" % (field[1], field[2], field[4])
+                    timelinetext = "%s,DeleteFile,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2], field[4])
+                    file_output.append(outputtext)
+                    timeline.append(timelinetext)
+
             elif field[3] == "SetRenameInformationFile":
                 if not blacklist_scan(file_blacklist, field):
                     to_file = field[6].split("FileName: ")[1].strip('"')
-                    output.append("[RenameFile] %s:%s > %s => %s" % (field[1], field[2], field[4], to_file))
-        except IndexError:
-            if debug:
-                sys.stderr.write(line)
-                sys.stderr.write(format_exc())
-            continue
+                    outputtext = "[RenameFile] %s:%s > %s => %s" % (field[1], field[2], field[4], to_file)
+                    timelinetext = "%s,RenameFile,%s,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2], field[4], to_file)
+                    file_output.append(outputtext)
+                    timeline.append(timelinetext)
 
-    output.append('')
-    output.append('Registry Activity:')
-    output.append('==================')
-
-    for line in data:
-        if line[0] != '"':  # Ignore lines that begin with Tab. Sysinternals breaks CSV with new processes
-            continue
-        line = line.strip(whitespace + '"')
-        field = line.split('","')
-        try:
-            if field[3] == "RegCreateKey" and field[5] == "SUCCESS":
+            elif field[3] == "RegCreateKey" and field[5] == "SUCCESS":
                 if not blacklist_scan(reg_blacklist, field):
-                    outputtext = "[CreateKey] %s:%s > %s" % (field[1], field[2], field[4])
-                    if not outputtext in output:  # Ignore multiple CreateKeys. Only log the first.
-                        output.append(outputtext)
+                    outputtext = "[RegCreateKey] %s:%s > %s" % (field[1], field[2], field[4])
+                    if not outputtext in reg_output:  # Ignore multiple CreateKeys. Only log the first.
+                        timelinetext = "%s,RegCreateKey,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2], field[4])
+                        reg_output.append(outputtext)
+                        timeline.append(timelinetext)
+
             elif field[3] == "RegSetValue" and field[5] == "SUCCESS":
                 if not blacklist_scan(reg_blacklist, field):
                     data_field = field[6].split("Data:")[1].strip(whitespace + '"')
                     if len(data_field.split(" ")) == 16:
                         data_field += " ..."
-                    output.append('[Set Value] %s:%s > %s  =  %s' % (field[1], field[2], field[4], data_field))
-            elif field[3] == "RegDeleteValue" and field[5] == "SUCCESS":
-                if not blacklist_scan(reg_blacklist, field):
-                    output.append('[DeleteValue] %s:%s > %s' % (field[1], field[2], field[4]))
-            elif field[3] == "RegDeleteKey" and field[5] == "SUCCESS":
-                if not blacklist_scan(reg_blacklist, field):
-                    output.append('[DeleteKey] %s:%s > %s' % (field[1], field[2], field[4]))
-        except IndexError:
-            if debug:
-                sys.stderr.write(line)
-                sys.stderr.write(format_exc())
-            continue
+                    outputtext = '[RegSetValue] %s:%s > %s  =  %s' % (field[1], field[2], field[4], data_field)
+                    timelinetext = "%s,RegSetValue,%s,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2], field[4], data_field)
+                    reg_output.append(outputtext)
+                    timeline.append(timelinetext)
 
-    output.append('')
-    output.append('Network Traffic:')
-    output.append('==================')
-    remote_servers = list()
-    #Protolol
-    for line in data:
-        # We do things different here, as there are so many dupes to remove
-        # Now, make sure entry doesn't exist in list before writing it to output
-        output_line = ''
-        server = ''
-        if line[0] != '"':  # Ignore lines that begin with Tab. Sysinternals breaks CSV with new processes
-            continue
-        line = line.strip(whitespace + '"')
-        field = line.split('","')
-        try:
-            if field[3] == "UDP Send" and field[5] == "SUCCESS":
+            elif field[3] == "RegDeleteValue":# and field[5] == "SUCCESS":
+                # SUCCESS if commented out. This allows us to see all attempted deltions, whether or not the value exists
+                if not blacklist_scan(reg_blacklist, field):
+                    outputtext = '[RegDeleteValue] %s:%s > %s' % (field[1], field[2], field[4])
+                    timelinetext = "%s,RegDeleteValue,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2], field[4])
+                    reg_output.append(outputtext)
+                    timeline.append(timelinetext)
+
+            elif field[3] == "RegDeleteKey":# and field[5] == "SUCCESS":
+                # SUCCESS if commented out. This allows us to see all attempted deltions, whether or not the key exists                
+                if not blacklist_scan(reg_blacklist, field):
+                    outputtext = '[RegDeleteKey] %s:%s > %s' % (field[1], field[2], field[4])
+                    timelinetext = "%s,RegDeleteKey,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2], field[4])
+                    reg_output.append(outputtext)
+                    timeline.append(timelinetext)
+
+            elif field[3] == "UDP Send" and field[5] == "SUCCESS":
                 if not blacklist_scan(net_blacklist, field):
                     server = field[4].split("-> ")[1]
                     """
@@ -308,39 +320,87 @@ def parse_csv(txt_file, csv_file, debug):
                         output_line = "[DNS Query] %s:%s > %s" % (field[1], field[2], protocol_replace(server))
                     else:
                     """
-                    output_line = "[UDP] %s:%s > %s" % (field[1], field[2], protocol_replace(server))
-            elif field[3] == "TCP Send" and field[5] == "SUCCESS":
-                if not blacklist_scan(net_blacklist, field):
-                    server = field[4].split("-> ")[1]
-                    output_line = "[TCP] %s:%s > %s" % (field[1], field[2], protocol_replace(server))
-            elif field[3] == "TCP Receive" and field[5] == "SUCCESS":
-                if not blacklist_scan(net_blacklist, field):
-                    server = field[4].split("-> ")[1]
-                    output_line = "[TCP] %s > %s:%s" % (protocol_replace(server), field[1], field[2])
+                    outputtext = "[UDP] %s:%s > %s" % (field[1], field[2], protocol_replace(server))
+                    if not outputtext in net_output:
+                        timelinetext = "%s,UDP Send,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2], protocol_replace(server))
+                        net_output.append(outputtext)
+                        timeline.append(timelinetext)
+
             elif field[3] == "UDP Receive" and field[5] == "SUCCESS":
                 if not blacklist_scan(net_blacklist, field):
                     server = field[4].split("-> ")[1]
-                    output_line = "[UDP] %s > %s:%s" % (protocol_replace(server), field[1], field[2])
+                    outputtext = "[UDP] %s > %s:%s" % (protocol_replace(server), field[1], field[2])
+                    if not outputtext in net_output:
+                        timelinetext = "%s,UDP Receive,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2])
+                        net_output.append(outputtext)
+                        timeline.append(timelinetext)
+
+            elif field[3] == "TCP Send" and field[5] == "SUCCESS":
+                if not blacklist_scan(net_blacklist, field):
+                    server = field[4].split("-> ")[1]
+                    outputtext = "[TCP] %s:%s > %s" % (field[1], field[2], protocol_replace(server))
+                    if not outputtext in net_output:
+                        timelinetext = "%s,TCP Send,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2], protocol_replace(server))
+                        net_output.append(outputtext)
+                        timeline.append(timelinetext)
+
+            elif field[3] == "TCP Receive" and field[5] == "SUCCESS":
+                if not blacklist_scan(net_blacklist, field):
+                    server = field[4].split("-> ")[1]
+                    outputtext = "[TCP] %s > %s:%s" % (protocol_replace(server), field[1], field[2])
+                    if not outputtext in net_output:
+                        timelinetext = "%s,TCP Receive,%s,%s" % (field[0].split()[0].split(".")[0], field[1], field[2])
+                        net_output.append(outputtext)
+                        timeline.append(timelinetext)
+
         except IndexError:
             if debug:
                 sys.stderr.write(line)
                 sys.stderr.write(format_exc())
-            continue
-        if output_line and not output_line in output:
-            output.append(output_line)
+            error_output.append(original_line)
+
+        # Enumerate unique remote hosts into their own section
         if server:
             server = server.split(":")[0]
             if not server in remote_servers and server != "localhost":
                 remote_servers.append(server)
+    #} End of file input processing
 
-    output.append('')
-    output.append('Unique Hosts:')
-    output.append('==================')
+    report.append('Processes Created:')
+    report.append('==================')
+    for event in process_output:
+        report.append(event)
+
+    report.append('')
+    report.append('File Activity:')
+    report.append('==================')
+    for event in file_output:
+        report.append(event)
+
+    report.append('')
+    report.append('Registry Activity:')
+    report.append('==================')
+    for event in reg_output:
+        report.append(event)
+
+    report.append('')
+    report.append('Network Traffic:')
+    report.append('==================')
+    for event in net_output:
+        report.append(event)
+
+    report.append('')
+    report.append('Unique Hosts:')
+    report.append('==================')
     for server in sorted(remote_servers):
-        output.append(protocol_replace(server).strip())
+        report.append(protocol_replace(server).strip())
 
-    codecs.open(txt_file, 'w', "utf-8").write('\r\n'.join(output))
-    open_file_with_assoc(txt_file)
+    if error_output:
+        report.append("\n\n\n\n\n\nERRORS DETECTED")
+        report.append("The following items could not be parsed correctly:")
+        for error in error_output:
+            report.append(error)
+# End of parse_csv()
 
 
 def main():
@@ -357,11 +417,18 @@ def main():
                         help='-r Noriben_<date>.CSV')
     parser.add_argument('-d', dest='debug', action='store_true', help='Enable debug tracebacks')
     args = parser.parse_args()
+    report = list()
+    timeline = list()
 
     if args.read_csv:
-        if os.path.exists(args.input_file):
+        if file_exists(args.input_file):
+            # Reparse an existing CSV
             txt_file = os.path.splitext(args.input_file)[0] + '.txt'
-            parse_csv(txt_file, args.input_file, args.debug)
+            timeline_file = os.path.splitext(args.input_file)[0] + '_timeline.csv'
+            parse_csv(txt_file, args.input_file, report, timeline, args.debug)
+            codecs.open(txt_file, 'w', "utf-8").write('\r\n'.join(report))
+            codecs.open(timeline_file, 'w', "utf-8").write('\r\n'.join(timeline))
+            open_file_with_assoc(txt_file)
             sys.exit()
         else:
             parser.print_usage()
@@ -379,7 +446,9 @@ def main():
     csv_file = "Noriben_%s.csv" % session_id
     txt_file = "Noriben_%s.txt" % session_id
     pmc_file = 'ProcmonConfiguration.PMC'
-    if not os.path.exists(pmc_file):
+
+
+    if not file_exists(pmc_file):
         use_pmc = False
         print("[!] ProcmonConfiguration.PMC not found. Continuing without filters.")
     else:
@@ -393,6 +462,7 @@ def main():
     if use_pmc:
         cmdline += " /LoadConfig %s" % pmc_file
     subprocess.Popen(cmdline)
+    sleep(3)
     print("[*] Procmon is running. Run your malware now.")
     print("[*] When runtime is complete, press CTRL+C to stop logging.")
 
@@ -408,18 +478,21 @@ def main():
     stdnull.wait()
 
     print("[*] Procmon terminated")
-    if not os.path.exists(pml_file):
+    if not file_exists(pml_file):
         print("[!] Error creating PML file!")
         sys.exit(1)
 
-    print("[*] Converting session to CSV: %s" % csv_file)
-    cmdline = "%s /OpenLog %s /saveas %s" % (procmonexe, pml_file, csv_file)
-    if use_pmc:
-        cmdline += " /LoadConfig %s" % pmc_file
-    stdnull = subprocess.Popen(cmdline)
-    stdnull.wait()
+    # PML created, now convert it to a CSV for parsing
+    process_PML_to_CSV(procmonexe, pml_file, pmc_file, csv_file, use_pmc)
+    if not file_exists(csv_file):
+        print("[!] Error detected. Could not create CSV file: %s" % csv_file)
+        sys.exit()
 
-    parse_csv(txt_file, csv_file, args.debug)
+    # Process CSV file, results in "report" and "timeline" output lists
+    parse_csv(txt_file, csv_file, report, timeline, args.debug)   
+    codecs.open(txt_file, 'w', "utf-8").write('\r\n'.join(report))
+    
+    open_file_with_assoc(txt_file)
 
 
 if __name__ == "__main__":
