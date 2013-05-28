@@ -16,7 +16,6 @@
 # When the malware has completed its processing, stop Noriben and you'll have a clean text report
 #
 # TODO:
-# * parse directly from a given .PML database
 # * extract data directly from registry? (requires python-registry - http://www.williballenthin.com/registry/)
 # * create a GUI interface with real, actual buttons to push
 
