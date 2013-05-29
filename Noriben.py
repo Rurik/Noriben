@@ -10,14 +10,14 @@
 #
 # Directions:
 # Just copy Noriben.py to a Windows-based VM alongside the Sysinternals Procmon.exe* 
-# * Procmon is a registered trademark of Microsoft Corporation
 #
 # Run Noriben.py, then run your malware.
-# When the malware has completed its processing, stop Noriben and you'll have a clean text report
+# When the malware has completed its processing, stop Noriben and you'll have a clean text report and timeline
 #
 # TODO:
 # * extract data directly from registry? (requires python-registry - http://www.williballenthin.com/registry/)
 # * create a GUI interface with real, actual buttons to push
+# * scan for mutexes, preferably in a way that doesn't require wmi/pywin32
 
 from __future__ import print_function
 import os
@@ -450,7 +450,7 @@ def main():
     parser = ArgumentParser()
     parser.add_argument('-c', '--csv', help='Re-analyze an existing Noriben CSV file [input file]', required=False)
     parser.add_argument('-p', '--pml', help='Re-analyze an existing Noriben PML file [input file]', required=False)
-    parser.add_argument('-f', '--filter', help='Alernate Procmon Filter PMC [input file]', required=False)
+    parser.add_argument('-f', '--filter', help='Specify alternate Procmon Filter PMC [input file]', required=False)
     parser.add_argument('-d', dest='debug', action='store_true', help='Enable debug tracebacks')
     args = parser.parse_args()
     report = list()
