@@ -45,7 +45,8 @@ procmon = "procmon.exe"  # Change this if you have a renamed procmon.exe
 # 3. To find a list of available "%%" variables, type `set` from a command prompt
 
 # These entries are applied to all blacklists
-global_blacklist = [r"VMwareUser.exe"]
+global_blacklist = [r"VMwareUser.exe",
+                    r"CaptureBAT.exe"]
 
 cmd_blacklist = [r"%SystemRoot%\system32\wbem\wmiprvse.exe",
                  r"%SystemRoot%\system32\wscntfy.exe",
@@ -68,6 +69,7 @@ file_blacklist = [r"procmon.exe",
                   #r"%AppData%\Microsoft\Office",
                   r"%AppData%\Microsoft\Proof\*",
                   r"%AppData%\Microsoft\Templates\*",
+                  r"%ProgramFiles%\Capture\*",
                   r"%SystemDrive%\Python",
                   r"%SystemRoot%\assembly",
                   r"%SystemRoot%\Prefetch\*",
@@ -75,11 +77,13 @@ file_blacklist = [r"procmon.exe",
                   r"%UserProfile%\Recent\*",
                   r"%UserProfile%\Local Settings\History\History.IE5\*"] + global_blacklist
 
-reg_blacklist = [r"procmon.exe",
+reg_blacklist = [r"CaptureProcessMonitor",
+                 r"procmon.exe",
+                 r"verclsid.exe",
                  r"wuauclt.exe",
                  r"wmiprvse.exe",
                  r"wscntfy.exe",
-                 r"verclsid.exe",
+                 r"HKCR\AllFilesystemObjects\shell",
                  r"HKCU\Printers\DevModePerUser",
                  r"HKCU\SessionInformation\ProgramCount",
                  r"HKCU\Software\Microsoft\Office",
@@ -90,16 +94,21 @@ reg_blacklist = [r"procmon.exe",
                  r"HKCU\Software\Microsoft\Windows\CurrentVersion\Group Policy",
                  r"HKCU\Software\Microsoft\Windows\Shell",
                  r"HKCU\Software\Microsoft\Windows\ShellNoRoam\MUICache",
-                 r"HKCR\AllFilesystemObjects\shell",
                  r"HKLM\Software\Microsoft\WBEM",
                  r"HKLM\Software\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products",
+                 r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\*",
                  r"HKLM\Software\Microsoft\Windows\CurrentVersion\Shell Extensions",
+                 r"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Prefetcher\*",
+                 r"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Tracing\*",
                  r"HKLM\System\CurrentControlSet\Control\DeviceClasses",
                  r"HKLM\System\CurrentControlSet\Control\MediaProperties",
                  r"HKLM\System\CurrentControlSet\Enum\*",
                  r"HKLM\System\CurrentControlSet\Services\CaptureRegistryMonitor",
+                 r"HKLM\System\CurrentControlSet\Services\Eventlog\*",
                  r"HKLM\System\CurrentControlSet\Services\Tcpip\Parameters",
                  r"HKLM\System\CurrentControlSet\Services\WinSock2\Parameters",
+                 r"LEGACY_CAPTUREREGISTRYMONITOR",
+                 r"Software\Microsoft\Multimedia\Audio$",
                  r"Software\Microsoft\Multimedia\Audio Compression Manager",
                  r"Software\Microsoft\Windows\CurrentVersion\Explorer\MenuOrder",
                  r"Software\Microsoft\Windows\ShellNoRoam\Bags",
@@ -108,12 +117,8 @@ reg_blacklist = [r"procmon.exe",
                  r"Software\Microsoft\Windows\CurrentVersion\Explorer\RecentDocs",
                  r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders",
                  r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders",
-                 r"LEGACY_CAPTUREREGISTRYMONITOR",
-                 r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\*",
-                 r"Software\Microsoft\Multimedia\Audio$",
-                 r"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Prefetcher\*",
-                 r"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Tracing\*",
-                 r"HKLM\System\CurrentControlSet\Services\Eventlog\*"] + global_blacklist
+                 r"UserAssist\{5E6AB780-7743-11CF-A12B-00AA004AE837}",
+                 r"UserAssist\{75048700-EF1F-11D0-9888-006097DEACF9}"] + global_blacklist
 
 net_blacklist = [r"hasplms.exe"] + global_blacklist  # Hasp dongle beacons
                  #r"192.168.2.", # Particular to my network
@@ -433,7 +438,7 @@ def parse_csv(csv_file, report, timeline, debug):
         report.append(protocol_replace(server).strip())
 
     if error_output:
-        report.append("\n\n\n\n\n\nERRORS DETECTED")
+        report.append("\r\n\r\n\r\n\r\n\r\n\r\nERRORS DETECTED")
         report.append("The following items could not be parsed correctly:")
         for error in error_output:
             report.append(error)
