@@ -1,40 +1,44 @@
 # Noriben Malware Analysis Sandbox
-# Version 1.0 - 10 Apr 13 - @bbaskin
-# Version 1.1 - 21 Apr 13 - Much improved filters and filter parsing.
-# Version 1.1a - 1 May 13 - Revamped regular expression support. Added Python 3.x forward compatibility.
+# Version 1.0 - 10 Apr 13 - @bbaskin - brian@thebaskins.com
+#                           Gracious edits, revisions, and corrections by Daniel Raygoza
+# Version 1.1 - 21 Apr 13 - Much improved filters and filter parsing
+# Version 1.1a - 1 May 13 - Revamped regular expression support. Added Python 3.x forward compatibility
 # Version 1.2 - 28 May 13 - Now reads CSV files line-by-line to handle large files, keep unsuccessful
 #                           registry deletes, compartmentalize sections, creates CSV timeline, can reparse PMLs,
 #                           can specify alternative PMC filters, changed command line arguments, added global blacklist
-#
-# Gracious edits, revisions, and corrections by Daniel Raygoza
+# Version 1.3 - 13 Sep 13 - Option to compress file paths in output, option to use a timeout instead of Ctrl-C to end
+#                           monitoring, only writes RegSetValue entries if Length > 0
 #
 # Directions:
-# Just copy Noriben.py to a Windows-based VM alongside the Sysinternals Procmon.exe* 
+# Just copy Noriben.py to a Windows-based VM alongside the Sysinternals Procmon.exe
 #
 # Run Noriben.py, then run your malware.
 # When the malware has completed its processing, stop Noriben and you'll have a clean text report and timeline
 #
 # TODO:
-# * extract data directly from registry? (requires python-registry - http://www.williballenthin.com/registry/)
-# * create a GUI interface with real, actual buttons to push
+# * extract data directly from registry? (may require python-registry - http://www.williballenthin.com/registry/)
 # * scan for mutexes, preferably in a way that doesn't require wmi/pywin32
 
 from __future__ import print_function
+import codecs
+import fileinput
+import hashlib
 import os
+import re
 import subprocess
 import sys
-import hashlib
-import re
-import codecs  # Needed to open text files as UTF-8 in Python 2.7 and 3.3
-from string import whitespace
-from datetime import datetime
 from argparse import ArgumentParser
-from traceback import format_exc
+from datetime import datetime
+from string import whitespace
 from time import sleep
+from traceback import format_exc
 
-__VERSION__ = "1.2"
+__VERSION__ = "1.3"
 enable_timeline = True
 procmon = "procmon.exe"  # Change this if you have a renamed procmon.exe
+compress_paths = False  # If true, paths are compressed to their base environment variable, e.g. %WINDIR%
+timeout_seconds = 0  # Set to 0 to manually end monitoring with Ctrl-C
+path_compress_list = {}
 
 # Rules for creating rules:
 # 1. Every rule string must begin with the `r` for regular expressions to work.
@@ -46,7 +50,8 @@ procmon = "procmon.exe"  # Change this if you have a renamed procmon.exe
 
 # These entries are applied to all blacklists
 global_blacklist = [r"VMwareUser.exe",
-                    r"CaptureBAT.exe"]
+                    r"CaptureBAT.exe",
+                    r"SearchIndexer.exe"]
 
 cmd_blacklist = [r"%SystemRoot%\system32\wbem\wmiprvse.exe",
                  r"%SystemRoot%\system32\wscntfy.exe",
@@ -66,7 +71,6 @@ file_blacklist = [r"procmon.exe",
                   r"wuauclt.exe",
                   r"wmiprvse.exe",
                   r"%AllUsersProfile%\Application Data\Microsoft\OFFICE\DATA",
-                  #r"%AppData%\Microsoft\Office",
                   r"%AppData%\Microsoft\Proof\*",
                   r"%AppData%\Microsoft\Templates\*",
                   r"%ProgramFiles%\Capture\*",
@@ -89,8 +93,8 @@ reg_blacklist = [r"CaptureProcessMonitor",
                  r"HKCU\Software\Microsoft\Office",
                  r"HKCU\Software\Microsoft\Shared Tools",
                  r"HKCU\Software\Microsoft\Windows\CurrentVersion\Applets",
-                 r"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo",
                  r"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2",
+                 r"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo",
                  r"HKCU\Software\Microsoft\Windows\CurrentVersion\Group Policy",
                  r"HKCU\Software\Microsoft\Windows\Shell",
                  r"HKCU\Software\Microsoft\Windows\ShellNoRoam\MUICache",
@@ -118,11 +122,52 @@ reg_blacklist = [r"CaptureProcessMonitor",
                  r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders",
                  r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders",
                  r"UserAssist\{5E6AB780-7743-11CF-A12B-00AA004AE837}",
-                 r"UserAssist\{75048700-EF1F-11D0-9888-006097DEACF9}"] + global_blacklist
+                 r"UserAssist\{75048700-EF1F-11D0-9888-006097DEACF9}",
+                 r"UserAssist\{CEBFF5CD-ACE2-4F4F-9178-9926F41749EA}"] + global_blacklist
 
 net_blacklist = [r"hasplms.exe"] + global_blacklist  # Hasp dongle beacons
                  #r"192.168.2.", # Particular to my network
                  #r"Verizon_router.home"]  # Particular to my network
+
+
+def compress_vars_init():
+##########################################################
+# Initialize a dictionary with the local system's
+# environment variables.
+##########################################################
+    envvar_list = [r'%AllUsersProfile%',
+                   r'%LocalAppData%',
+                   r'%AppData%',
+                   r'%CommonProgramFiles%',
+                   r'%ProgramData%',
+                   r'%ProgramFiles%',
+                   #r'%PROGRAMFILES(x86)%',
+                   r'%Public%',
+                   r'%Temp%',
+                   r'%UserProfile%',
+                   r'%WinDir%']
+
+    global path_compress_list
+    path_compress_list = {}
+    print("[*] Enabling Windows string compression.")
+    for env in envvar_list:
+        resolved = os.path.expandvars(env).encode('unicode_escape')
+        if not resolved == env:
+            path_compress_list[resolved] = env
+
+
+def compress_var(string):
+##########################################################
+# Initialize a dictionary with the local system's
+# environment variables.
+##########################################################
+    if not len(path_compress_list):
+        compress_vars_init()  # Maybe you imported Noriben and forgot to call compress_vars_init? No biggie.
+    d = path_compress_list  # To get line length under 80 bytes :)
+    search = '(?i)' + '|'.join('(%s)' % key for key in d.iterkeys())
+    regex = re.compile(search)
+    lookup = dict((index + 1, value) for index, value in enumerate(d.itervalues()))
+    return regex.sub(lambda match: match.expand(lookup[match.lastindex]), string)
 
 
 def open_file_with_assoc(fname):
@@ -193,7 +238,6 @@ def blacklist_scan(blacklist, data):
         for bad in blacklist:
             bad = os.path.expandvars(bad).replace("\\", "\\\\")
             try:
-#                if os.path.expandvars(bad).upper() in os.path.expandvars(event).upper():  # Old way
                 if re.search(bad, event, flags=re.IGNORECASE):
                     return True
             except re.error:
@@ -215,10 +259,10 @@ def process_PML_to_CSV(procmonexe, pml_file, pmc_file, csv_file, use_pmc):
     stdnull.wait()
 
 
+def launch_procmon_capture(procmonexe, pml_file, use_pmc, pmc_file):
 ##########################################################
 # Launch Procmon to begin capturing data
 ##########################################################
-def launch_procmon_capture(procmonexe, pml_file, use_pmc, pmc_file):
     cmdline = "%s /BackingFile %s /Quiet /Minimized" % (procmonexe, pml_file)
     if use_pmc:
         cmdline += " /LoadConfig %s" % pmc_file
@@ -226,10 +270,10 @@ def launch_procmon_capture(procmonexe, pml_file, use_pmc, pmc_file):
     sleep(3)
 
 
+def terminate_procmon(procmonexe):
 ##########################################################
 # Terminate Procmon cleanly
 ##########################################################
-def terminate_procmon(procmonexe):
     cmdline = "%s /Terminate" % procmonexe
     stdnull = subprocess.Popen(cmdline)
     stdnull.wait()
@@ -241,8 +285,6 @@ def parse_csv(csv_file, report, timeline, debug):
 # Given the location of CSV and TXT files,
 # parse the CSV for notable items
 ##########################################################
-    import fileinput
-
     process_output = list()
     file_output = list()
     reg_output = list()
@@ -261,6 +303,8 @@ def parse_csv(csv_file, report, timeline, debug):
             if field[3] in ["Process Create"] and field[5] == "SUCCESS":
                 cmdline = field[6].split("Command line: ")[1]
                 if not blacklist_scan(cmd_blacklist, field):
+                    if compress_paths:
+                        cmdline = compress_var(cmdline)
                     child_pid = field[6].split("PID: ")[1].split(",")[0]
                     outputtext = "[CreateProcess] %s:%s > \"%s\"\t[Child PID: %s]" % (
                         field[1], field[2], cmdline.replace('"', ''), child_pid)
@@ -272,42 +316,49 @@ def parse_csv(csv_file, report, timeline, debug):
 
             elif field[3] == "CreateFile" and field[5] == "SUCCESS":
                 if not blacklist_scan(file_blacklist, field):
-                    if os.path.isdir(field[4]):
+                    path = field[4]
+                    if compress_paths:
+                        path = compress_var(path)
+                    if os.path.isdir(path):
                         outputtext = "[CreateFolder] %s:%s > %s" % (field[1], field[2], field[4])
                         timelinetext = "%s,File,CreateFolder,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1],
-                                                                     field[2], field[4])
+                                                                          field[2], path)
                         file_output.append(outputtext)
                         timeline.append(timelinetext)                    
                     else:
                         try:
-                            md5 = md5_file(field[4])
+                            md5 = md5_file(path)
                             outputtext = "[CreateFile] %s:%s > %s\t[MD5: %s]" % (field[1], field[2], field[4], md5)
                             timelinetext = "%s,File,CreateFile,%s,%s,%s,%s" % (field[0].split()[0].split(".")[0],
-                                                                               field[1], field[2], field[4], md5)
+                                                                               field[1], field[2], path, md5)
                             file_output.append(outputtext)
                             timeline.append(timelinetext) 
                         except (IndexError, IOError):
-                            outputtext = "[CreateFile] %s:%s > %s\t[File no longer exists]" % (field[1], field[2],
-                                                                                               field[4])
+                            outputtext = "[CreateFile] %s:%s > %s\t[File no longer exists]" % (field[1], field[2], path)
                             timelinetext = "%s,File,CreateFile,%s,%s,%s,N/A" % (field[0].split()[0].split(".")[0],
-                                                                                field[1], field[2], field[4])
+                                                                                field[1], field[2], path)
                             file_output.append(outputtext)
                             timeline.append(timelinetext)
 
             elif field[3] == "SetDispositionInformationFile" and field[5] == "SUCCESS":
                 if not blacklist_scan(file_blacklist, field):
+                    path = field[4]
                     outputtext = "[DeleteFile] %s:%s > %s" % (field[1], field[2], field[4])
                     timelinetext = "%s,File,DeleteFile,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1],
-                                                                    field[2], field[4])
+                                                                    field[2], path)
                     file_output.append(outputtext)
                     timeline.append(timelinetext)
 
             elif field[3] == "SetRenameInformationFile":
                 if not blacklist_scan(file_blacklist, field):
+                    from_file = field[4]
                     to_file = field[6].split("FileName: ")[1].strip('"')
+                    if compress_paths:
+                        from_file = compress_var(from_file)
+                        to_file = compress_var(to_file)
                     outputtext = "[RenameFile] %s:%s > %s => %s" % (field[1], field[2], field[4], to_file)
                     timelinetext = "%s,File,RenameFile,%s,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1],
-                                                                       field[2], field[4], to_file)
+                                                                       field[2], from_file, to_file)
                     file_output.append(outputtext)
                     timeline.append(timelinetext)
 
@@ -322,21 +373,24 @@ def parse_csv(csv_file, report, timeline, debug):
 
             elif field[3] == "RegSetValue" and field[5] == "SUCCESS":
                 if not blacklist_scan(reg_blacklist, field):
-                    data_field = field[6].split("Data:")[1].strip(whitespace + '"')
-                    if len(data_field.split(" ")) == 16:
-                        data_field += " ..."
-                    outputtext = '[RegSetValue] %s:%s > %s  =  %s' % (field[1], field[2], field[4], data_field)
-                    timelinetext = "%s,Registry,RegSetValue,%s,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1],
-                                                                            field[2], field[4], data_field)
-                    reg_output.append(outputtext)
-                    timeline.append(timelinetext)
+                    reg_length = field[6].split("Length:")[1].split(",")[0].strip(whitespace + '"')
+                    if int(reg_length):
+                        data_field = field[6].split("Data:")[1].strip(whitespace + '"')
+                        if len(data_field.split(" ")) == 16:
+                            data_field += " ..."
+                        outputtext = '[RegSetValue] %s:%s > %s  =  %s' % (field[1], field[2], field[4], data_field)
+                        timelinetext = "%s,Registry,RegSetValue,%s,%s,%s,%s" % (field[0].split()[0].split(".")[0],
+                                                                                field[1], field[2], field[4],
+                                                                                data_field)
+                        reg_output.append(outputtext)
+                        timeline.append(timelinetext)
 
             elif field[3] == "RegDeleteValue":  # and field[5] == "SUCCESS":
                 # SUCCESS is commented out to allows all attempted deletions, whether or not the value exists
                 if not blacklist_scan(reg_blacklist, field):
                     outputtext = '[RegDeleteValue] %s:%s > %s' % (field[1], field[2], field[4])
                     timelinetext = "%s,Registry,RegDeleteValue,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1],
-                                                                   field[2], field[4])
+                                                                            field[2], field[4])
                     reg_output.append(outputtext)
                     timeline.append(timelinetext)
 
@@ -352,12 +406,10 @@ def parse_csv(csv_file, report, timeline, debug):
             elif field[3] == "UDP Send" and field[5] == "SUCCESS":
                 if not blacklist_scan(net_blacklist, field):
                     server = field[4].split("-> ")[1]
-                    """
                     # TODO: work on this later, once I can verify it better.
-                    if field[6] == "Length: 20":
-                        output_line = "[DNS Query] %s:%s > %s" % (field[1], field[2], protocol_replace(server))
-                    else:
-                    """
+                    #if field[6] == "Length: 20":
+                    #    output_line = "[DNS Query] %s:%s > %s" % (field[1], field[2], protocol_replace(server))
+                    #else:
                     outputtext = "[UDP] %s:%s > %s" % (field[1], field[2], protocol_replace(server))
                     if not outputtext in net_output:
                         timelinetext = "%s,Network,UDP Send,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1],
@@ -399,7 +451,7 @@ def parse_csv(csv_file, report, timeline, debug):
             if debug:
                 sys.stderr.write(line)
                 sys.stderr.write(format_exc())
-            error_output.append(original_line)
+            error_output.append(original_line.strip())
 
         # Enumerate unique remote hosts into their own section
         if server:
@@ -456,11 +508,21 @@ def main():
     parser.add_argument('-c', '--csv', help='Re-analyze an existing Noriben CSV file [input file]', required=False)
     parser.add_argument('-p', '--pml', help='Re-analyze an existing Noriben PML file [input file]', required=False)
     parser.add_argument('-f', '--filter', help='Specify alternate Procmon Filter PMC [input file]', required=False)
-    parser.add_argument('-d', dest='debug', action='store_true', help='Enable debug tracebacks')
+    parser.add_argument('-t', '--timeout', help='Number of seconds to collect activity', required=False, type=int)
+    parser.add_argument('--compress', dest='compress_paths', default=False, action='store_true',
+                        help='Compress file paths to their environment variables. Default: %s' % compress_paths,
+                        required=False)
+    parser.add_argument('-d', dest='debug', action='store_true', help='Enable debug tracebacks', required=False)
     args = parser.parse_args()
     report = list()
     timeline = list()
-    pmc_file = ''
+
+    if args.compress_paths:
+        global compress_paths
+        compress_paths = True
+
+    if compress_paths:
+        compress_vars_init()
 
     # First check for a valid filter file
     if args.filter:
@@ -531,6 +593,10 @@ def main():
             parser.print_usage()
             sys.exit(1)
 
+    if args.timeout:
+        global timeout_seconds
+        timeout_seconds = args.timeout
+
     # Start main data collection and processing
     print("[*] Using procmon EXE: %s" % procmonexe)
     session_id = get_session_name()
@@ -544,15 +610,25 @@ def main():
     launch_procmon_capture(procmonexe, pml_file, use_pmc, pmc_file)
 
     print("[*] Procmon is running. Run your malware now.")
-    print("[*] When runtime is complete, press CTRL+C to stop logging.")
 
-    try:
-        while True:
-            sleep(10)
-    except KeyboardInterrupt:
-        pass
+    if timeout_seconds:
+        print("[*] Running for %d seconds." % timeout_seconds)
+        # Print a small progress indicator, for those REALLY long sleeps.
+        for i in range(timeout_seconds):
+            progress = (100 / timeout_seconds) * i
+            sys.stdout.write('\r%d%% complete' % progress)
+            sys.stdout.flush()
+            sleep(1)
 
-    print("[*] Termination of Procmon commencing... please wait")
+    else:
+        print("[*] When runtime is complete, press CTRL+C to stop logging.")
+        try:
+            while True:
+                sleep(10)
+        except KeyboardInterrupt:
+            pass
+
+    print("\n[*] Termination of Procmon commencing... please wait")
     terminate_procmon(procmonexe)
 
     print("[*] Procmon terminated")
