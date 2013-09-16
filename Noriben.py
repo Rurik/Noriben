@@ -8,6 +8,9 @@
 #                           can specify alternative PMC filters, changed command line arguments, added global blacklist
 # Version 1.3 - 13 Sep 13 - Option to compress file paths in output, option to use a timeout instead of Ctrl-C to end
 #                           monitoring, only writes RegSetValue entries if Length > 0
+# Version 1.4 - 16 Sep 13 - Fixed string compression on file rename, added ability to Ctrl-C from a timeout, added
+#                           specifying malware file from command line, string compression now supports ()'s in
+#                           environment variable name (for 64-bit systems).
 #
 # Directions:
 # Just copy Noriben.py to a Windows-based VM alongside the Sysinternals Procmon.exe
@@ -33,7 +36,7 @@ from string import whitespace
 from time import sleep
 from traceback import format_exc
 
-__VERSION__ = "1.3"
+__VERSION__ = "1.4"
 enable_timeline = True
 procmon = "procmon.exe"  # Change this if you have a renamed procmon.exe
 compress_paths = False  # If true, paths are compressed to their base environment variable, e.g. %WINDIR%
@@ -44,7 +47,7 @@ path_compress_list = {}
 # 1. Every rule string must begin with the `r` for regular expressions to work.
 # 1.a. This signifies a "raw" string.
 # 2. No backslashes at the end of a filter. Either:
-# 2.a. truncate the backslash, or 
+# 2.a. truncate the backslash, or
 # 2.b. use "\*" to signify "zero or more slashes".
 # 3. To find a list of available "%%" variables, type `set` from a command prompt
 
@@ -141,7 +144,7 @@ def compress_vars_init():
                    r'%CommonProgramFiles%',
                    r'%ProgramData%',
                    r'%ProgramFiles%',
-                   #r'%PROGRAMFILES(x86)%',
+                   r'%ProgramFiles(x86)%',
                    r'%Public%',
                    r'%Temp%',
                    r'%UserProfile%',
@@ -152,14 +155,14 @@ def compress_vars_init():
     print("[*] Enabling Windows string compression.")
     for env in envvar_list:
         resolved = os.path.expandvars(env).encode('unicode_escape')
+        resolved = resolved.replace('(', '\\(').replace(')', '\\)')
         if not resolved == env:
             path_compress_list[resolved] = env
 
 
 def compress_var(string):
 ##########################################################
-# Initialize a dictionary with the local system's
-# environment variables.
+# Compress a given string to include its environment variable
 ##########################################################
     if not len(path_compress_list):
         compress_vars_init()  # Maybe you imported Noriben and forgot to call compress_vars_init? No biggie.
@@ -324,7 +327,7 @@ def parse_csv(csv_file, report, timeline, debug):
                         timelinetext = "%s,File,CreateFolder,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1],
                                                                           field[2], path)
                         file_output.append(outputtext)
-                        timeline.append(timelinetext)                    
+                        timeline.append(timelinetext)
                     else:
                         try:
                             md5 = md5_file(path)
@@ -332,7 +335,7 @@ def parse_csv(csv_file, report, timeline, debug):
                             timelinetext = "%s,File,CreateFile,%s,%s,%s,%s" % (field[0].split()[0].split(".")[0],
                                                                                field[1], field[2], path, md5)
                             file_output.append(outputtext)
-                            timeline.append(timelinetext) 
+                            timeline.append(timelinetext)
                         except (IndexError, IOError):
                             outputtext = "[CreateFile] %s:%s > %s\t[File no longer exists]" % (field[1], field[2], path)
                             timelinetext = "%s,File,CreateFile,%s,%s,%s,N/A" % (field[0].split()[0].split(".")[0],
@@ -356,7 +359,7 @@ def parse_csv(csv_file, report, timeline, debug):
                     if compress_paths:
                         from_file = compress_var(from_file)
                         to_file = compress_var(to_file)
-                    outputtext = "[RenameFile] %s:%s > %s => %s" % (field[1], field[2], field[4], to_file)
+                    outputtext = "[RenameFile] %s:%s > %s => %s" % (field[1], field[2], from_file, to_file)
                     timelinetext = "%s,File,RenameFile,%s,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1],
                                                                        field[2], from_file, to_file)
                     file_output.append(outputtext)
@@ -501,6 +504,9 @@ def main():
 ##########################################################
 # Main routine, parses arguments and calls other routines
 ##########################################################
+    global compress_paths
+    global timeout_seconds
+
     print("--===[ Noriben v%s ]===--" % __VERSION__)
     print("--===[   @bbaskin   ]===--\r\n")
 
@@ -512,13 +518,13 @@ def main():
     parser.add_argument('--compress', dest='compress_paths', default=False, action='store_true',
                         help='Compress file paths to their environment variables. Default: %s' % compress_paths,
                         required=False)
+    parser.add_argument('--malware', help='Malware command line to execute (in quotes)', required=False)
     parser.add_argument('-d', dest='debug', action='store_true', help='Enable debug tracebacks', required=False)
     args = parser.parse_args()
     report = list()
     timeline = list()
 
     if args.compress_paths:
-        global compress_paths
         compress_paths = True
 
     if compress_paths:
@@ -594,8 +600,12 @@ def main():
             sys.exit(1)
 
     if args.timeout:
-        global timeout_seconds
         timeout_seconds = args.timeout
+
+    if args.malware:
+        malware_cmdline = args.malware
+    else:
+        malware_cmdline = ''
 
     # Start main data collection and processing
     print("[*] Using procmon EXE: %s" % procmonexe)
@@ -609,16 +619,23 @@ def main():
     print("[*] Launching Procmon ...")
     launch_procmon_capture(procmonexe, pml_file, use_pmc, pmc_file)
 
-    print("[*] Procmon is running. Run your malware now.")
+    if malware_cmdline:
+        print("[*] Launching malware: %s" % malware_cmdline)
+        subprocess.Popen(malware_cmdline)
+    else:
+        print("[*] Procmon is running. Run your malware now.")
 
     if timeout_seconds:
-        print("[*] Running for %d seconds." % timeout_seconds)
+        print("[*] Running for %d seconds. Press Ctrl-C to stop logging early." % timeout_seconds)
         # Print a small progress indicator, for those REALLY long sleeps.
-        for i in range(timeout_seconds):
-            progress = (100 / timeout_seconds) * i
-            sys.stdout.write('\r%d%% complete' % progress)
-            sys.stdout.flush()
-            sleep(1)
+        try:
+            for i in range(timeout_seconds):
+                progress = (100 / timeout_seconds) * i
+                sys.stdout.write('\r%d%% complete' % progress)
+                sys.stdout.flush()
+                sleep(1)
+        except KeyboardInterrupt:
+            pass
 
     else:
         print("[*] When runtime is complete, press CTRL+C to stop logging.")
