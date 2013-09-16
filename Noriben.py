@@ -15,8 +15,8 @@
 # Directions:
 # Just copy Noriben.py to a Windows-based VM alongside the Sysinternals Procmon.exe
 #
-# Run Noriben.py, then run your malware.
-# When the malware has completed its processing, stop Noriben and you'll have a clean text report and timeline
+# Run Noriben.py, then run your executable.
+# When the executable has completed its processing, stop Noriben and you'll have a clean text report and timeline
 #
 # TODO:
 # * extract data directly from registry? (may require python-registry - http://www.williballenthin.com/registry/)
@@ -519,7 +519,7 @@ def main():
     parser.add_argument('--generalize', dest='generalize_paths', default=False, action='store_true',
                         help='Generalize file paths to their environment variables. Default: %s' % generalize_paths,
                         required=False)
-    parser.add_argument('--malware', help='Malware command line to execute (in quotes)', required=False)
+    parser.add_argument('--cmd', help='Command line to execute (in quotes)', required=False)
     parser.add_argument('-d', dest='debug', action='store_true', help='Enable debug tracebacks', required=False)
     args = parser.parse_args()
     report = list()
@@ -617,10 +617,10 @@ def main():
     if args.timeout:
         timeout_seconds = args.timeout
 
-    if args.malware:
-        malware_cmdline = args.malware
+    if args.cmd:
+        exe_cmdline = args.cmd
     else:
-        malware_cmdline = ''
+        exe_cmdline = ''
 
     # Start main data collection and processing
     print("[*] Using procmon EXE: %s" % procmonexe)
@@ -634,11 +634,11 @@ def main():
     print("[*] Launching Procmon ...")
     launch_procmon_capture(procmonexe, pml_file, use_pmc, pmc_file)
 
-    if malware_cmdline:
-        print("[*] Launching malware: %s" % malware_cmdline)
-        subprocess.Popen(malware_cmdline)
+    if exe_cmdline:
+        print("[*] Launching command line: %s" % exe_cmdline)
+        subprocess.Popen(exe_cmdline)
     else:
-        print("[*] Procmon is running. Run your malware now.")
+        print("[*] Procmon is running. Run your executable now.")
 
     if timeout_seconds:
         print("[*] Running for %d seconds. Press Ctrl-C to stop logging early." % timeout_seconds)
