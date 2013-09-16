@@ -6,11 +6,11 @@
 # Version 1.2 - 28 May 13 - Now reads CSV files line-by-line to handle large files, keep unsuccessful
 #                           registry deletes, compartmentalize sections, creates CSV timeline, can reparse PMLs,
 #                           can specify alternative PMC filters, changed command line arguments, added global blacklist
-# Version 1.3 - 13 Sep 13 - Option to compress file paths in output, option to use a timeout instead of Ctrl-C to end
+# Version 1.3 - 13 Sep 13 - Option to generalize file paths in output, option to use a timeout instead of Ctrl-C to end
 #                           monitoring, only writes RegSetValue entries if Length > 0
-# Version 1.4 - 16 Sep 13 - Fixed string compression on file rename, added ability to Ctrl-C from a timeout, added
-#                           specifying malware file from command line, string compression now supports ()'s in
-#                           environment variable name (for 64-bit systems).
+# Version 1.4 - 16 Sep 13 - Fixed string generalization on file rename and now supports ()'s in environment name (for
+#                           64-bit systems), added ability to Ctrl-C from a timeout, added
+#                           specifying malware file from command line, added an output directory
 #
 # Directions:
 # Just copy Noriben.py to a Windows-based VM alongside the Sysinternals Procmon.exe
@@ -39,9 +39,9 @@ from traceback import format_exc
 __VERSION__ = "1.4"
 enable_timeline = True
 procmon = "procmon.exe"  # Change this if you have a renamed procmon.exe
-compress_paths = False  # If true, paths are compressed to their base environment variable, e.g. %WINDIR%
+generalize_paths = False  # If true, paths are generalized to their base environment variable, e.g. %WINDIR%
 timeout_seconds = 0  # Set to 0 to manually end monitoring with Ctrl-C
-path_compress_list = {}
+path_general_list = {}
 
 # Rules for creating rules:
 # 1. Every rule string must begin with the `r` for regular expressions to work.
@@ -133,7 +133,7 @@ net_blacklist = [r"hasplms.exe"] + global_blacklist  # Hasp dongle beacons
                  #r"Verizon_router.home"]  # Particular to my network
 
 
-def compress_vars_init():
+def generalize_vars_init():
 ##########################################################
 # Initialize a dictionary with the local system's
 # environment variables.
@@ -150,23 +150,23 @@ def compress_vars_init():
                    r'%UserProfile%',
                    r'%WinDir%']
 
-    global path_compress_list
-    path_compress_list = {}
-    print("[*] Enabling Windows string compression.")
+    global path_general_list
+    path_general_list = {}
+    print("[*] Enabling Windows string generalization.")
     for env in envvar_list:
         resolved = os.path.expandvars(env).encode('unicode_escape')
         resolved = resolved.replace('(', '\\(').replace(')', '\\)')
         if not resolved == env:
-            path_compress_list[resolved] = env
+            path_general_list[resolved] = env
 
 
-def compress_var(string):
+def generalize_var(string):
 ##########################################################
-# Compress a given string to include its environment variable
+# Generalize a given string to include its environment variable
 ##########################################################
-    if not len(path_compress_list):
-        compress_vars_init()  # Maybe you imported Noriben and forgot to call compress_vars_init? No biggie.
-    d = path_compress_list  # To get line length under 80 bytes :)
+    if not len(path_general_list):
+        generalize_vars_init()  # Maybe you imported Noriben and forgot to call generalize_vars_init? No biggie.
+    d = path_general_list  # To get line length under 80 bytes :)
     search = '(?i)' + '|'.join('(%s)' % key for key in d.iterkeys())
     regex = re.compile(search)
     lookup = dict((index + 1, value) for index, value in enumerate(d.itervalues()))
@@ -306,8 +306,8 @@ def parse_csv(csv_file, report, timeline, debug):
             if field[3] in ["Process Create"] and field[5] == "SUCCESS":
                 cmdline = field[6].split("Command line: ")[1]
                 if not blacklist_scan(cmd_blacklist, field):
-                    if compress_paths:
-                        cmdline = compress_var(cmdline)
+                    if generalize_paths:
+                        cmdline = generalize_var(cmdline)
                     child_pid = field[6].split("PID: ")[1].split(",")[0]
                     outputtext = "[CreateProcess] %s:%s > \"%s\"\t[Child PID: %s]" % (
                         field[1], field[2], cmdline.replace('"', ''), child_pid)
@@ -320,8 +320,8 @@ def parse_csv(csv_file, report, timeline, debug):
             elif field[3] == "CreateFile" and field[5] == "SUCCESS":
                 if not blacklist_scan(file_blacklist, field):
                     path = field[4]
-                    if compress_paths:
-                        path = compress_var(path)
+                    if generalize_paths:
+                        path = generalize_var(path)
                     if os.path.isdir(path):
                         outputtext = "[CreateFolder] %s:%s > %s" % (field[1], field[2], field[4])
                         timelinetext = "%s,File,CreateFolder,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1],
@@ -356,9 +356,9 @@ def parse_csv(csv_file, report, timeline, debug):
                 if not blacklist_scan(file_blacklist, field):
                     from_file = field[4]
                     to_file = field[6].split("FileName: ")[1].strip('"')
-                    if compress_paths:
-                        from_file = compress_var(from_file)
-                        to_file = compress_var(to_file)
+                    if generalize_paths:
+                        from_file = generalize_var(from_file)
+                        to_file = generalize_var(to_file)
                     outputtext = "[RenameFile] %s:%s > %s => %s" % (field[1], field[2], from_file, to_file)
                     timelinetext = "%s,File,RenameFile,%s,%s,%s,%s" % (field[0].split()[0].split(".")[0], field[1],
                                                                        field[2], from_file, to_file)
@@ -504,7 +504,7 @@ def main():
 ##########################################################
 # Main routine, parses arguments and calls other routines
 ##########################################################
-    global compress_paths
+    global generalize_paths
     global timeout_seconds
 
     print("--===[ Noriben v%s ]===--" % __VERSION__)
@@ -515,8 +515,9 @@ def main():
     parser.add_argument('-p', '--pml', help='Re-analyze an existing Noriben PML file [input file]', required=False)
     parser.add_argument('-f', '--filter', help='Specify alternate Procmon Filter PMC [input file]', required=False)
     parser.add_argument('-t', '--timeout', help='Number of seconds to collect activity', required=False, type=int)
-    parser.add_argument('--compress', dest='compress_paths', default=False, action='store_true',
-                        help='Compress file paths to their environment variables. Default: %s' % compress_paths,
+    parser.add_argument('--output', help='Folder to store output files', required=False)
+    parser.add_argument('--generalize', dest='generalize_paths', default=False, action='store_true',
+                        help='Generalize file paths to their environment variables. Default: %s' % generalize_paths,
                         required=False)
     parser.add_argument('--malware', help='Malware command line to execute (in quotes)', required=False)
     parser.add_argument('-d', dest='debug', action='store_true', help='Enable debug tracebacks', required=False)
@@ -524,13 +525,14 @@ def main():
     report = list()
     timeline = list()
 
-    if args.compress_paths:
-        compress_paths = True
+    # First check to see if string generalization is wanted
+    if args.generalize_paths:
+        generalize_paths = True
 
-    if compress_paths:
-        compress_vars_init()
+    if generalize_paths:
+        generalize_vars_init()
 
-    # First check for a valid filter file
+    # Next, check for a valid filter file
     if args.filter:
         if file_exists(args.filter):
             pmc_file = args.filter
@@ -552,18 +554,31 @@ def main():
         print("[!] Unable to find Procmon (%s) in path." % procmon)
         sys.exit(1)
 
+    if args.output:
+        output_dir = args.output
+        if not output_dir[-1] == "\\":
+            output_dir += "\\"
+        if not os.path.exists(output_dir):
+            try:
+                os.mkdir(output_dir)
+            except WindowsError:
+                print('[!] Unable to create directory: %s' % output_dir)
+                sys.exit(1)
+    else:
+        output_dir = ''
+
     # Check if user-specified to rescan a PML
     if args.pml:
         if file_exists(args.pml):
             # Reparse an existing PML
-            csv_file = os.path.splitext(args.pml)[0] + '.csv'
-            txt_file = os.path.splitext(args.pml)[0] + '.txt'
-            timeline_file = os.path.splitext(args.pml)[0] + '_timeline.csv'
+            csv_file = output_dir + os.path.splitext(args.pml)[0] + '.csv'
+            txt_file = output_dir + os.path.splitext(args.pml)[0] + '.txt'
+            timeline_file = output_dir + os.path.splitext(args.pml)[0] + '_timeline.csv'
 
             process_PML_to_CSV(procmonexe, args.pml, pmc_file, csv_file, use_pmc)
             if not file_exists(csv_file):
                 print("[!] Error detected. Could not create CSV file: %s" % csv_file)
-                sys.exit()
+                sys.exit(1)
 
             parse_csv(csv_file, report, timeline, args.debug)
 
@@ -610,10 +625,10 @@ def main():
     # Start main data collection and processing
     print("[*] Using procmon EXE: %s" % procmonexe)
     session_id = get_session_name()
-    pml_file = "Noriben_%s.pml" % session_id
-    csv_file = "Noriben_%s.csv" % session_id
-    txt_file = "Noriben_%s.txt" % session_id
-    timeline_file = "Noriben_%s_timeline.csv" % session_id
+    pml_file = output_dir + "Noriben_%s.pml" % session_id
+    csv_file = output_dir + "Noriben_%s.csv" % session_id
+    txt_file = output_dir + "Noriben_%s.txt" % session_id
+    timeline_file = output_dir + "Noriben_%s_timeline.csv" % session_id
     print("[*] Procmon session saved to: %s" % pml_file)
 
     print("[*] Launching Procmon ...")
@@ -657,7 +672,7 @@ def main():
     process_PML_to_CSV(procmonexe, pml_file, pmc_file, csv_file, use_pmc)
     if not file_exists(csv_file):
         print("[!] Error detected. Could not create CSV file: %s" % csv_file)
-        sys.exit()
+        sys.exit(1)
 
     # Process CSV file, results in "report" and "timeline" output lists
     parse_csv(csv_file, report, timeline, args.debug)
