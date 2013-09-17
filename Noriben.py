@@ -9,8 +9,8 @@
 # Version 1.3 - 13 Sep 13 - Option to generalize file paths in output, option to use a timeout instead of Ctrl-C to end
 #                           monitoring, only writes RegSetValue entries if Length > 0
 # Version 1.4 - 16 Sep 13 - Fixed string generalization on file rename and now supports ()'s in environment name (for
-#                           64-bit systems), added ability to Ctrl-C from a timeout, added
-#                           specifying malware file from command line, added an output directory
+#                           64-bit systems) (thanks to Andrew Havens from Cipher Tech), added ability to Ctrl-C from a
+#                           timeout, added specifying malware file from command line, added an output directory
 #
 # Directions:
 # Just copy Noriben.py to a Windows-based VM alongside the Sysinternals Procmon.exe
