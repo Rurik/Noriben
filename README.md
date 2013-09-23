@@ -1,13 +1,27 @@
 ## Noriben Malware Analysis Sandbox
 
+
+
 Noriben is a Python-based script that works in conjunction with Sysinternals Procmon to automatically collect, analyze, and report on runtime indicators of malware. In a nutshell, it allows you to run your malware, hit a keypress, and get a simple text report of the sample's activities.
 
+
+
+
+
 Noriben allows you to not only run malware similar to a sandbox, but to also log system-wide events while you manually run malware in ways particular to making it run. For example, it can listen as you run malware that requires varying command line options. Or, watch the system as you step through malware in a debugger.
+
+
+
+
 
 Noriben only requires Sysinternals procmon.exe to operate. It requires no pre-filtering (though it may help) as it contains numerous black list items to reduce unwanted noise from system activity (particular to Windows XP).
 
 
+
+
+
 Usage:
+<pre>
 --===[ Noriben v1.4 ]===--
 --===[   @bbaskin   ]===--
 
@@ -27,10 +41,11 @@ optional arguments:
                         Default: False
   --cmd CMD             Command line to execute (in quotes)
   -d                    Enable debug tracebacks
-
+</pre>
 
 Sample text report output:
 
+<pre>
 Processes Created:
 ==================
 [CreateProcess] Explorer.EXE:1432 > "%UserProfile%\Desktop\hehda.exe"	[Child PID: 2520]
@@ -116,7 +131,7 @@ Unique Hosts:
 88.254.253.254.dynamic.ttnet.com.tr
 92.254.253.254
 google-public-dns-a.google.com
-
+</pre>
 
 
 For additional information, see this blog post:
