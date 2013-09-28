@@ -767,6 +767,7 @@ def main():
             open_file_with_assoc(txt_file)
             sys.exit()
         else:
+            print("[!] PML file does not exist: %s\n" % args.pml)
             parser.print_usage()
             sys.exit(1)
 
