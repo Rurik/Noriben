@@ -220,6 +220,8 @@ def yara_import_rules(yara_folder):
         rules: a yara.Rules structure of available YARA rules
     """
     yara_files = {}
+    if not output_dir[-1] == '\\':
+        output_dir += '\\'    
     print('[*] Loading YARA rules from folder: %s' % yara_folder)
     files = os.listdir(yara_folder)
     for file_name in files:
@@ -435,7 +437,7 @@ def parse_csv(csv_file, report, timeline):
     net_output = list()
     error_output = list()
     remote_servers = list()
-    if yara_folder:
+    if yara_folder and has_yara:
         yara_rules = yara_import_rules(yara_folder)
     else:
         yara_rules = ''
@@ -723,8 +725,6 @@ def main():
     # This only works one path deep. In future, may make it recursive.
     if args.output:
         output_dir = args.output
-        if not output_dir[-1] == '\\':
-            output_dir += '\\'
         if not os.path.exists(output_dir):
             try:
                 os.mkdir(output_dir)
