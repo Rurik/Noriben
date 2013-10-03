@@ -31,6 +31,10 @@
 #       Standardized to single quotes, added YARA scanning of resident files,
 #       reformatted function comments to match appropriate docstring format,
 #       fixed bug with generalize paths - now generalizes after getting MD5
+# Version 1.5b - 1 Oct 13 -
+#       Ninja edits to fix a few small bug fixes and change path generalization
+#       to an ordered list instead of an unordered dictionary. This lets you
+#       prioritize resolutions.
 #
 # TODO:
 # * extract data directly from registry? (may require python-registry - http://www.williballenthin.com/registry/)
@@ -56,15 +60,18 @@ try:
 except ImportError:
     has_yara = False
 
-__VERSION__ = '1.5'
-enable_timeline = True
+# The below are customizable variables. Change these as you see fit.
 procmon = 'procmon.exe'  # Change this if you have a renamed procmon.exe
 generalize_paths = False  # generalize paths to their base environment variable
-timeout_seconds = 0  # Set to 0 to manually end monitoring with Ctrl-C
-path_general_list = {}
-yara_folder = ''
+enable_timeline = True
 use_pmc = False
 debug = False
+timeout_seconds = 0  # Set to 0 to manually end monitoring with Ctrl-C
+
+# The below is for global internal variables. Don't touch them.
+__VERSION__ = '1.5'
+path_general_list = []
+yara_folder = ''
 
 # Rules for creating rules:
 # 1. Every rule string must begin with the `r` for regular expressions to work.
@@ -183,13 +190,12 @@ def generalize_vars_init():
                    r'%WinDir%']
 
     global path_general_list
-    path_general_list = {}
     print('[*] Enabling Windows string generalization.')
     for env in envvar_list:
         resolved = os.path.expandvars(env).encode('unicode_escape')
         resolved = resolved.replace('(', '\\(').replace(')', '\\)')
-        if not resolved == env:
-            path_general_list[resolved] = env
+        if not resolved == env and not resolved == env.replace('(', '\\(').replace(')', '\\)'):
+            path_general_list.append([env, resolved])
 
 
 def generalize_var(path_string):
@@ -203,16 +209,30 @@ def generalize_var(path_string):
     """
     if not len(path_general_list):
         generalize_vars_init()  # Maybe you imported Noriben and forgot to call generalize_vars_init? No biggie.
-    d = path_general_list  # To get line length under 80 bytes :)
-    search = '(?i)' + '|'.join('(%s)' % key for key in d.iterkeys())
-    regex = re.compile(search)
-    lookup = dict((index + 1, value) for index, value in enumerate(d.itervalues()))
-    return regex.sub(lambda match: match.expand(lookup[match.lastindex]), path_string)
+    for item in path_general_list:
+        path_string = re.sub(item[1], item[0], path_string)
+    return path_string
+
+
+def yara_rule_check(yara_folder):
+    """
+    Scan a folder of YARA rule files to determine which provide syntax errors
+
+    Arguments:
+        yara_folder: path to folder containing rules
+    """
+    for name in os.listdir(yara_folder):
+        fname = yara_folder + name
+        try:
+            rules = yara.compile(filepath=fname)
+        except yara.SyntaxError:
+            print('[!] YARA Syntax Error in file: %s' % fname)
+            print(format_exc())
 
 
 def yara_import_rules(yara_folder):
     """
-    Immport a folder of YARA rule files
+    Import a folder of YARA rule files
 
     Arguments:
         yara_folder: path to folder containing rules
@@ -225,8 +245,14 @@ def yara_import_rules(yara_folder):
     for file_name in files:
         if '.yara' in file_name:
             yara_files[file_name.split('.yara')[0]] = yara_folder + file_name
-    rules = yara.compile(filepaths=yara_files)
-    print('[*] YARA rules loaded. Total files imported: %d' % len(yara_files))
+    try:
+        rules = yara.compile(filepaths=yara_files)
+        print('[*] YARA rules loaded. Total files imported: %d' % len(yara_files))
+    except yara.SyntaxError:
+        print('[!] Syntax error found in one of the imported YARA files. Error shown below.')
+        rules = ''
+        yara_rule_check(yara_folder)
+        print('[!] YARA rules disabled until all Syntax Errors are fixed.')
     return rules
 
 
@@ -435,7 +461,7 @@ def parse_csv(csv_file, report, timeline):
     net_output = list()
     error_output = list()
     remote_servers = list()
-    if yara_folder:
+    if yara_folder and has_yara:
         yara_rules = yara_import_rules(yara_folder)
     else:
         yara_rules = ''
@@ -466,7 +492,7 @@ def parse_csv(csv_file, report, timeline):
                 if not blacklist_scan(file_blacklist, field):
                     path = field[4]
                     yara_hits = ''
-                    if yara_folder:
+                    if yara_folder and yara_rules:
                         yara_hits = yara_filescan(path, yara_rules)
                     if os.path.isdir(path):
                         if generalize_paths:
@@ -767,7 +793,7 @@ def main():
             open_file_with_assoc(txt_file)
             sys.exit()
         else:
-            print("[!] PML file does not exist: %s\n" % args.pml)
+            print('[!] PML file does not exist: %s\n' % args.pml)
             parser.print_usage()
             sys.exit(1)
 
