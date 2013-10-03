@@ -52,7 +52,7 @@ from argparse import ArgumentParser
 from datetime import datetime
 from string import whitespace
 from time import sleep
-from traceback import format_exc
+from traceback import format_exc, format_list
 
 try:
     import yara
@@ -240,8 +240,8 @@ def yara_import_rules(yara_folder):
         rules: a yara.Rules structure of available YARA rules
     """
     yara_files = {}
-    if not output_dir[-1] == '\\':
-        output_dir += '\\'    
+    if not yara_folder[-1] == '\\':
+        yara_folder += '\\'
     print('[*] Loading YARA rules from folder: %s' % yara_folder)
     files = os.listdir(yara_folder)
     for file_name in files:
