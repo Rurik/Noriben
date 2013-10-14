@@ -52,7 +52,7 @@ from argparse import ArgumentParser
 from datetime import datetime
 from string import whitespace
 from time import sleep
-from traceback import format_exc, format_list
+from traceback import format_exc
 
 try:
     import yara
@@ -527,6 +527,8 @@ def parse_csv(csv_file, report, timeline):
             elif field[3] == 'SetDispositionInformationFile' and field[5] == 'SUCCESS':
                 if not blacklist_scan(file_blacklist, field):
                     path = field[4]
+                    if generalize_paths:
+                        path = generalize_var(path)
                     outputtext = '[DeleteFile] %s:%s > %s' % (field[1], field[2], field[4])
                     timelinetext = '%s,File,DeleteFile,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
                                                                     field[2], path)
