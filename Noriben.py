@@ -426,7 +426,7 @@ def launch_procmon_capture(procmonexe, pml_file, pmc_file):
     Results:
         None
     """
-    cmdline = '%s /BackingFile %s /Quiet /Minimized' % (procmonexe, pml_file)
+    cmdline = '/AcceptEula %s /BackingFile %s /Quiet /Minimized' % (procmonexe, pml_file)
     if use_pmc:
         cmdline += ' /LoadConfig %s' % pmc_file
     subprocess.Popen(cmdline)
