@@ -1,6 +1,6 @@
 ## Noriben Malware Analysis Sandbox
 
-
+Like it? Buy me a beer! :) <a href='https://pledgie.com/campaigns/22876'><img alt='Click here to lend your support to: Open Source Software and make a donation at pledgie.com !' src='https://pledgie.com/campaigns/22876.png?skin_name=chrome' border='0' ></a>
 
 Noriben is a Python-based script that works in conjunction with Sysinternals Procmon to automatically collect, analyze, and report on runtime indicators of malware. In a nutshell, it allows you to run your malware, hit a keypress, and get a simple text report of the sample's activities.
 
