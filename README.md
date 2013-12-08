@@ -43,7 +43,32 @@ optional arguments:
   -d                    Enable debug tracebacks
 </pre>
 
-Sample text report output:
+## Errors?
+One common error that appears is due to how Python 2.7 handles Ctrl-C calls during a sleep. This is seen in operation as soon as Ctrl-C is pressed with the following errors:
+
+<pre>
+[*] Launching Procmon ...
+Traceback (most recent call last):
+  File "Noriben.py", line 1063, in <module>
+    main()
+  File "Noriben.py", line 1043, in main
+    live_capture()
+  File "Noriben.py", line 858, in live_capture
+    launch_procmon_capture()
+  File "Noriben.py", line 564, in launch_procmon_capture
+    sleep(3)
+KeyboardInterrupt
+</pre>
+
+This is an odd error that occurs seemingly randomly, and in ways that cannot be managed.
+Resolving this can be done multiple ways. Once this error occurs, you can terminate Procmon manually with 'procmon.exe /Terminate'. From this point, your Noriben*.PML file still exists and the operation can be resumed with: 'Noriben.py -p <filename>.PML'. 
+
+Resolutions:
+1. Use Python 3.X instead of 2.X.
+2. Specify a timeout period instead of using Ctrl-C.
+
+
+# Sample text report output:
 
 <pre>
 Processes Created:
