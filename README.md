@@ -63,10 +63,12 @@ KeyboardInterrupt
 This is an odd error that occurs seemingly randomly, and in ways that cannot be managed.
 Resolving this can be done multiple ways. Once this error occurs, you can terminate Procmon manually with 'procmon.exe /Terminate'. From this point, your Noriben*.PML file still exists and the operation can be resumed with: 'Noriben.py -p <filename>.PML'. 
 
+
 Resolutions:
+<pre>
 1. Use Python 3.X instead of 2.X.
 2. Specify a timeout period instead of using Ctrl-C.
-
+</pre>
 
 # Sample text report output:
 
