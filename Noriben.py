@@ -62,7 +62,7 @@ except ImportError:
 
 # The below are customizable variables. Change these as you see fit.
 procmon = 'procmon.exe'  # Change this if you have a renamed procmon.exe
-generalize_paths = False  # generalize paths to their base environment variable
+generalize_paths = True  # generalize paths to their base environment variable
 enable_timeline = True
 use_pmc = False
 debug = False
