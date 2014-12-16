@@ -62,7 +62,7 @@ except ImportError:
 
 # The below are customizable variables. Change these as you see fit.
 procmon = 'procmon.exe'  # Change this if you have a renamed procmon.exe
-generalize_paths = False  # generalize paths to their base environment variable
+generalize_paths = True  # generalize paths to their base environment variable
 enable_timeline = True
 use_pmc = False
 debug = False
@@ -84,7 +84,9 @@ yara_folder = ''
 # These entries are applied to all blacklists
 global_blacklist = [r'VMwareUser.exe',
                     r'CaptureBAT.exe',
-                    r'SearchIndexer.exe']
+                    r'SearchIndexer.exe',
+                    r'Fakenet.exe',
+                    r'idaq.exe']
 
 cmd_blacklist = [r'%SystemRoot%\system32\wbem\wmiprvse.exe',
                  r'%SystemRoot%\system32\wscntfy.exe',
@@ -106,41 +108,79 @@ file_blacklist = [r'procmon.exe',
                   r'wmiprvse.exe',
                   r'Microsoft\Windows\Explorer\thumbcache_.*.db',
                   r'Thumbs.db$',
+
                   r'%AllUsersProfile%\Application Data\Microsoft\OFFICE\DATA',
                   r'%AppData%\Microsoft\Proof\*',
                   r'%AppData%\Microsoft\Templates\*',
+                  r'%LocalAppData%\Google\Drive\sync_config.db*',
                   r'%ProgramFiles%\Capture\*',
                   r'%SystemDrive%\Python',
                   r'%SystemRoot%\assembly',
                   r'%SystemRoot%\Prefetch\*',
                   r'%SystemRoot%\system32\wbem\Logs\*',
+                  r'%UserProfile%$',
+                  r'%UserProfile%\AppData\LocalLow$',
                   r'%UserProfile%\Recent\*',
                   r'%UserProfile%\Local Settings\History\History.IE5\*'] + global_blacklist
 
 reg_blacklist = [r'CaptureProcessMonitor',
+                 r'consent.exe',
                  r'procmon.exe',
                  r'verclsid.exe',
-                 r'wuauclt.exe',
                  r'wmiprvse.exe',
                  r'wscntfy.exe',
+                 r'wuauclt.exe',
+
+                 r'HKCR$',
                  r'HKCR\AllFilesystemObjects\shell',
+
+                 r'HKCU$',
                  r'HKCU\Printers\DevModePerUser',
                  r'HKCU\SessionInformation\ProgramCount',
+                 r'HKCU\Software$',
+                 r'HKCU\Software\Classes\Software\Microsoft\Windows\CurrentVersion\Deployment\SideBySide',
+                 r'HKCU\Software\Classes\Local Settings\MuiCache\*',
+                 r'HKCU\Software\Microsoft\Calc$',
+                 r'HKCU\Software\Microsoft\.*\Window_Placement',
+                 r'HKCU\Software\Microsoft\Internet Explorer\TypedURLs',
+                 r'HKCU\Software\Microsoft\Notepad',
                  r'HKCU\Software\Microsoft\Office',
                  r'HKCU\Software\Microsoft\Shared Tools',
-                 r'HKCU\Software\Classes\Software\Microsoft\Windows\CurrentVersion\Deployment\SideBySide',
+                 r'HKCU\Software\Microsoft\SystemCertificates\Root$',
                  r'HKCU\Software\Microsoft\Windows\CurrentVersion\Applets',
+                 r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\CIDOpen',
+                 r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Modules',
                  r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2',
+                 r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU',
                  r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo',
+                 r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartPage',
+                 r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartPage2',
+                 r'HKCU\Software\Microsoft\Windows\Currentversion\Explorer\StreamMRU',
+                 r'HKCU\Software\Microsoft\Windows\Currentversion\Explorer\Streams',
                  r'HKCU\Software\Microsoft\Windows\CurrentVersion\Group Policy',
                  r'HKCU\Software\Microsoft\Windows\Shell',
+                 r'HKCU\Software\Microsoft\Windows\Shell\BagMRU',
+                 r'HKCU\Software\Microsoft\Windows\Shell\Bags',
                  r'HKCU\Software\Microsoft\Windows\ShellNoRoam\MUICache',
+                 r'HKCU\Software\Microsoft\Windows\ShellNoRoam\BagMRU',
+                 r'HKCU\Software\Microsoft\Windows\ShellNoRoam\Bags',
+                 r'HKCU\Software\Policies$',
+                 r'HKCU\Software\Policies\Microsoft$',
+
+                 r'HKLM$',
+                 r'HKLM\SOFTWARE$',
+                 r'HKLM\SOFTWARE\Microsoft$',
+                 r'HKLM\SOFTWARE\Policies$',
+                 r'HKLM\SOFTWARE\Policies\Microsoft$',
+                 r'HKLM\SOFTWARE\MICROSOFT\SystemCertificates$',
                  r'HKLM\Software\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products',
                  r'HKLM\Software\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\*',
+                 r'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render',
                  r'HKLM\Software\Microsoft\Windows\CurrentVersion\Shell Extensions',
                  r'HKLM\Software\Microsoft\WBEM',
                  r'HKLM\Software\Microsoft\Windows NT\CurrentVersion\Prefetcher\*',
                  r'HKLM\Software\Microsoft\Windows NT\CurrentVersion\Tracing\*',
+                 r'HKLM\System\CurrentControlSet\Control\CLASS\{4D36E968-E325-11CE-BFC1-08002BE10318}',
                  r'HKLM\System\CurrentControlSet\Control\DeviceClasses',
                  r'HKLM\System\CurrentControlSet\Control\MediaProperties',
                  r'HKLM\System\CurrentControlSet\Enum\*',
@@ -148,6 +188,7 @@ reg_blacklist = [r'CaptureProcessMonitor',
                  r'HKLM\System\CurrentControlSet\Services\Eventlog\*',
                  r'HKLM\System\CurrentControlSet\Services\Tcpip\Parameters',
                  r'HKLM\System\CurrentControlSet\Services\WinSock2\Parameters',
+
                  r'LEGACY_CAPTUREREGISTRYMONITOR',
                  r'Software\Microsoft\Multimedia\Audio$',
                  r'Software\Microsoft\Multimedia\Audio Compression Manager',
@@ -530,7 +571,7 @@ def parse_csv(csv_file, report, timeline):
                     path = field[4]
                     if generalize_paths:
                         path = generalize_var(path)
-                    outputtext = '[DeleteFile] %s:%s > %s' % (field[1], field[2], field[4])
+                    outputtext = '[DeleteFile] %s:%s > %s' % (field[1], field[2], path)
                     timelinetext = '%s,File,DeleteFile,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
                                                                     field[2], path)
                     file_output.append(outputtext)
