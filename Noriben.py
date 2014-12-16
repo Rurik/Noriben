@@ -193,8 +193,8 @@ def generalize_vars_init():
     print('[*] Enabling Windows string generalization.')
     for env in envvar_list:
         resolved = os.path.expandvars(env).encode('unicode_escape')
-        resolved = resolved.replace('(', '\\(').replace(')', '\\)')
-        if not resolved == env and not resolved == env.replace('(', '\\(').replace(')', '\\)'):
+        resolved = resolved.replace(b'(', b'\\(').replace(b')', b'\\)')
+        if not resolved == env and not resolved == env.replace(b'(', b'\\(').replace(b')', b'\\)'):
             path_general_list.append([env, resolved])
 
 
@@ -506,7 +506,8 @@ def parse_csv(csv_file, report, timeline):
                         timeline.append(timelinetext)
                     else:
                         try:
-                            md5 = md5_file(path)
+                            md5=''
+                            #md5 = md5_file(path)
                             if generalize_paths:
                                 path = generalize_var(path)
                             outputtext = '[CreateFile] %s:%s > %s\t[MD5: %s]%s' % (field[1], field[2], path, md5,
