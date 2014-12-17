@@ -233,10 +233,15 @@ def generalize_vars_init():
     global path_general_list
     print('[*] Enabling Windows string generalization.')
     for env in envvar_list:
-        resolved = os.path.expandvars(env).encode('unicode_escape')
-        resolved = resolved.replace(b'(', b'\\(').replace(b')', b'\\)')
-        if not resolved == env and not resolved == env.replace(b'(', b'\\(').replace(b')', b'\\)'):
-            path_general_list.append([env, resolved])
+        try:
+            resolved = os.path.expandvars(env).encode('unicode_escape')
+            resolved = resolved.replace(b'(', b'\\(').replace(b')', b'\\)')
+            if not resolved == env and not resolved == env.replace(b'(', b'\\(').replace(b')', b'\\)'):
+                path_general_list.append([env, resolved])
+        except TypeError:
+            if resolved in locals():
+                print('[!] generalize_vars_init(): Unable to parse var: %s' % resolved)
+            continue
 
 
 def generalize_var(path_string):
