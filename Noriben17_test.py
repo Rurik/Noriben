@@ -71,6 +71,10 @@ except ImportError:
 
 # The below are customizable variables. Change these as you see fit.
 virustotal_api_key = ''  ## SET THIS
+if os.path.exists('virustotal.api'):
+    virustotal_api_key = open('virustotal.api', 'r').readlines()[0].strip()
+virustotal_upload = True
+
 procmon = 'procmon.exe'  # Change this if you have a renamed procmon.exe
 generalize_paths = False  # generalize paths to their base environment variable
 enable_timeline = True
@@ -143,6 +147,8 @@ reg_blacklist = [r'CaptureProcessMonitor',
                  r'HKCU\Software$',
                  r'HKCU\Software\Classes\Software\Microsoft\Windows\CurrentVersion\Deployment\SideBySide',
                  r'HKCU\Software\Classes\Local Settings\MuiCache\*',
+                 r'HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\BagMRU',
+                 r'HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags',
                  r'HKCU\Software\Microsoft\Calc$',
                  r'HKCU\Software\Microsoft\.*\Window_Placement',
                  r'HKCU\Software\Microsoft\Internet Explorer\TypedURLs',
@@ -254,7 +260,8 @@ class Event(object):
                  process_value=None,
                  md5=None,
                  child_pid=None,
-                 hostname=None):
+                 hostname=None,
+                 virustotal_scanned=False):
 
         self.time = time
         self.group = group
@@ -265,6 +272,7 @@ class Event(object):
         self.md5 = md5
         self.child_pid = child_pid
         self.hostname = hostname
+        self.virustotal_scanned = virustotal_scanned
         self.tags = {}
 
     def __str__(self):
@@ -296,6 +304,7 @@ class Event(object):
 
     def get_report_string(self):
         """Return the event contents in a format relevant to text report."""
+        txt = ''
         if self.activity == 'CreateProcess':
             txt = '[CreateProcess] %s:%s > "%s"\t[Child PID: %s]' % (
                     self.process, self.PID, self.process_value, self.child_pid)
@@ -355,6 +364,30 @@ def generalize_var(path_string):
     return path_string
 
 
+def virustotal_scan_events(Container):
+    """ XXXXX Submit an MD5/SHA1 value to VirusTotal to check for results.
+
+    Arguments:
+        file_id: MD5 or SHA1 of file to retrieve report
+    Results:
+        String value showing number of positive results
+    """
+    vt_all_files = {}
+    #for event in Container:  XXXXXX
+        #if event.md5 and 0 < os.path.getsize(event)
+        #    vt_all_files[event.md5] = ''
+
+    for md5 in vt_all_files.iterkeys():
+        print(md5)
+#    av_hits = virustotal_scan_file(evt.md5)
+    av_hits = ''
+    if av_hits:
+        evt.tags['VirusTotal'] = av_hits
+        if Config.debug:
+            print('[_] VT: %s' % av_hits)
+    print(vt_all_files)
+ 
+
 def virustotal_scan_file(file_id):
     """Submit an MD5/SHA1 value to VirusTotal to check for results.
 
@@ -390,14 +423,59 @@ def virustotal_scan_file(file_id):
 
     result = ''
     if data['response_code'] and data['total']:
-        result = '[VT: %s/%s]' % (data['positives'], data['total'])
+        result = '%s/%s' % (data['positives'], data['total'])
     else:
         if data['verbose_msg'] == 'The requested resource is not among the finished, queued or pending scans':
-            result = '[VT: Not Scanned]'
+            result = 'Not Scanned'
         else:
-            result = '[VT: Error]'
+            result = 'Error'
     vt_results[file_id] = result
     return result
+
+
+def http_encode_multipart(fields, files=()):
+   BOUNDARY = '----------ThIs_Is_tHe_bouNdaRY_$'
+   CRLF = '\r\n'
+   L = []
+   for key, value in fields.items():
+      L.append('--' + BOUNDARY)
+      L.append('Content-Disposition: form-data; name="%s"' % key)
+      L.append('')
+      L.append(value)
+   for (key, filename, value) in files:
+      L.append('--' + BOUNDARY)
+      L.append('Content-Disposition: form-data; name="%s"; filename="%s"' % (key, filename))
+      content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+      L.append('Content-Type: %s' % content_type)
+      L.append('')
+      L.append(value)
+   L.append('--' + BOUNDARY + '--')
+   L.append('')
+   body = CRLF.join(L)
+   content_type = 'multipart/form-data; boundary=%s' % BOUNDARY
+   return content_type, body
+
+
+def http_post_multipart(url, fields, files=()):
+   """Transmit HTTP multipart data.
+
+   Arguments:
+       url: FQDN URL to transmit to
+       fields: HTTP multipart fields
+       files: list of files to submit as (key, filename, data)
+   Results:
+       String value showing number of positive results
+   """
+
+   content_type, data = http_encode_multipart(fields, files)
+   url_parts = urlparse.urlparse(url)
+   if url_parts.scheme == 'http':
+      con = httplib.HTTPConnection(url_parts.netloc)
+   elif url_parts.scheme == 'https':
+      con = httplib.HTTPSConnection(url_parts.netloc)
+   path = urlparse.urlunparse(('', '') + url_parts[2:])
+   con.request('POST', path, data, {'content-type':content_type})
+   return con.getresponse().read()
 
 
 def yara_rule_check():
@@ -652,12 +730,12 @@ def parse_csv():
                             if Config.debug:
                                 print ('[_] File: %s\texists' % path)
                             try:
-                                md5 = md5_file(path)
-                                evt.tags['MD5'] = md5
+                                #md5 = md5_file(path)
+                                evt.md5 = '' # XXX
                                 if Config.debug:
-                                    print('[_]\t%s' % md5)
+                                    print('[_]\t%s' % evt.md5)
                             except (IndexError, IOError):
-                                md5 = ''
+                                evt.md5 = ''
                                 if Config.debug:
                                     print('[_]\tMD5 could not be calculated')
 
@@ -671,12 +749,6 @@ def parse_csv():
                                 else:
                                     if Config.debug:
                                         print('[_] No YARA hits.')
-                            if has_virustotal:
-                                av_hits = virustotal_scan_file(md5)
-                                if av_hits:
-                                    evt.tags['VirusTotal'] = av_hits
-                                    if Config.debug:
-                                        print('[_] VT: %s' % av_hits)
 
             elif field[3] == 'SetDispositionInformationFile' and field[5] == 'SUCCESS':
                 if not blacklist_scan(file_blacklist, field):
@@ -1036,6 +1108,8 @@ def main():
         sys.exit(1)
 
     events = parse_csv()
+    if has_virustotal:
+        virustotal_scan_events(events)
     create_report(events)
     create_timeline(events)
 
