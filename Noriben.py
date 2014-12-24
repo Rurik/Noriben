@@ -552,8 +552,7 @@ def parse_csv(csv_file, report, timeline):
                         timeline.append(timelinetext)
                     else:
                         try:
-                            md5=''
-                            #md5 = md5_file(path)
+                            md5 = md5_file(path)
                             if generalize_paths:
                                 path = generalize_var(path)
                             outputtext = '[CreateFile] %s:%s > %s\t[MD5: %s]%s' % (field[1], field[2], path, md5,
