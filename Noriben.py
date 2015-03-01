@@ -606,16 +606,19 @@ def parse_csv(csv_file, report, timeline):
             elif field[3] == 'RegSetValue' and field[5] == 'SUCCESS':
                 if not blacklist_scan(reg_blacklist, field):
                     reg_length = field[6].split('Length:')[1].split(',')[0].strip(whitespace + '"')
-                    if int(reg_length):
-                        data_field = field[6].split('Data:')[1].strip(whitespace + '"')
-                        if len(data_field.split(' ')) == 16:
-                            data_field += ' ...'
-                        outputtext = '[RegSetValue] %s:%s > %s  =  %s' % (field[1], field[2], field[4], data_field)
-                        timelinetext = '%s,Registry,RegSetValue,%s,%s,%s,%s' % (field[0].split()[0].split('.')[0],
-                                                                                field[1], field[2], field[4],
-                                                                                data_field)
-                        reg_output.append(outputtext)
-                        timeline.append(timelinetext)
+                    try:
+                        if int(reg_length):
+                            data_field = field[6].split('Data:')[1].strip(whitespace + '"')
+                            if len(data_field.split(' ')) == 16:
+                                data_field += ' ...'
+                            outputtext = '[RegSetValue] %s:%s > %s  =  %s' % (field[1], field[2], field[4], data_field)
+                            timelinetext = '%s,Registry,RegSetValue,%s,%s,%s,%s' % (field[0].split()[0].split('.')[0],
+                                                                                    field[1], field[2], field[4],
+                                                                                    data_field)
+                            reg_output.append(outputtext)
+                            timeline.append(timelinetext)
+                    except ValueError: # Sometimes additional data is added to the int?
+                        error_output.append(original_line.strip())
 
             elif field[3] == 'RegDeleteValue':  # and field[5] == 'SUCCESS':
                 # SUCCESS is commented out to allows all attempted deletions, whether or not the value exists
