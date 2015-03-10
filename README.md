@@ -1,5 +1,11 @@
 ## Noriben Malware Analysis Sandbox
 
+# Beta Testing!
+Uploaded here is a beta for version 1.6 (Noriben-1.6beta.py). This version works exactly the same as the prior one, but with some additions. There were a few small changes in the back end but everything _should_ work faster and _should not_ crash. If you have a VirusTotal API, place it into a file named "virustotal.api" to auto-submit MD5 file hashes to VT to get # of viral results.  You can also add lists of MD5s to auto-ignore (such as all of your system files). Use md5deep and throw them into a text file, use --hash <file> to read them.
+Hopefully all those features work and without crashing :)  Please let me know if there are bugs: brian at thebaskins.com or @bbaskin
+
+
+
 Like it? Buy me a beer! :) <a href='https://pledgie.com/campaigns/22876'><img alt='Click here to lend your support to: Open Source Software and make a donation at pledgie.com !' src='https://pledgie.com/campaigns/22876.png?skin_name=chrome' border='0' ></a>
 
 Noriben is a Python-based script that works in conjunction with Sysinternals Procmon to automatically collect, analyze, and report on runtime indicators of malware. In a nutshell, it allows you to run your malware, hit a keypress, and get a simple text report of the sample's activities.
