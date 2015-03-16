@@ -82,6 +82,7 @@ timeout_seconds = 0      # Set to 0 to manually end monitoring with Ctrl-C
 virustotal_api_key = ''                 ## Set API here
 if os.path.exists('virustotal.api'):    ## Or put it in here
     virustotal_api_key = open('virustotal.api', 'r').readline().strip()
+yara_folder = ''
 
 
 # Rules for creating rules:
@@ -246,7 +247,6 @@ hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89',
 ### Below are global internal variables. Do not edit these. ##
 __VERSION__ = '1.6'                                          #
 path_general_list = []                                       #
-yara_folder = ''                                             #
 has_virustotal = True if virustotal_api_key else False       #
 virustotal_upload = True if virustotal_api_key else False    #
 use_virustotal = True if virustotal_api_key else False       #
@@ -385,15 +385,15 @@ def virustotal_query_hash(hash):
     return result
 
 
-def yara_rule_check(yara_folder):
+def yara_rule_check(yara_path):
     """
     Scan a folder of YARA rule files to determine which provide syntax errors
 
     Arguments:
-        yara_folder: path to folder containing rules
+        yara_path: path to folder containing rules
     """
-    for name in os.listdir(yara_folder):
-        fname = yara_folder + name
+    for name in os.listdir(yara_path):
+        fname = yara_path + name
         try:
             rules = yara.compile(filepath=fname)
         except yara.SyntaxError:
@@ -401,30 +401,30 @@ def yara_rule_check(yara_folder):
             print(format_exc())
 
 
-def yara_import_rules(yara_folder):
+def yara_import_rules(yara_path):
     """
     Import a folder of YARA rule files
 
     Arguments:
-        yara_folder: path to folder containing rules
+        yara_path: path to folder containing rules
     Results:
         rules: a yara.Rules structure of available YARA rules
     """
     yara_files = {}
-    if not yara_folder[-1] == '\\':
-        yara_folder += '\\'
-    print('[*] Loading YARA rules from folder: %s' % yara_folder)
-    files = os.listdir(yara_folder)
+    if not yara_path[-1] == '\\':
+        yara_path += '\\'
+    print('[*] Loading YARA rules from folder: %s' % yara_path)
+    files = os.listdir(yara_path)
     for file_name in files:
         if '.yara' in file_name:
-            yara_files[file_name.split('.yara')[0]] = yara_folder + file_name
+            yara_files[file_name.split('.yara')[0]] = yara_path + file_name
     try:
         rules = yara.compile(filepaths=yara_files)
         print('[*] YARA rules loaded. Total files imported: %d' % len(yara_files))
     except yara.SyntaxError:
         print('[!] Syntax error found in one of the imported YARA files. Error shown below.')
         rules = ''
-        yara_rule_check(yara_folder)
+        yara_rule_check(yara_path)
         print('[!] YARA rules disabled until all Syntax Errors are fixed.')
     return rules
 
@@ -646,8 +646,8 @@ def parse_csv(csv_file, report, timeline):
     net_output = list()
     error_output = list()
     remote_servers = list()
-    if yara_folder and has_yara:
-        yara_rules = yara_import_rules(yara_folder)
+    if yara_path and has_yara:
+        yara_rules = yara_import_rules(yara_path)
     else:
         yara_rules = ''
 
@@ -682,7 +682,7 @@ def parse_csv(csv_file, report, timeline):
                 if not whitelist_scan(file_whitelist, field):
                     path = field[4]
                     yara_hits = ''
-                    if yara_folder and yara_rules:
+                    if yara_path and yara_rules:
                         yara_hits = yara_filescan(path, yara_rules)
                     if os.path.isdir(path):
                         if generalize_paths:
@@ -995,8 +995,9 @@ def main():
 
     # Check to see if specified YARA folder exists
     use_yara = False
-    if args.yara:
-        yara_folder = args.yara
+    if args.yara or yara_folder:
+        if not yara_folder:
+            yara_folder = args.yara
         if not yara_folder[-1] == '\\':
             yara_folder += '\\'
         if not os.path.exists(yara_folder):

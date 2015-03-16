@@ -35,7 +35,7 @@
 #       Ninja edits to fix a few small bug fixes and change path generalization
 #       to an ordered list instead of an unordered dictionary. This lets you
 #       prioritize resolutions.
-# Version 1.6 - 9 Mar 15 -
+# Version 1.6 - 14 Mar 15 -
 #       Long delayed and now forked release. This will be the final release for 
 #       Python 2.X except for updated rules. Now requires 3rd party libraries.
 #       VirusTotal API scanning implemented. Added better filters.
@@ -43,6 +43,10 @@
 #       Added whitelist for MD5 hashes and --hash option for hash file.
 #       Renamed 'blacklist' to 'whitelist' because it's supposed to be. LOL
 #       Change file handling due to 'read entire file' bug in FileInput.
+# Version 1.6.1 - 16 Mar 15 -
+#       Soft fails on Requests import. Lack of module now just disables VirusTotal.
+#       Added better YARA handling. Instead of failing over a single error, it
+#       will skip the offending file.
 #
 # TODO:
 # * Upload files directly to VirusTotal (1.7 feature?)
@@ -57,7 +61,6 @@ import hashlib
 import io
 import os
 import re
-import requests    #pip install requests
 import subprocess
 import sys
 import time
@@ -73,6 +76,14 @@ try:
 except ImportError:
     has_yara = False
 
+try:
+    import requests
+    has_internet = True
+except ImportError:
+    has_internet = False
+    print('[!] Python module "requests" not found. Internet functionality is now disabled.')
+
+
 # The below are customizable variables. Change these as you see fit.
 procmon = 'procmon.exe'  # Change this if you have a renamed procmon.exe
 generalize_paths = True  # Generalize paths to their base environment variable
@@ -82,6 +93,7 @@ timeout_seconds = 0      # Set to 0 to manually end monitoring with Ctrl-C
 virustotal_api_key = ''                 ## Set API here
 if os.path.exists('virustotal.api'):    ## Or put it in here
     virustotal_api_key = open('virustotal.api', 'r').readline().strip()
+yara_folder = r'C:\Yara_sigs'
 
 
 # Rules for creating rules:
@@ -243,20 +255,19 @@ hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89',
 
 
 
-### Below are global internal variables. Do not edit these. ##
-__VERSION__ = '1.6'                                          #
-path_general_list = []                                       #
-yara_folder = ''                                             #
-has_virustotal = True if virustotal_api_key else False       #
-virustotal_upload = True if virustotal_api_key else False    #
-use_virustotal = True if virustotal_api_key else False       #
-use_pmc = False                                              #
-vt_results = {}                                              #
-exe_cmdline = ''                                             #
-time_exec = 0                                                #
-time_process = 0                                             #
-time_analyze = 0                                             #
-##############################################################
+### Below are global internal variables. Do not edit these. #############
+__VERSION__ = '1.6'                                                     #
+path_general_list = []                                                  #
+has_virustotal = True if virustotal_api_key else False                  #
+virustotal_upload = True if virustotal_api_key else False               #
+use_virustotal = True if virustotal_api_key and has_internet else False #
+use_pmc = False                                                         #
+vt_results = {}                                                         #
+exe_cmdline = ''                                                        #
+time_exec = 0                                                           #
+time_process = 0                                                        #
+time_analyze = 0                                                        #
+#########################################################################
 
 
 def generalize_vars_init():
@@ -385,47 +396,56 @@ def virustotal_query_hash(hash):
     return result
 
 
-def yara_rule_check(yara_folder):
+def yara_rule_check(yara_files):
     """
-    Scan a folder of YARA rule files to determine which provide syntax errors
+    Scan a dictionary of YARA rule files to determine
+    which are valid for compilation.
 
     Arguments:
-        yara_folder: path to folder containing rules
+        yara_path: path to folder containing rules
     """
-    for name in os.listdir(yara_folder):
-        fname = yara_folder + name
+    result = dict()
+    for id in yara_files:
+        fname = yara_files[id]
         try:
             rules = yara.compile(filepath=fname)
+            result[id] = fname
         except yara.SyntaxError:
-            print('[!] YARA Syntax Error in file: %s' % fname)
-            print(format_exc())
+            if debug:
+                print('[!] Syntax Error found in YARA file: %s' % fname)
+                print(format_exc())
+    return result
 
 
-def yara_import_rules(yara_folder):
+def yara_import_rules(yara_path):
     """
     Import a folder of YARA rule files
 
     Arguments:
-        yara_folder: path to folder containing rules
+        yara_path: path to folder containing rules
     Results:
         rules: a yara.Rules structure of available YARA rules
     """
     yara_files = {}
-    if not yara_folder[-1] == '\\':
-        yara_folder += '\\'
-    print('[*] Loading YARA rules from folder: %s' % yara_folder)
-    files = os.listdir(yara_folder)
+    if not yara_path[-1] == '\\':
+        yara_path += '\\'
+    
+    print('[*] Loading YARA rules from folder: %s' % yara_path)
+    files = os.listdir(yara_path)
+    
     for file_name in files:
         if '.yara' in file_name:
-            yara_files[file_name.split('.yara')[0]] = yara_folder + file_name
-    try:
-        rules = yara.compile(filepaths=yara_files)
-        print('[*] YARA rules loaded. Total files imported: %d' % len(yara_files))
-    except yara.SyntaxError:
-        print('[!] Syntax error found in one of the imported YARA files. Error shown below.')
-        rules = ''
-        yara_rule_check(yara_folder)
-        print('[!] YARA rules disabled until all Syntax Errors are fixed.')
+            yara_files[file_name.split('.yara')[0]] = yara_path + file_name
+            
+    yara_files = yara_rule_check(yara_files)
+    rules = ''
+    if yara_files:
+        try:
+            rules = yara.compile(filepaths=yara_files)
+            print('[*] YARA rules loaded. Total files imported: %d' % len(yara_files))
+        except yara.SyntaxError:
+            print('[!] YARA: Unknown Syntax Errors found.')
+            print('[!] YARA rules disabled until all Syntax Errors are fixed.')
     return rules
 
 
@@ -701,7 +721,7 @@ def parse_csv(csv_file, report, timeline):
                                 continue
 
                             av_hits = ''
-                            if has_virustotal:
+                            if has_virustotal and has_internet:
                                 av_hits = virustotal_query_hash(md5)
                             
                             
@@ -995,8 +1015,9 @@ def main():
 
     # Check to see if specified YARA folder exists
     use_yara = False
-    if args.yara:
-        yara_folder = args.yara
+    if args.yara or yara_folder:
+        if not yara_folder:
+            yara_folder = args.yara
         if not yara_folder[-1] == '\\':
             yara_folder += '\\'
         if not os.path.exists(yara_folder):
