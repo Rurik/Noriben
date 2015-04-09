@@ -83,6 +83,7 @@ except ImportError:
 
 try:
     import requests
+    import json
     has_internet = True
 except ImportError:
     has_internet = False
@@ -268,28 +269,28 @@ virustotal_upload = True if virustotal_api_key else False               #
 use_virustotal = True if virustotal_api_key and has_internet else False #
 use_pmc = False                                                         #
 vt_results = {}                                                         #
-vt_dump = ()                                                            #
-debug_messages = ()                                                     #
+vt_dump = list()                                                        #
+debug_messages = list()                                                 #
 exe_cmdline = ''                                                        #
+output_dir = ''                                                         #
 time_exec = 0                                                           #
 time_process = 0                                                        #
 time_analyze = 0                                                        #
 #########################################################################
 
-def log_error(error):
+def log_debug(msg):
     """
-    Logs a passed error. Results are printed and stored in 
-    list for later writing to error log.
+    Logs a passed message. Results are printed and stored in 
+    a list for later writing to the debug log.
 
     Arguments:
-        error: Text string of error.
+        msg: Text string of message.
     Results:
         none
     """
     global debug_messages
-    if error:
-        debug_messages.append(error)
-        print(error)
+    if msg and debug:
+        debug_messages.append(msg + '\r\n')
     
 
 def generalize_vars_init():
@@ -324,7 +325,7 @@ def generalize_vars_init():
                 path_general_list.append([env, resolved])
         except TypeError:
             if resolved in locals():
-                log_error('[!] generalize_vars_init(): Unable to parse var: %s' % resolved)
+                log_debug('[!] generalize_vars_init(): Unable to parse var: %s' % resolved)
             continue
 
 
@@ -378,8 +379,7 @@ def virustotal_query_hash(hash):
 
     try:
         previous_result = vt_results[hash]
-        if debug:
-            print('[*] VT scan already performed for %s. Returning previous: %s' % (hash, previous_result))
+        log_debug('[*] VT scan already performed for %s. Returning previous: %s' % (hash, previous_result))
         return previous_result
     except KeyError:
         pass
@@ -417,8 +417,7 @@ def virustotal_query_hash(hash):
         except TypeError:
             result = ' [VT: Error 003]'
     vt_results[hash] = result
-    if debug:
-        log_error('[*] VirusTotal result for hash %s: %s' % (hash, result))
+    log_debug('[*] VirusTotal result for hash %s: %s' % (hash, result))
     return result
 
 
@@ -437,9 +436,8 @@ def yara_rule_check(yara_files):
             rules = yara.compile(filepath=fname)
             result[id] = fname
         except yara.SyntaxError:
-            if debug:
-                log_error('[!] Syntax Error found in YARA file: %s' % fname)
-                log_error(format_exc())
+            log_debug('[!] Syntax Error found in YARA file: %s' % fname)
+            log_debug(format_exc())
     return result
 
 
@@ -472,8 +470,7 @@ def yara_import_rules(yara_path):
         except yara.SyntaxError:
             print('[!] YARA: Unknown Syntax Errors found.')
             print('[!] YARA rules disabled until all Syntax Errors are fixed.')
-            if debug:
-                log_error('[!] YARA rules disabled due to unknown Syntax Errors')
+            log_debug('[!] YARA rules disabled due to unknown Syntax Errors')
     return rules
 
 
@@ -493,8 +490,7 @@ def yara_filescan(file_path, rules):
     try:
         matches = rules.match(file_path)
     except yara.Error:  # If can't open file
-        if debug:
-            log_error('[!] YARA can\'t open file: %s' % file_path)
+        log_debug('[!] YARA can\'t open file: %s' % file_path)
         return ''
     if matches:
         results = '\t[YARA: %s]' % \
@@ -610,9 +606,8 @@ def whitelist_scan(whitelist, data):
                 if re.search(bad, event, flags=re.IGNORECASE):
                     return True
             except re.error:
-                if debug:
-                    log_error('[!] Error found while processing filters.\r\nFilter:\t%s\r\nEvent:\t%s' % (bad, event))
-                    log_error(format_exc())
+                log_debug('[!] Error found while processing filters.\r\nFilter:\t%s\r\nEvent:\t%s' % (bad, event))
+                log_debug(format_exc())
                 return False
     return False
 
@@ -747,8 +742,7 @@ def parse_csv(csv_file, report, timeline):
                         try:
                             md5 = md5_file(path)
                             if md5 in hash_whitelist:
-                                if debug:
-                                    log_error('[_] Skipping hash: %s' % md5)
+                                log_debug('[_] Skipping hash: %s' % md5)
                                 continue
 
                             av_hits = ''
@@ -893,9 +887,8 @@ def parse_csv(csv_file, report, timeline):
                         timeline.append(timelinetext)
 
         except IndexError:
-            if debug:
-                log_error(line)
-                log_error(format_exc())
+            log_debug(line)
+            log_debug(format_exc())
             error_output.append(original_line.strip())
 
         # Enumerate unique remote hosts into their own section
@@ -925,56 +918,55 @@ def parse_csv(csv_file, report, timeline):
     
     report.append('Processes Created:')
     report.append('==================')
-    log_error('[*] Writing %d Process Events results to report' % len(process_output))
+    log_debug('[*] Writing %d Process Events results to report' % len(process_output))
     for event in process_output:
         report.append(event)
 
     report.append('')
     report.append('File Activity:')
     report.append('==================')
-    log_error('[*] Writing %d Filesystem Events results to report' % len(file_output))
+    log_debug('[*] Writing %d Filesystem Events results to report' % len(file_output))
     for event in file_output:
         report.append(event)
 
     report.append('')
     report.append('Registry Activity:')
     report.append('==================')
-    log_error('[*] Writing %d Registry Events results to report' % len(reg_output))
+    log_debug('[*] Writing %d Registry Events results to report' % len(reg_output))
     for event in reg_output:
         report.append(event)
 
     report.append('')
     report.append('Network Traffic:')
     report.append('==================')
-    log_error('[*] Writing %d Network Events results to report' % len(net_output))
+    log_debug('[*] Writing %d Network Events results to report' % len(net_output))
     for event in net_output:
         report.append(event)
 
     report.append('')
     report.append('Unique Hosts:')
     report.append('==================')
-    log_error('[*] Writing %d Remote Servers results to report' % len(remote_servers))
+    log_debug('[*] Writing %d Remote Servers results to report' % len(remote_servers))
     for server in sorted(remote_servers):
         report.append(protocol_replace(server).strip())
 
     if error_output:
         report.append('\r\n\r\n\r\n\r\n\r\n\r\nERRORS DETECTED')
         report.append('The following items could not be parsed correctly:')
-        log_error('[*] Writing %d Output Errors results to report' % len(error_output))
+        log_debug('[*] Writing %d Output Errors results to report' % len(error_output))
         for error in error_output:
             report.append(error)
             
     if debug and vt_dump:
-        vt_file = output_dir + os.path.splitext(args.pml)[0] + '.vt.json'
-        log_error('[*] Writing %d VirusTotal results to %s' % (len(vt_dump), vt_file))
+        vt_file = output_dir + os.path.splitext(csv_file)[0] + '.vt.json'
+        log_debug('[*] Writing %d VirusTotal results to %s' % (len(vt_dump), vt_file))
         vt_out = open(vt_file, 'w')
-        for result in vt_dump:
-            vt_out.write(result)
+        json.dump(vt_dump, vt_out)
         vt_out.close()
         
     if debug and debug_messages:
-        debug_file = output_dir + os.path.splitext(args.pml)[0] + '.log'
-        debug_out = open(debug_file, 'w')
+        debug_file = output_dir + os.path.splitext(csv_file)[0] + '.log'
+        debug_out = open(debug_file, 'wb')
         for message in debug_messages:
             debug_out.write(message)
         debug_out.close()
@@ -996,6 +988,7 @@ def main():
     global use_pmc
     global debug
     global exe_cmdline
+    global output_dir
 
     header1 = '--===[ Noriben v%s ]===--' % __VERSION__
     header2 = '--===[%s@bbaskin%s]===--'
