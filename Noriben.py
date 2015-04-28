@@ -990,11 +990,14 @@ def main():
     global exe_cmdline
     global output_dir
 
-    header1 = '--===[ Noriben v%s ]===--' % __VERSION__
-    header2 = '--===[%s@bbaskin%s]===--'
-    padding = (len(header1)) - (len(header2) - 4)
-    print(header1)
-    print(header2 % (' ' * (padding / 2), ' ' * (padding / 2)))
+    try:
+        header1 = '--===[ Noriben v%s ]===--' % __VERSION__
+        header2 = '--===[%s@bbaskin%s]===--'
+        padding = (len(header1)) - (len(header2) - 4)
+        print(header1)
+        print(header2 % (' ' * (padding / 2), ' ' * (padding / 2)))
+    except TypeError:
+        print '--==[ Noriben v%s ]==--' % __VERSION__
 
     parser = ArgumentParser()
     parser.add_argument('-c', '--csv', help='Re-analyze an existing Noriben CSV file', required=False)
