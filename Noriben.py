@@ -997,7 +997,7 @@ def main():
         print(header1)
         print(header2 % (' ' * (padding / 2), ' ' * (padding / 2)))
     except TypeError:
-        print '--==[ Noriben v%s ]==--' % __VERSION__
+        print('--==[ Noriben v%s ]==--' % __VERSION__)
 
     parser = ArgumentParser()
     parser.add_argument('-c', '--csv', help='Re-analyze an existing Noriben CSV file', required=False)
