@@ -52,6 +52,9 @@
 #       Created debug output to file. This now includes full VirusTotal dumps.
 #       Currently Noriben only displays number of hits, but additional meta is now
 #       dumped for further analysis by users.
+# Version 1.6.3 - 13 Jan 16 -
+#       Bug fixes to handle path joining. Bug fixes for spaces in all directory
+#       names. Added support to find default PMC from script working directory.
 #
 # TODO:
 # * Upload files directly to VirusTotal (1.7 feature?)
@@ -111,17 +114,19 @@ yara_folder = ''
 # 3. To find a list of available '%%' variables, type `set` from a command prompt
 
 # These entries are applied to all whitelists
-global_whitelist = [r'VMwareUser.exe',
-                    r'CaptureBAT.exe',
-                    r'SearchIndexer.exe',
-                    r'Fakenet.exe',
-                    r'idaq.exe',
-                    r'ngen.exe',
-                    r'ngentask.exe']
+global_whitelist = [r'VMwareUser.exe',      # VMware User Tools
+                    r'CaptureBAT.exe',      # CaptureBAT Malware Tool
+                    r'SearchIndexer.exe',   # Windows Search Indexer
+                    r'Fakenet.exe',         # Practical Malware Analysis FakeNET
+                    r'idaq.exe',            # IDA Pro
+                    r'ngen.exe',            # Windows Native Image Generator
+                    r'ngentask.exe',        # Windows Native Image Generator
+                    r'consent.exe']         # Windows UAC prompt
 
 cmd_whitelist = [r'%SystemRoot%\system32\wbem\wmiprvse.exe',
                  r'%SystemRoot%\system32\wscntfy.exe',
                  r'procmon.exe',
+                 r'procmon64.exe',
                  r'wuauclt.exe',
                  r'jqs.exe',
                  r'TCPView.exe'] + global_whitelist
@@ -138,6 +143,7 @@ file_whitelist = [r'procmon.exe',
                   r'Google\Chrome\User Data\.*.tmp',
                   r'wuauclt.exe',
                   r'wmiprvse.exe',
+                  r'Microsoft\Windows\Explorer\iconcache_*',
                   r'Microsoft\Windows\Explorer\thumbcache_.*.db',
                   r'Thumbs.db$',
 
@@ -176,6 +182,7 @@ reg_whitelist = [r'CaptureProcessMonitor',
                  r'HKCU\Software$',
                  r'HKCU\Software\Classes\Software\Microsoft\Windows\CurrentVersion\Deployment\SideBySide',
                  r'HKCU\Software\Classes\Local Settings\MuiCache\*',
+                 r'HKCU\Software\Classes\Local Settings\MrtCache\*',
                  r'HKCU\Software\Microsoft\Calc$',
                  r'HKCU\Software\Microsoft\.*\Window_Placement',
                  r'HKCU\Software\Microsoft\Internet Explorer\TypedURLs',
@@ -262,7 +269,7 @@ hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89',
 
 
 ### Below are global internal variables. Do not edit these. #############
-__VERSION__ = '1.6.2'                                                   #
+__VERSION__ = '1.6.3'                                                   #
 path_general_list = []                                                  #
 has_virustotal = True if virustotal_api_key else False                  #
 virustotal_upload = True if virustotal_api_key else False               #
@@ -316,7 +323,7 @@ def generalize_vars_init():
                    r'%WinDir%']
 
     global path_general_list
-    print('[*] Enabling Windows string generalization.')
+    log_debug('[*] Enabling Windows string generalization.')
     for env in envvar_list:
         try:
             resolved = os.path.expandvars(env).encode('unicode_escape')
@@ -387,7 +394,7 @@ def virustotal_query_hash(hash):
     vt_query_url = 'https://www.virustotal.com/vtapi/v2/file/report'
     post_params = {'apikey': virustotal_api_key,
                    'resource': hash}
-    print('[*] Querying VirusTotal for hash: %s' % hash)
+    log_debug('[*] Querying VirusTotal for hash: %s' % hash)
     data = ''
     http_response = requests.post(vt_query_url, post_params)
     
@@ -470,7 +477,8 @@ def yara_import_rules(yara_path):
         except yara.SyntaxError:
             print('[!] YARA: Unknown Syntax Errors found.')
             print('[!] YARA rules disabled until all Syntax Errors are fixed.')
-            log_debug('[!] YARA rules disabled due to unknown Syntax Errors')
+            log_debug('[!] YARA: Unknown Syntax Errors found.')
+            log_debug('[!] YARA rules disabled until all Syntax Errors are fixed.')
     return rules
 
 
@@ -627,10 +635,11 @@ def process_PML_to_CSV(procmonexe, pml_file, pmc_file, csv_file):
     global time_process
     time_convert_start = time.time()
 
-    print('[*] Converting session to CSV: %s' % csv_file)
-    cmdline = '%s /OpenLog %s /saveas %s' % (procmonexe, pml_file, csv_file)
+    log_debug('[*] Converting session to CSV: %s' % csv_file)
+    cmdline = '"%s" /OpenLog "%s" /saveas "%s"' % (procmonexe, pml_file, csv_file)
     if use_pmc:
-        cmdline += ' /LoadConfig %s' % pmc_file
+        cmdline += ' /LoadConfig "%s"' % pmc_file
+    log_debug('[*] Running cmdline: %s' % cmdline)
     stdnull = subprocess.Popen(cmdline)
     stdnull.wait()
     
@@ -652,9 +661,10 @@ def launch_procmon_capture(procmonexe, pml_file, pmc_file):
     global time_exec
     time_exec = time.time()
 
-    cmdline = '%s /BackingFile %s /Quiet /Minimized' % (procmonexe, pml_file)
+    cmdline = '"%s" /BackingFile "%s" /Quiet /Minimized' % (procmonexe, pml_file)
     if use_pmc:
-        cmdline += ' /LoadConfig %s' % pmc_file
+        cmdline += ' /LoadConfig "%s"' % pmc_file
+    log_debug('[*] Running cmdline: %s' % cmdline)
     subprocess.Popen(cmdline)
     sleep(3)
 
@@ -671,7 +681,8 @@ def terminate_procmon(procmonexe):
     global time_exec
     time_exec = time.time() - time_exec
 
-    cmdline = '%s /Terminate' % procmonexe
+    cmdline = '"%s" /Terminate' % procmonexe
+    log_debug('[*] Running cmdline: %s' % cmdline)
     stdnull = subprocess.Popen(cmdline)
     stdnull.wait()
 
@@ -697,7 +708,7 @@ def parse_csv(csv_file, report, timeline):
     else:
         yara_rules = ''
 
-    print('[*] Processing CSV: %s' % csv_file)
+    log_debug('[*] Processing CSV: %s' % csv_file)
     
     time_parse_csv_start = time.time()
 
@@ -705,10 +716,11 @@ def parse_csv(csv_file, report, timeline):
     #for original_line in fileinput.input(csv_file, openhook=fileinput.hook_encoded('iso-8859-1')):
     for line_num, original_line in enumerate(io.open(csv_file, encoding='utf-8')):
         server = ''
-        if original_line[0] != '"':  # Ignore lines that begin with Tab. Sysinternals breaks CSV with new processes
+        if original_line[0] != '"':  # Ignore lines that begin with Tab.
             continue
         line = original_line.strip(whitespace + '"')
         field = line.strip().split('","')
+        log_debug('[*] Parse line. Event: %s' % field[3])
         try:
             if field[3] in ['Process Create'] and field[5] == 'SUCCESS':
                 cmdline = field[6].split('Command line: ')[1]
@@ -958,14 +970,14 @@ def parse_csv(csv_file, report, timeline):
             report.append(error)
             
     if debug and vt_dump:
-        vt_file = output_dir + os.path.splitext(csv_file)[0] + '.vt.json'
+        vt_file = os.path.join(output_dir, os.path.splitext(csv_file)[0] + '.vt.json')
         log_debug('[*] Writing %d VirusTotal results to %s' % (len(vt_dump), vt_file))
         vt_out = open(vt_file, 'w')
         json.dump(vt_dump, vt_out)
         vt_out.close()
         
     if debug and debug_messages:
-        debug_file = output_dir + os.path.splitext(csv_file)[0] + '.log'
+        debug_file = os.path.join(output_dir, os.path.splitext(csv_file)[0] + '.log')
         debug_out = open(debug_file, 'wb')
         for message in debug_messages:
             debug_out.write(message)
@@ -1015,6 +1027,7 @@ def main():
     args = parser.parse_args()
     report = list()
     timeline = list()
+    script_cwd = os.path.dirname(os.path.abspath(__file__))
 
     if args.debug:
         debug = True
@@ -1037,13 +1050,20 @@ def main():
             pmc_file = 'ProcmonConfiguration.PMC'
     else:
         pmc_file = 'ProcmonConfiguration.PMC'
-
+    pmc_file_cwd = os.path.join(script_cwd, pmc_file)
+    
     if not file_exists(pmc_file):
-        use_pmc = False
-        print('[!] Filter file %s not found. Continuing without filters.' % pmc_file)
+        if not file_exists(pmc_file_cwd):
+            use_pmc = False
+            print('[!] Filter file %s not found. Continuing without filters.' % pmc_file)
+        else:
+            use_pmc = True
+            pmc_file = pmc_file_cwd
+            print('[*] Using filter file: %s' % pmc_file)
     else:
         use_pmc = True
         print('[*] Using filter file: %s' % pmc_file)
+    log_debug('[*] Using filter file: %s' % pmc_file)
 
     # Find a valid procmon executable.
     procmonexe = check_procmon()
@@ -1063,6 +1083,7 @@ def main():
                 sys.exit(1)
     else:
         output_dir = ''
+    log_debug('[*] Log output directory: %s' % output_dir)
 
     # Check to see if specified YARA folder exists
     use_yara = False
@@ -1077,17 +1098,19 @@ def main():
             use_yara = False
         else:
             use_yara = True
+    log_debug('[*] YARA directory: %s' % yara_folder)
 
     # Print feature list
     print('[+] Features: (Debug: %s\tYARA: %s\tVirusTotal: %s)' % (debug, use_yara, use_virustotal))
+    log_debug('[+] Features: (Debug: %s\tYARA: %s\tVirusTotal: %s)' % (debug, use_yara, use_virustotal))
 
     # Check if user-specified to rescan a PML
     if args.pml:
         if file_exists(args.pml):
             # Reparse an existing PML
-            csv_file = output_dir + os.path.splitext(args.pml)[0] + '.csv'
-            txt_file = output_dir + os.path.splitext(args.pml)[0] + '.txt'
-            timeline_file = output_dir + os.path.splitext(args.pml)[0] + '_timeline.csv'
+            csv_file = os.path.join(output_dir, os.path.splitext(args.pml)[0] + '.csv')
+            txt_file = os.path.join(output_dir, os.path.splitext(args.pml)[0] + '.txt')
+            timeline_file = os.path.join(output_dir, os.path.splitext(args.pml)[0] + '_timeline.csv')
 
             process_PML_to_CSV(procmonexe, args.pml, pmc_file, csv_file)
             if not file_exists(csv_file):
@@ -1141,12 +1164,16 @@ def main():
     # Start main data collection and processing
     print('[*] Using procmon EXE: %s' % procmonexe)
     session_id = get_session_name()
-    pml_file = output_dir + 'Noriben_%s.pml' % session_id
-    csv_file = output_dir + 'Noriben_%s.csv' % session_id
-    txt_file = output_dir + 'Noriben_%s.txt' % session_id
-    timeline_file = output_dir + 'Noriben_%s_timeline.csv' % session_id
+    pml_file = os.path.join(output_dir, 'Noriben_%s.pml' % session_id)
+    csv_file = os.path.join(output_dir, 'Noriben_%s.csv' % session_id)
+    txt_file = os.path.join(output_dir, 'Noriben_%s.txt' % session_id)
+    timeline_file = os.path.join(output_dir, 'Noriben_%s_timeline.csv' % session_id)
     print('[*] Procmon session saved to: %s' % pml_file)
 
+    if exe_cmdline and not file_exists(exe_cmdline):
+        print('[!] Error: Specified malware executable does not exist: %s' % exe_cmdline)
+        sys.exit(1)
+    
     print('[*] Launching Procmon ...')
     launch_procmon_capture(procmonexe, pml_file, pmc_file)
 
