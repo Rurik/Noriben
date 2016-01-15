@@ -554,6 +554,9 @@ def check_procmon():
         for path in os.environ['PATH'].split(os.pathsep):
             if file_exists(os.path.join(path.strip('"'), procmon)):
                 return os.path.join(path, procmon)
+        if file_exists(os.path.join(script_cwd, procmon)):
+            return os.path.join(script_cwd, procmon)
+
 
 
 def md5_file(fname):
@@ -1001,6 +1004,7 @@ def main():
     global debug
     global exe_cmdline
     global output_dir
+    global script_cwd
 
     try:
         header1 = '--===[ Noriben v%s ]===--' % __VERSION__
