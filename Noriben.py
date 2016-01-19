@@ -254,17 +254,17 @@ net_whitelist = [r'hasplms.exe'] + global_whitelist  # Hasp dongle beacons
                  #r'192.168.2.',                     # Example for blocking net ranges
                  #r'Verizon_router.home']            # Example for blocking local domains
 
-hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89',
-                  r'b60dddd2d63ce41cb8c487fcfbb6419e',
-                  r'f8f0d25ca553e39dde485d8fc7fcce89',
-                  r'6fe42512ab1b89f32a7407f261b1d2d0',
-                  r'8b1f3320aebb536e021a5014409862de',
-                  r'b26b135ff1b9f60c9388b4a7d16f600b',
-                  r'355edbb4d412b01f1740c17e3f50fa00',
-                  r'd4502f124289a31976130cccb014c9aa',
-                  r'81faefc42d0b236c62c3401558867faa',
-                  r'e40fcf943127ddc8fd60554b722d762b',
-                  r'0da85218e92526972a821587e6a8bf8f']
+hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89', # WinXP ntdll.dll
+                  r'f8f0d25ca553e39dde485d8fc7fcce89', # ntdll.dll
+                  r'b60dddd2d63ce41cb8c487fcfbb6419e', # iexplore.exe 8.0
+                  r'6fe42512ab1b89f32a7407f261b1d2d0', # kernel32.dll
+                  r'8b1f3320aebb536e021a5014409862de', # gdi32.dll
+                  r'b26b135ff1b9f60c9388b4a7d16f600b', # user32.dll
+                  r'355edbb4d412b01f1740c17e3f50fa00', # msvcrt.dll
+                  r'd4502f124289a31976130cccb014c9aa', # rpcrt4.dll
+                  r'81faefc42d0b236c62c3401558867faa', # iertutil.dll
+                  r'e40fcf943127ddc8fd60554b722d762b', # msctf.dll
+                  r'0da85218e92526972a821587e6a8bf8f'] # imm32.dll
 
 
 
