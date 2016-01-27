@@ -30,6 +30,7 @@ echo %VMRUN% -T ws -gu %VM_USER% -gp %VM_PASS% runProgramInGuest %VMX% C:\Python
 %VMRUN% -T ws -gu %VM_USER% -gp %VM_PASS% runProgramInGuest %VMX% C:\Python27\Python.exe %NORIBEN_PATH% -d -t %DELAY% --cmd "C:\Malware\Malware.exe" --output %LOG_PATH%
 if %ERRORLEVEL%==1 goto ERROR1
 
+
 : The -j option for zip tell is to disregard the file path. You may need to remove/replace this for other zip compressors.
 %VMRUN% -T ws -gu %VM_USER% -gp %VM_PASS% runProgramInGuest %VMX% %ZIP_PATH% -j C:\NoribenReports.zip %LOG_PATH%\*.*
 %VMRUN% -gu %VM_USER%  -gp %VM_PASS% copyFileFromGuestToHost %VMX% C:\NoribenReports.zip %CWD%\NoribenReports_%FILENAME%.zip
