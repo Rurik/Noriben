@@ -129,6 +129,9 @@ cmd_whitelist = [r'%SystemRoot%\system32\wbem\wmiprvse.exe',
                  r'procmon64.exe',
                  r'wuauclt.exe',
                  r'jqs.exe',
+                 r'avgrsa.exe', # AVG AntiVirus
+                 r'avgcsrva.exe', # AVG AntiVirus
+                 r'avgidsagenta.exe', #AVG AntiVirus
                  r'TCPView.exe'] + global_whitelist
 
 file_whitelist = [r'procmon.exe',
