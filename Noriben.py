@@ -55,6 +55,8 @@
 # Version 1.6.3 - 13 Jan 16 -
 #       Bug fixes to handle path joining. Bug fixes for spaces in all directory
 #       names. Added support to find default PMC from script working directory.
+# Version 1.6.4 - 7 Dec 16 -
+#       A handful of bug fixes related to bad Internet access. Small variable updates.
 #
 # TODO:
 # * Upload files directly to VirusTotal (1.7 feature?)
@@ -272,10 +274,9 @@ hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89', # WinXP ntdll.dll
 
 
 ### Below are global internal variables. Do not edit these. #############
-__VERSION__ = '1.6.3'                                                   #
+__VERSION__ = '1.6.4'                                                   #
 path_general_list = []                                                  #
-has_virustotal = True if virustotal_api_key else False                  #
-virustotal_upload = True if virustotal_api_key else False               #
+virustotal_upload = True if virustotal_api_key else False # TODO        #
 use_virustotal = True if virustotal_api_key and has_internet else False #
 use_pmc = False                                                         #
 vt_results = {}                                                         #
@@ -383,7 +384,7 @@ def virustotal_query_hash(hash):
     global vt_dump
     try:
         if not (len(hash) == 32 and int(hash, 16)):
-            return null
+            return ''
     except (TypeError, ValueError):
         pass
 
@@ -399,7 +400,10 @@ def virustotal_query_hash(hash):
                    'resource': hash}
     log_debug('[*] Querying VirusTotal for hash: %s' % hash)
     data = ''
-    http_response = requests.post(vt_query_url, post_params)
+    try:
+        http_response = requests.post(vt_query_url, post_params)
+    except requests.exceptions.RequestException as e:
+        return '' # null string to append to output
     
     if http_response.status_code == 204:
         print('[!] VirusTotal Rate Limit Exceeded. Sleeping for 60 seconds.')
@@ -764,7 +768,7 @@ def parse_csv(csv_file, report, timeline):
                                 continue
 
                             av_hits = ''
-                            if has_virustotal and has_internet:
+                            if use_virustotal and has_internet:
                                 av_hits = virustotal_query_hash(md5)
                             
                             
