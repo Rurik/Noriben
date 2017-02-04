@@ -36,7 +36,7 @@
 #       to an ordered list instead of an unordered dictionary. This lets you
 #       prioritize resolutions.
 # Version 1.6 - 14 Mar 15 -
-#       Long delayed and now forked release. This will be the final release for 
+#       Long delayed and now forked release. This will be the final release for
 #       Python 2.X except for updated rules. Now requires 3rd party libraries.
 #       VirusTotal API scanning implemented. Added better filters.
 #       Added controls for some registry writes that had size but no data.
@@ -57,16 +57,20 @@
 #       names. Added support to find default PMC from script working directory.
 # Version 1.6.4 - 7 Dec 16 -
 #       A handful of bug fixes related to bad Internet access. Small variable updates.
+# Version 1.7.0 - 4 Feb 17
+#       Default hash method is not SHA256. An argument and global var allow to
+#       override hash. Numerous filters added. PEP8 cleanup, multiple small fixes to
+#       code and implementation styles.
 #
 # TODO:
-# * Upload files directly to VirusTotal (1.7 feature?)
+# * Upload files directly to VirusTotal (1.7.X feature?)
 # * extract data directly from registry? (may require python-registry - http://www.williballenthin.com/registry/)
 # * scan for mutexes, preferably in a way that doesn't require wmi/pywin32
+# * Fix CSV issues (see GitHub issue)
 
 from __future__ import print_function
 
 import codecs
-import fileinput
 import hashlib
 import io
 import os
@@ -101,11 +105,12 @@ generalize_paths = True  # Generalize paths to their base environment variable
 enable_timeline = True   # Create a second, compact CSV with events in order
 debug = False
 timeout_seconds = 0      # Set to 0 to manually end monitoring with Ctrl-C
-virustotal_api_key = ''                 ## Set API here
-if os.path.exists('virustotal.api'):    ## Or put it in here
+virustotal_api_key = ''               # Set API here
+if os.path.exists('virustotal.api'):  # Or put it in here
     virustotal_api_key = open('virustotal.api', 'r').readline().strip()
 yara_folder = ''
-
+hash_type = 'SHA256'
+valid_hash_types = ['MD5', 'SHA1', 'SHA256']
 
 # Rules for creating rules:
 # 1. Every rule string must begin with the `r` for regular expressions to work.
@@ -131,10 +136,14 @@ cmd_whitelist = [r'%SystemRoot%\system32\wbem\wmiprvse.exe',
                  r'procmon64.exe',
                  r'wuauclt.exe',
                  r'jqs.exe',
-                 r'avgrsa.exe', # AVG AntiVirus
-                 r'avgcsrva.exe', # AVG AntiVirus
-                 r'avgidsagenta.exe', #AVG AntiVirus
-                 r'TCPView.exe'] + global_whitelist
+                 r'avgrsa.exe',  # AVG AntiVirus
+                 r'avgcsrva.exe',  # AVG AntiVirus
+                 r'avgidsagenta.exe',  # AVG AntiVirus
+                 r'TCPView.exe',
+                 r'%WinDir%\System32\mobsync.exe',
+                 r'/Processid:{AB8902B4-09CA-4BB6-B78D-A8F59079A8D5}',  # Thumbnail server
+                 r'/Processid:{F9717507-6651-4EDB-BFF7-AE615179BCCF}'   # DCOM error
+                 ] + global_whitelist
 
 file_whitelist = [r'procmon.exe',
 
@@ -153,9 +162,11 @@ file_whitelist = [r'procmon.exe',
                   r'Thumbs.db$',
 
                   r'%AllUsersProfile%\Application Data\Microsoft\OFFICE\DATA',
+                  r'%AllUsersProfile%\Microsoft\RAC',
                   r'%AppData%\Microsoft\Proof\*',
                   r'%AppData%\Microsoft\Templates\*',
                   r'%LocalAppData%\Google\Drive\sync_config.db*',
+                  r'MAILSLOT\NET\NETLOGON',
                   r'%ProgramFiles%\Capture\*',
                   r'%SystemDrive%\Python',
                   r'%SystemRoot%\assembly',
@@ -165,9 +176,14 @@ file_whitelist = [r'procmon.exe',
                   r'%SystemRoot%\System32\LogFiles\Scm',
                   r'%SystemRoot%\System32\Tasks\Microsoft\Windows',  # Some may want to remove this
                   r'%UserProfile%$',
+                  r'%UserProfile%\Desktop$',
                   r'%UserProfile%\AppData\LocalLow$',
                   r'%UserProfile%\Recent\*',
-                  r'%UserProfile%\Local Settings\History\History.IE5\*'] + global_whitelist
+                  r'%UserProfile%\Local Settings\History\History.IE5\*',
+                  r'%WinDir%\AppCompat\Programs\RecentFileCache.bcf',
+                  r'%WinDir%\System32\spool\drivers\*',
+                  r'Windows\Temporary Internet Files\counters.dat'
+                  ] + global_whitelist
 
 reg_whitelist = [r'CaptureProcessMonitor',
                  r'consent.exe',
@@ -188,6 +204,8 @@ reg_whitelist = [r'CaptureProcessMonitor',
                  r'HKCU\Software\Classes\Software\Microsoft\Windows\CurrentVersion\Deployment\SideBySide',
                  r'HKCU\Software\Classes\Local Settings\MuiCache\*',
                  r'HKCU\Software\Classes\Local Settings\MrtCache\*',
+                 r'HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\SyncMgr\*',
+                 r'HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\*',
                  r'HKCU\Software\Microsoft\Calc$',
                  r'HKCU\Software\Microsoft\.*\Window_Placement',
                  r'HKCU\Software\Microsoft\Internet Explorer\TypedURLs',
@@ -206,12 +224,17 @@ reg_whitelist = [r'CaptureProcessMonitor',
                  r'HKCU\Software\Microsoft\Windows\Currentversion\Explorer\StreamMRU',
                  r'HKCU\Software\Microsoft\Windows\Currentversion\Explorer\Streams',
                  r'HKCU\Software\Microsoft\Windows\CurrentVersion\Group Policy',
+                 r'HKCU\Software\Microsoft\Windows\CurrentVersion\HomeGroup',
+                 r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings\Wpad\*',
                  r'HKCU\Software\Microsoft\Windows\Shell',
                  r'HKCU\Software\Microsoft\Windows\Shell\BagMRU',
                  r'HKCU\Software\Microsoft\Windows\Shell\Bags',
                  r'HKCU\Software\Microsoft\Windows\ShellNoRoam\MUICache',
                  r'HKCU\Software\Microsoft\Windows\ShellNoRoam\BagMRU',
                  r'HKCU\Software\Microsoft\Windows\ShellNoRoam\Bags',
+                 r'HKCU\Software\Microsoft\Windows NT\CurrentVersion\Devices',
+                 r'HKCU\Software\Microsoft\Windows NT\CurrentVersion\PrinterPorts\*',
+                 r'HKCU\Software\Microsoft\Windows NT\CurrentVersion\Windows\UserSelectedDefault',
                  r'HKCU\Software\Policies$',
                  r'HKCU\Software\Policies\Microsoft$',
 
@@ -220,26 +243,38 @@ reg_whitelist = [r'CaptureProcessMonitor',
                  r'HKLM\SOFTWARE$',
                  r'HKLM\SOFTWARE\Microsoft\Cryptography\RNG\Seed',  # Some people prefer to leave this in.
                  r'HKLM\SOFTWARE\Microsoft$',
-                 r'HKLM\SOFTWARE\Policies$',
-                 r'HKLM\SOFTWARE\Policies\Microsoft$',
                  r'HKLM\SOFTWARE\MICROSOFT\Dfrg\Statistics',
+                 r'HKLM\SOFTWARE\Microsoft\Reliability Analysis\RAC',
                  r'HKLM\SOFTWARE\MICROSOFT\SystemCertificates$',
+                 r'HKLM\Software\Microsoft\WBEM',
                  r'HKLM\Software\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products',
                  r'HKLM\Software\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\*',
                  r'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render',
                  r'HKLM\Software\Microsoft\Windows\CurrentVersion\Shell Extensions',
-                 r'HKLM\Software\Microsoft\WBEM',
+                 r'HKLM\SOFTWARE\Microsoft\Windows Media Player NSS\*',
+                 r'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Print\Printers\*',
+                 r'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\NetworkList\Nla\Cache\*',
                  r'HKLM\Software\Microsoft\Windows NT\CurrentVersion\Prefetcher\*',
+                 r'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Print\*',
                  r'HKLM\Software\Microsoft\Windows NT\CurrentVersion\Tracing\*',
-                 r'HKLM\System\CurrentControlSet\Control\CLASS\{4D36E968-E325-11CE-BFC1-08002BE10318}',
+                 r'HKLM\SOFTWARE\Policies$',
+                 r'HKLM\SOFTWARE\Policies\Microsoft$',
+                 r'HKLM\System\CurrentControlSet\Control\CLASS\{.*-E325-11CE-BFC1-08002BE10318}',
                  r'HKLM\System\CurrentControlSet\Control\DeviceClasses',
                  r'HKLM\System\CurrentControlSet\Control\MediaProperties',
+                 r'HKLM\System\CurrentControlSet\Control\Network\{.*-e325-11ce-bfc1-08002be10318}',
+                 r'HKLM\System\CurrentControlSet\Control\Network\NetCfgLockHolder',
+                 r'HKLM\System\CurrentControlSet\Control\Nsi\{eb004a03-9b1a-11d4-9123-0050047759bc}',
+                 r'HKLM\System\CurrentControlSet\Control\Print\Environments\*',
                  r'HKLM\System\CurrentControlSet\Enum\*',
                  r'HKLM\System\CurrentControlSet\Services\CaptureRegistryMonitor',
                  r'HKLM\System\CurrentControlSet\Services\Eventlog\*',
                  r'HKLM\System\CurrentControlSet\Services\Tcpip\Parameters',
                  r'HKLM\System\CurrentControlSet\Services\WinSock2\Parameters',
                  r'HKLM\System\CurrentControlSet\Services\VSS\Diag',
+
+                 r'HKU\.DEFAULT\Printers\*',
+                 r'HKU\.DEFAULT\SOFTWARE\Classes\Local Settings\MuiCache',
 
                  r'LEGACY_CAPTUREREGISTRYMONITOR',
                  r'Software\Microsoft\Multimedia\Audio$',
@@ -253,45 +288,46 @@ reg_whitelist = [r'CaptureProcessMonitor',
                  r'Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders',
                  r'UserAssist\{5E6AB780-7743-11CF-A12B-00AA004AE837}',
                  r'UserAssist\{75048700-EF1F-11D0-9888-006097DEACF9}',
-                 r'UserAssist\{CEBFF5CD-ACE2-4F4F-9178-9926F41749EA}'] + global_whitelist
+                 r'UserAssist\{CEBFF5CD-ACE2-4F4F-9178-9926F41749EA}'
+                 ] + global_whitelist
 
-net_whitelist = [r'hasplms.exe'] + global_whitelist  # Hasp dongle beacons
-                 #r'192.168.2.',                     # Example for blocking net ranges
-                 #r'Verizon_router.home']            # Example for blocking local domains
+net_whitelist = [r'hasplms.exe'  # Hasp dongle beacons
+                 # r'192.168.2.',                     # Example for blocking net ranges
+                 # r'Verizon_router.home']            # Example for blocking local domains
+                 ] + global_whitelist
 
-hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89', # WinXP ntdll.dll
-                  r'f8f0d25ca553e39dde485d8fc7fcce89', # ntdll.dll
-                  r'b60dddd2d63ce41cb8c487fcfbb6419e', # iexplore.exe 8.0
-                  r'6fe42512ab1b89f32a7407f261b1d2d0', # kernel32.dll
-                  r'8b1f3320aebb536e021a5014409862de', # gdi32.dll
-                  r'b26b135ff1b9f60c9388b4a7d16f600b', # user32.dll
-                  r'355edbb4d412b01f1740c17e3f50fa00', # msvcrt.dll
-                  r'd4502f124289a31976130cccb014c9aa', # rpcrt4.dll
-                  r'81faefc42d0b236c62c3401558867faa', # iertutil.dll
-                  r'e40fcf943127ddc8fd60554b722d762b', # msctf.dll
-                  r'0da85218e92526972a821587e6a8bf8f'] # imm32.dll
+hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89',  # WinXP ntdll.dll
+                  r'b60dddd2d63ce41cb8c487fcfbb6419e',  # iexplore.exe 8.0
+                  r'6fe42512ab1b89f32a7407f261b1d2d0',  # kernel32.dll
+                  r'8b1f3320aebb536e021a5014409862de',  # gdi32.dll
+                  r'b26b135ff1b9f60c9388b4a7d16f600b',  # user32.dll
+                  r'355edbb4d412b01f1740c17e3f50fa00',  # msvcrt.dll
+                  r'd4502f124289a31976130cccb014c9aa',  # rpcrt4.dll
+                  r'81faefc42d0b236c62c3401558867faa',  # iertutil.dll
+                  r'e40fcf943127ddc8fd60554b722d762b',  # msctf.dll
+                  r'0da85218e92526972a821587e6a8bf8f']  # imm32.dll
 
 
+# Below are global internal variables. Do not edit these. ################
+__VERSION__ = '1.7.0'                                                    #
+path_general_list = []                                                   #
+virustotal_upload = True if virustotal_api_key else False  # TODO        #
+use_virustotal = True if virustotal_api_key and has_internet else False  #
+use_pmc = False                                                          #
+vt_results = {}                                                          #
+vt_dump = list()                                                         #
+debug_messages = list()                                                  #
+exe_cmdline = ''                                                         #
+output_dir = ''                                                          #
+time_exec = 0                                                            #
+time_process = 0                                                         #
+script_cwd = ''                                                          #
+##########################################################################
 
-### Below are global internal variables. Do not edit these. #############
-__VERSION__ = '1.6.4'                                                   #
-path_general_list = []                                                  #
-virustotal_upload = True if virustotal_api_key else False # TODO        #
-use_virustotal = True if virustotal_api_key and has_internet else False #
-use_pmc = False                                                         #
-vt_results = {}                                                         #
-vt_dump = list()                                                        #
-debug_messages = list()                                                 #
-exe_cmdline = ''                                                        #
-output_dir = ''                                                         #
-time_exec = 0                                                           #
-time_process = 0                                                        #
-time_analyze = 0                                                        #
-#########################################################################
 
 def log_debug(msg):
     """
-    Logs a passed message. Results are printed and stored in 
+    Logs a passed message. Results are printed and stored in
     a list for later writing to the debug log.
 
     Arguments:
@@ -302,17 +338,12 @@ def log_debug(msg):
     global debug_messages
     if msg and debug:
         debug_messages.append(msg + '\r\n')
-    
+
 
 def generalize_vars_init():
     """
     Initialize a dictionary with the local system's environment variables.
     Returns via a global variable, path_general_list
-
-    Arguments:
-        none
-    Results:
-        none
     """
     envvar_list = [r'%AllUsersProfile%',
                    r'%LocalAppData%',
@@ -356,59 +387,60 @@ def generalize_var(path_string):
     return path_string
 
 
-def read_hash_file(hash_file):
+def read_hash_file(hash_filename):
     """
-    Read a given file of MD5 hashes and add them to the hash whitelist.
+    Read a given file of SHA256 hashes and add them to the hash whitelist.
 
     Arguments:
-        hash_file: path to a text file containing hashes (either flat or md5deep)
+        hash_filename: path to a text file containing hashes (either flat or sha256deep)
     """
     global hash_whitelist
-    for line_num, hash_line in enumerate(io.open(hash_file, encoding='utf-8')):
-        hash = hash_line.split()[0]
+    for line_num, hash_line in enumerate(io.open(hash_filename, encoding='utf-8')):
+        hashval = hash_line.split()[0]
         try:
-            if (len(hash) == 32 and int(hash, 16)):
-                hash_whitelist.append(hash)
+            if int(hashval, 16) and (len(hashval) == 32 or len(hashval) == 40 or len(hashval) == 64):
+                hash_whitelist.append(hashval)
         except (TypeError, ValueError):
             pass
 
 
-def virustotal_query_hash(hash):
+def virustotal_query_hash(hashval):
     """
     Submit a given hash to VirusTotal to retrieve number of alerts
 
     Arguments:
-        hash: MD5 hash to a given file
+        hashval: SHA256 hash to a given file
     """
     global vt_results
     global vt_dump
+    result = ''
     try:
-        if not (len(hash) == 32 and int(hash, 16)):
+        if not (int(hashval, 16) and (len(hashval) == 32 or len(hashval) == 40 or len(hashval) == 64)):
             return ''
     except (TypeError, ValueError):
         pass
 
     try:
-        previous_result = vt_results[hash]
-        log_debug('[*] VT scan already performed for %s. Returning previous: %s' % (hash, previous_result))
+        previous_result = vt_results[hashval]
+        log_debug('[*] VT scan already performed for %s. Returning previous: %s' % (hashval, previous_result))
         return previous_result
     except KeyError:
         pass
-        
+
     vt_query_url = 'https://www.virustotal.com/vtapi/v2/file/report'
     post_params = {'apikey': virustotal_api_key,
-                   'resource': hash}
-    log_debug('[*] Querying VirusTotal for hash: %s' % hash)
+                   'resource': hashval}
+    log_debug('[*] Querying VirusTotal for hash: %s' % hashval)
     data = ''
     try:
         http_response = requests.post(vt_query_url, post_params)
-    except requests.exceptions.RequestException as e:
-        return '' # null string to append to output
-    
+    except requests.exceptions.RequestException:
+        return ''  # null string to append to output
+
     if http_response.status_code == 204:
         print('[!] VirusTotal Rate Limit Exceeded. Sleeping for 60 seconds.')
         time.sleep(60)
-        return virustotal_query_hash(hash)
+        return virustotal_query_hash(hashval)
     else:
         try:
             data = http_response.json()
@@ -430,8 +462,8 @@ def virustotal_query_hash(hash):
                     result = ' [VT: Error 002]'
         except TypeError:
             result = ' [VT: Error 003]'
-    vt_results[hash] = result
-    log_debug('[*] VirusTotal result for hash %s: %s' % (hash, result))
+    vt_results[hashval] = result
+    log_debug('[*] VirusTotal result for hash %s: %s' % (hashval, result))
     return result
 
 
@@ -441,14 +473,14 @@ def yara_rule_check(yara_files):
     which are valid for compilation.
 
     Arguments:
-        yara_path: path to folder containing rules
+        yara_files: path to folder containing rules
     """
     result = dict()
-    for id in yara_files:
-        fname = yara_files[id]
+    for yara_id in yara_files:
+        fname = yara_files[yara_id]
         try:
-            rules = yara.compile(filepath=fname)
-            result[id] = fname
+            yara.compile(filepath=fname)
+            result[yara_id] = fname
         except yara.SyntaxError:
             log_debug('[!] Syntax Error found in YARA file: %s' % fname)
             log_debug(format_exc())
@@ -467,14 +499,14 @@ def yara_import_rules(yara_path):
     yara_files = {}
     if not yara_path[-1] == '\\':
         yara_path += '\\'
-    
+
     print('[*] Loading YARA rules from folder: %s' % yara_path)
     files = os.listdir(yara_path)
-    
+
     for file_name in files:
         if '.yara' in file_name:
             yara_files[file_name.split('.yara')[0]] = yara_path + file_name
-            
+
     yara_files = yara_rule_check(yara_files)
     rules = ''
     if yara_files:
@@ -548,8 +580,6 @@ def check_procmon():
     """
     Finds the local path to Procmon
 
-    Arguments:
-        None
     Results:
         folder path to procmon executable
     """
@@ -565,25 +595,27 @@ def check_procmon():
             return os.path.join(script_cwd, procmon)
 
 
-
-def md5_file(fname):
+def hash_file(fname):
     """
-    Given a filename, returns the hex MD5 value
+    Given a filename, returns the hex hash value
 
     Arguments:
         fname: path to a file
     Results:
-        hex MD5 value of file's contents as a string
+        hex hash value of file's contents as a string
     """
-    return hashlib.md5(codecs.open(fname, 'rb').read()).hexdigest()
+    if hash_type == 'MD5':
+        return hashlib.md5(codecs.open(fname, 'rb').read()).hexdigest()
+    elif hash_type == 'SHA1':
+        return hashlib.sha1(codecs.open(fname, 'rb').read()).hexdigest()
+    elif hash_type == 'SHA256':
+        return hashlib.sha256(codecs.open(fname, 'rb').read()).hexdigest()
 
 
 def get_session_name():
     """
     Returns current date and time stamp for file name
 
-    Arguments:
-        None
     Results:
         string value of a current timestamp to apply to log file names
     """
@@ -630,7 +662,7 @@ def whitelist_scan(whitelist, data):
     return False
 
 
-def process_PML_to_CSV(procmonexe, pml_file, pmc_file, csv_file):
+def process_pml_to_csv(procmonexe, pml_file, pmc_file, csv_file):
     """
     Uses Procmon to convert the PML to a CSV file
 
@@ -652,7 +684,7 @@ def process_PML_to_CSV(procmonexe, pml_file, pmc_file, csv_file):
     log_debug('[*] Running cmdline: %s' % cmdline)
     stdnull = subprocess.Popen(cmdline)
     stdnull.wait()
-    
+
     time_convert_end = time.time()
     time_process = time_convert_end - time_convert_start
 
@@ -703,9 +735,8 @@ def parse_csv(csv_file, report, timeline):
 
     Arguments:
         csv_file: path to csv output to parse
-    Results:
-        report: string text containing the entirety of the text report
-        timeline: string text containing the entirety of the CSV report
+        report: OUT string text containing the entirety of the text report
+        timeline: OUT string text containing the entirety of the CSV report
     """
     process_output = list()
     file_output = list()
@@ -719,11 +750,11 @@ def parse_csv(csv_file, report, timeline):
         yara_rules = ''
 
     log_debug('[*] Processing CSV: %s' % csv_file)
-    
+
     time_parse_csv_start = time.time()
 
     # Use fileinput.input() now to read data line-by-line
-    #for original_line in fileinput.input(csv_file, openhook=fileinput.hook_encoded('iso-8859-1')):
+    # for original_line in fileinput.input(csv_file, openhook=fileinput.hook_encoded('iso-8859-1')):
     for line_num, original_line in enumerate(io.open(csv_file, encoding='utf-8')):
         server = ''
         if original_line[0] != '"':  # Ignore lines that begin with Tab.
@@ -740,11 +771,10 @@ def parse_csv(csv_file, report, timeline):
                     child_pid = field[6].split('PID: ')[1].split(',')[0]
                     outputtext = '[CreateProcess] %s:%s > "%s"\t[Child PID: %s]' % (
                         field[1], field[2], cmdline.replace('"', ''), child_pid)
-                    timelinetext = '%s,Process,CreateProcess,%s,%s,%s,%s' % (field[0].split()[0].split('.')[0],
-                                                                             field[1], field[2],
-                                                                             cmdline.replace('"', ''), child_pid)
+                    tl_text = '%s,Process,CreateProcess,%s,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
+                                                                        field[2], cmdline.replace('"', ''), child_pid)
                     process_output.append(outputtext)
-                    timeline.append(timelinetext)
+                    timeline.append(tl_text)
 
             elif field[3] == 'CreateFile' and field[5] == 'SUCCESS':
                 if not whitelist_scan(file_whitelist, field):
@@ -756,39 +786,39 @@ def parse_csv(csv_file, report, timeline):
                         if generalize_paths:
                             path = generalize_var(path)
                         outputtext = '[CreateFolder] %s:%s > %s' % (field[1], field[2], path)
-                        timelinetext = '%s,File,CreateFolder,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
-                                                                          field[2], path)
+                        tl_text = '%s,File,CreateFolder,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
+                                                                     field[2], path)
                         file_output.append(outputtext)
-                        timeline.append(timelinetext)
+                        timeline.append(tl_text)
                     else:
                         try:
-                            md5 = md5_file(path)
-                            if md5 in hash_whitelist:
-                                log_debug('[_] Skipping hash: %s' % md5)
+                            hashval = hash_file(path)
+                            if hashval in hash_whitelist:
+                                log_debug('[_] Skipping hash: %s' % hashval)
                                 continue
 
                             av_hits = ''
                             if use_virustotal and has_internet:
-                                av_hits = virustotal_query_hash(md5)
-                            
-                            
+                                av_hits = virustotal_query_hash(hashval)
+
                             if generalize_paths:
                                 path = generalize_var(path)
-                            outputtext = '[CreateFile] %s:%s > %s\t[MD5: %s]%s%s' % (field[1], field[2], path, md5,
-                                                                                     yara_hits, av_hits)
-                            timelinetext = '%s,File,CreateFile,%s,%s,%s,%s,%s,%s' % (field[0].split()[0].split('.')[0],
-                                                                                     field[1], field[2], path, md5,
-                                                                                     yara_hits, av_hits)
+                            outputtext = '[CreateFile] %s:%s > %s\t[%s: %s]%s%s' % (field[1], field[2], path, hash_type,
+                                                                                    hashval, yara_hits, av_hits)
+                            tl_text = '%s,File,CreateFile,%s,%s,%s,%s,%s,%s,%s' % (field[0].split()[0].split('.')[0],
+                                                                                   field[1], field[2], path,
+                                                                                   hash_type, hashval, yara_hits,
+                                                                                   av_hits)
                             file_output.append(outputtext)
-                            timeline.append(timelinetext)
+                            timeline.append(tl_text)
                         except (IndexError, IOError):
                             if generalize_paths:
                                 path = generalize_var(path)
                             outputtext = '[CreateFile] %s:%s > %s\t[File no longer exists]' % (field[1], field[2], path)
-                            timelinetext = '%s,File,CreateFile,%s,%s,%s,N/A' % (field[0].split()[0].split('.')[0],
-                                                                                field[1], field[2], path)
+                            tl_text = '%s,File,CreateFile,%s,%s,%s,N/A' % (field[0].split()[0].split('.')[0],
+                                                                           field[1], field[2], path)
                             file_output.append(outputtext)
-                            timeline.append(timelinetext)
+                            timeline.append(tl_text)
 
             elif field[3] == 'SetDispositionInformationFile' and field[5] == 'SUCCESS':
                 if not whitelist_scan(file_whitelist, field):
@@ -796,10 +826,10 @@ def parse_csv(csv_file, report, timeline):
                     if generalize_paths:
                         path = generalize_var(path)
                     outputtext = '[DeleteFile] %s:%s > %s' % (field[1], field[2], path)
-                    timelinetext = '%s,File,DeleteFile,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
-                                                                    field[2], path)
+                    tl_text = '%s,File,DeleteFile,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
+                                                               field[2], path)
                     file_output.append(outputtext)
-                    timeline.append(timelinetext)
+                    timeline.append(tl_text)
 
             elif field[3] == 'SetRenameInformationFile':
                 if not whitelist_scan(file_whitelist, field):
@@ -809,19 +839,19 @@ def parse_csv(csv_file, report, timeline):
                         from_file = generalize_var(from_file)
                         to_file = generalize_var(to_file)
                     outputtext = '[RenameFile] %s:%s > %s => %s' % (field[1], field[2], from_file, to_file)
-                    timelinetext = '%s,File,RenameFile,%s,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
-                                                                       field[2], from_file, to_file)
+                    tl_text = '%s,File,RenameFile,%s,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
+                                                                  field[2], from_file, to_file)
                     file_output.append(outputtext)
-                    timeline.append(timelinetext)
+                    timeline.append(tl_text)
 
             elif field[3] == 'RegCreateKey' and field[5] == 'SUCCESS':
                 if not whitelist_scan(reg_whitelist, field):
                     outputtext = '[RegCreateKey] %s:%s > %s' % (field[1], field[2], field[4])
-                    if not outputtext in reg_output:  # Ignore multiple CreateKeys. Only log the first.
-                        timelinetext = '%s,Registry,RegCreateKey,%s,%s,%s' % (field[0].split()[0].split('.')[0],
-                                                                              field[1], field[2], field[4])
+                    if outputtext not in reg_output:  # Ignore multiple CreateKeys. Only log the first.
+                        tl_text = '%s,Registry,RegCreateKey,%s,%s,%s' % (field[0].split()[0].split('.')[0],
+                                                                         field[1], field[2], field[4])
                         reg_output.append(outputtext)
-                        timeline.append(timelinetext)
+                        timeline.append(tl_text)
 
             elif field[3] == 'RegSetValue' and field[5] == 'SUCCESS':
                 if not whitelist_scan(reg_whitelist, field):
@@ -837,12 +867,11 @@ def parse_csv(csv_file, report, timeline):
                             else:
                                 continue
                             outputtext = '[RegSetValue] %s:%s > %s%s' % (field[1], field[2], field[4], data_field)
-                            timelinetext = '%s,Registry,RegSetValue,%s,%s,%s,%s' % (field[0].split()[0].split('.')[0],
-                                                                                    field[1], field[2], field[4],
-                                                                                    data_field)
+                            tl_text = '%s,Registry,RegSetValue,%s,%s,%s,%s' % (field[0].split()[0].split('.')[0],
+                                                                               field[1], field[2], field[4], data_field)
                             reg_output.append(outputtext)
-                            timeline.append(timelinetext)
-                                
+                            timeline.append(tl_text)
+
                     except (IndexError, ValueError):
                         error_output.append(original_line.strip())
 
@@ -850,63 +879,63 @@ def parse_csv(csv_file, report, timeline):
                 # SUCCESS is commented out to allows all attempted deletions, whether or not the value exists
                 if not whitelist_scan(reg_whitelist, field):
                     outputtext = '[RegDeleteValue] %s:%s > %s' % (field[1], field[2], field[4])
-                    timelinetext = '%s,Registry,RegDeleteValue,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
-                                                                            field[2], field[4])
+                    tl_text = '%s,Registry,RegDeleteValue,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
+                                                                       field[2], field[4])
                     reg_output.append(outputtext)
-                    timeline.append(timelinetext)
+                    timeline.append(tl_text)
 
             elif field[3] == 'RegDeleteKey':  # and field[5] == 'SUCCESS':
                 # SUCCESS is commented out to allows all attempted deletions, whether or not the value exists
                 if not whitelist_scan(reg_whitelist, field):
                     outputtext = '[RegDeleteKey] %s:%s > %s' % (field[1], field[2], field[4])
-                    timelinetext = '%s,Registry,RegDeleteKey,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
-                                                                          field[2], field[4])
+                    tl_text = '%s,Registry,RegDeleteKey,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
+                                                                     field[2], field[4])
                     reg_output.append(outputtext)
-                    timeline.append(timelinetext)
+                    timeline.append(tl_text)
 
             elif field[3] == 'UDP Send' and field[5] == 'SUCCESS':
                 if not whitelist_scan(net_whitelist, field):
                     server = field[4].split('-> ')[1]
                     # TODO: work on this later, once I can verify it better.
-                    #if field[6] == 'Length: 20':
+                    # if field[6] == 'Length: 20':
                     #    output_line = '[DNS Query] %s:%s > %s' % (field[1], field[2], protocol_replace(server))
-                    #else:
+                    # else:
                     outputtext = '[UDP] %s:%s > %s' % (field[1], field[2], protocol_replace(server))
-                    if not outputtext in net_output:
-                        timelinetext = '%s,Network,UDP Send,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
-                                                                         field[2], protocol_replace(server))
+                    if outputtext not in net_output:
+                        tl_text = '%s,Network,UDP Send,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
+                                                                    field[2], protocol_replace(server))
                         net_output.append(outputtext)
-                        timeline.append(timelinetext)
+                        timeline.append(tl_text)
 
             elif field[3] == 'UDP Receive' and field[5] == 'SUCCESS':
                 if not whitelist_scan(net_whitelist, field):
                     server = field[4].split('-> ')[1]
                     outputtext = '[UDP] %s > %s:%s' % (protocol_replace(server), field[1], field[2])
-                    if not outputtext in net_output:
-                        timelinetext = '%s,Network,UDP Receive,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
-                                                                         field[2])
+                    if outputtext not in net_output:
+                        tl_text = '%s,Network,UDP Receive,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
+                                                                    field[2])
                         net_output.append(outputtext)
-                        timeline.append(timelinetext)
+                        timeline.append(tl_text)
 
             elif field[3] == 'TCP Send' and field[5] == 'SUCCESS':
                 if not whitelist_scan(net_whitelist, field):
                     server = field[4].split('-> ')[1]
                     outputtext = '[TCP] %s:%s > %s' % (field[1], field[2], protocol_replace(server))
-                    if not outputtext in net_output:
-                        timelinetext = '%s,Network,TCP Send,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
-                                                                         field[2], protocol_replace(server))
+                    if outputtext not in net_output:
+                        tl_text = '%s,Network,TCP Send,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
+                                                                    field[2], protocol_replace(server))
                         net_output.append(outputtext)
-                        timeline.append(timelinetext)
+                        timeline.append(tl_text)
 
             elif field[3] == 'TCP Receive' and field[5] == 'SUCCESS':
                 if not whitelist_scan(net_whitelist, field):
                     server = field[4].split('-> ')[1]
                     outputtext = '[TCP] %s > %s:%s' % (protocol_replace(server), field[1], field[2])
-                    if not outputtext in net_output:
-                        timelinetext = '%s,Network,TCP Receive,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
-                                                                         field[2])
+                    if outputtext not in net_output:
+                        tl_text = '%s,Network,TCP Receive,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
+                                                                    field[2])
                         net_output.append(outputtext)
-                        timeline.append(timelinetext)
+                        timeline.append(tl_text)
 
         except IndexError:
             log_debug(line)
@@ -916,28 +945,28 @@ def parse_csv(csv_file, report, timeline):
         # Enumerate unique remote hosts into their own section
         if server:
             server = server.split(':')[0]
-            if not server in remote_servers and server != 'localhost':
+            if server not in remote_servers and server != 'localhost':
                 remote_servers.append(server)
-    #} End of file input processing
+    # } End of file input processing
 
     time_parse_csv_end = time.time()
-    
+
     report.append('-=] Sandbox Analysis Report generated by Noriben v%s' % __VERSION__)
     report.append('-=] Developed by Brian Baskin: brian @@ thebaskins.com  @bbaskin')
     report.append('-=] The latest release can be found at https://github.com/Rurik/Noriben')
     report.append('')
     if exe_cmdline:
         report.append('-=] Analysis of command line: %s' % exe_cmdline)
-    
+
     if time_exec:
         report.append('-=] Execution time: %0.2f seconds' % time_exec)
     if time_process:
         report.append('-=] Processing time: %0.2f seconds' % time_process)
-    
+
     time_analyze = time_parse_csv_end - time_parse_csv_start
     report.append('-=] Analysis time: %0.2f seconds' % time_analyze)
     report.append('')
-    
+
     report.append('Processes Created:')
     report.append('==================')
     log_debug('[*] Writing %d Process Events results to report' % len(process_output))
@@ -978,14 +1007,14 @@ def parse_csv(csv_file, report, timeline):
         log_debug('[*] Writing %d Output Errors results to report' % len(error_output))
         for error in error_output:
             report.append(error)
-            
+
     if debug and vt_dump:
         vt_file = os.path.join(output_dir, os.path.splitext(csv_file)[0] + '.vt.json')
         log_debug('[*] Writing %d VirusTotal results to %s' % (len(vt_dump), vt_file))
         vt_out = open(vt_file, 'w')
         json.dump(vt_dump, vt_out)
         vt_out.close()
-        
+
     if debug and debug_messages:
         debug_file = os.path.join(output_dir, os.path.splitext(csv_file)[0] + '.log')
         debug_out = open(debug_file, 'wb')
@@ -998,11 +1027,6 @@ def parse_csv(csv_file, report, timeline):
 def main():
     """
     Main routine, parses arguments and calls other routines
-
-    Arguments:
-        None
-    Results:
-        None
     """
     global generalize_paths
     global timeout_seconds
@@ -1012,21 +1036,17 @@ def main():
     global exe_cmdline
     global output_dir
     global script_cwd
+    global hash_type
 
-    try:
-        header1 = '--===[ Noriben v%s ]===--' % __VERSION__
-        header2 = '--===[%s@bbaskin%s]===--'
-        padding = (len(header1)) - (len(header2) - 4)
-        print(header1)
-        print(header2 % (' ' * (padding / 2), ' ' * (padding / 2)))
-    except TypeError:
-        print('--==[ Noriben v%s ]==--' % __VERSION__)
+    print('--===[ Noriben v%s' % __VERSION__)
+    print('--===[ @bbaskin')
 
     parser = ArgumentParser()
     parser.add_argument('-c', '--csv', help='Re-analyze an existing Noriben CSV file', required=False)
     parser.add_argument('-p', '--pml', help='Re-analyze an existing Noriben PML file', required=False)
     parser.add_argument('-f', '--filter', help='Specify alternate Procmon Filter PMC', required=False)
-    parser.add_argument('--hash', help='Specify MD5 file whitelist', required=False)
+    parser.add_argument('--hash', help='Specify hash whitelist file', required=False)
+    parser.add_argument('--hashtype', help='Specify hash type', required=False, choices=valid_hash_types)
     parser.add_argument('-t', '--timeout', help='Number of seconds to collect activity', required=False, type=int)
     parser.add_argument('--output', help='Folder to store output files', required=False)
     parser.add_argument('--yara', help='Folder containing YARA rules', required=False)
@@ -1048,10 +1068,13 @@ def main():
         generalize_paths = True
         generalize_vars_init()
 
-    # Load MD5 white list and append to global white list
+    if args.hashtype:
+        hash_type = args.hashtype
+
+    # Load hash whitelist and append to global white list
     if args.hash:
         if file_exists(args.hash):
-            read_hash_file(args.hash)        
+            read_hash_file(args.hash)
 
     # Check for a valid filter file
     if args.filter:
@@ -1062,7 +1085,7 @@ def main():
     else:
         pmc_file = 'ProcmonConfiguration.PMC'
     pmc_file_cwd = os.path.join(script_cwd, pmc_file)
-    
+
     if not file_exists(pmc_file):
         if not file_exists(pmc_file_cwd):
             use_pmc = False
@@ -1123,7 +1146,7 @@ def main():
             txt_file = os.path.join(output_dir, os.path.splitext(args.pml)[0] + '.txt')
             timeline_file = os.path.join(output_dir, os.path.splitext(args.pml)[0] + '_timeline.csv')
 
-            process_PML_to_CSV(procmonexe, args.pml, pmc_file, csv_file)
+            process_pml_to_csv(procmonexe, args.pml, pmc_file, csv_file)
             if not file_exists(csv_file):
                 print('[!] Error detected. Could not create CSV file: %s' % csv_file)
                 sys.exit(1)
@@ -1149,7 +1172,7 @@ def main():
             # Reparse an existing CSV
             txt_file = os.path.splitext(args.csv)[0] + '.txt'
             timeline_file = os.path.splitext(args.csv)[0] + '_timeline.csv'
-            
+
             parse_csv(args.csv, report, timeline)
 
             print('[*] Saving report to: %s' % txt_file)
@@ -1184,7 +1207,7 @@ def main():
     if exe_cmdline and not file_exists(exe_cmdline):
         print('[!] Error: Specified malware executable does not exist: %s' % exe_cmdline)
         sys.exit(1)
-    
+
     print('[*] Launching Procmon ...')
     launch_procmon_capture(procmonexe, pml_file, pmc_file)
 
@@ -1223,7 +1246,7 @@ def main():
         sys.exit(1)
 
     # PML created, now convert it to a CSV for parsing
-    process_PML_to_CSV(procmonexe, pml_file, pmc_file, csv_file)
+    process_pml_to_csv(procmonexe, pml_file, pmc_file, csv_file)
     if not file_exists(csv_file):
         print('[!] Error detected. Could not create CSV file: %s' % csv_file)
         sys.exit(1)
