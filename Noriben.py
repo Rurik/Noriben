@@ -142,7 +142,8 @@ cmd_whitelist = [r'%SystemRoot%\system32\wbem\wmiprvse.exe',
                  r'TCPView.exe',
                  r'%WinDir%\System32\mobsync.exe',
                  r'/Processid:{AB8902B4-09CA-4BB6-B78D-A8F59079A8D5}',  # Thumbnail server
-                 r'/Processid:{F9717507-6651-4EDB-BFF7-AE615179BCCF}'   # DCOM error
+                 r'/Processid:{F9717507-6651-4EDB-BFF7-AE615179BCCF}',  # DCOM error
+                 r'\??\%WinDir%\system32\conhost.exe -'
                  ] + global_whitelist
 
 file_whitelist = [r'procmon.exe',
@@ -182,6 +183,7 @@ file_whitelist = [r'procmon.exe',
                   r'%UserProfile%\Local Settings\History\History.IE5\*',
                   r'%WinDir%\AppCompat\Programs\RecentFileCache.bcf',
                   r'%WinDir%\System32\spool\drivers\*',
+                  r'%WinDir%\Temp\fwtsqmfile00.sqm',  # Software Quality Metrics (SQM) from iphlpsvc
                   r'Windows\Temporary Internet Files\counters.dat'
                   ] + global_whitelist
 
@@ -259,6 +261,10 @@ reg_whitelist = [r'CaptureProcessMonitor',
                  r'HKLM\Software\Microsoft\Windows NT\CurrentVersion\Tracing\*',
                  r'HKLM\SOFTWARE\Policies$',
                  r'HKLM\SOFTWARE\Policies\Microsoft$',
+                 r'HKLM\SOFTWARE\Wow6432Node\Google\Update\ClientState\{',
+                 r'HKLM\SOFTWARE\Wow6432Node\Google\Update\old-uid',
+                 r'HKLM\SOFTWARE\Wow6432Node\Google\Update\uid',
+
                  r'HKLM\System\CurrentControlSet\Control\CLASS\{.*-E325-11CE-BFC1-08002BE10318}',
                  r'HKLM\System\CurrentControlSet\Control\DeviceClasses',
                  r'HKLM\System\CurrentControlSet\Control\MediaProperties',
