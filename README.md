@@ -37,12 +37,12 @@ The --generalize feature will automatically substitute absolute paths with Windo
 
 Usage:
 <pre>
---===[ Noriben v1.6 ]===--
---===[   @bbaskin   ]===--
-
+--===[ Noriben v1.7.0
+--===[ @bbaskin
 usage: Noriben.py [-h] [-c CSV] [-p PML] [-f FILTER] [--hash HASH]
-                  [-t TIMEOUT] [--output OUTPUT] [--yara YARA] [--generalize]
-                  [--cmd CMD] [-d]
+                  [--hashtype {MD5,SHA1,SHA256}] [-t TIMEOUT]
+                  [--output OUTPUT] [--yara YARA] [--generalize] [--cmd CMD]
+                  [-d]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -50,7 +50,9 @@ optional arguments:
   -p PML, --pml PML     Re-analyze an existing Noriben PML file
   -f FILTER, --filter FILTER
                         Specify alternate Procmon Filter PMC
-  --hash HASH           Specify MD5 file whitelist
+  --hash HASH           Specify hash whitelist file
+  --hashtype {MD5,SHA1,SHA256}
+                        Specify hash type
   -t TIMEOUT, --timeout TIMEOUT
                         Number of seconds to collect activity
   --output OUTPUT       Folder to store output files
