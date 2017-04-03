@@ -36,15 +36,15 @@ if [ ! -z $NORIBEN_DEBUG ]; then echo "$VMRUN" -T ws start "$VMX"; fi
 if [ ! -z $NORIBEN_DEBUG ]; then echo "$VMRUN" -gu $VM_USER  -gp $VM_PASS copyFileFromHostToGuest "$VMX" "$MALWAREFILE" C:\\Malware\\malware.exe; fi
 "$VMRUN" -gu $VM_USER  -gp $VM_PASS copyFileFromHostToGuest "$VMX" "$MALWAREFILE" C:\\Malware\\malware.exe
 
-if [ ! -z $NORIBEN_DEBUG ]; then echo "$VMRUN" -T ws -gu $VM_USER -gp $VM_PASS runProgramInGuest "$VMX" C:\\Python27\\Python.exe "$NORIBEN_PATH" -d -t $DELAY --cmd "C:\\Malware\\Malware.exe" --output "$LOG_PATH"; fi
-"$VMRUN" -T ws -gu $VM_USER -gp $VM_PASS runProgramInGuest "$VMX" C:\\Python27\\Python.exe "$NORIBEN_PATH" -d -t $DELAY --cmd "C:\\Malware\\Malware.exe" --output "$LOG_PATH"
+if [ ! -z $NORIBEN_DEBUG ]; then echo "$VMRUN" -T ws -gu $VM_USER -gp $VM_PASS runProgramInGuest "$VMX" -activeWindow -interactive C:\\Python27\\Python.exe "$NORIBEN_PATH" -d -t $DELAY --cmd "C:\\Malware\\Malware.exe" --output "$LOG_PATH"; fi
+"$VMRUN" -T ws -gu $VM_USER -gp $VM_PASS runProgramInGuest "$VMX" -activeWindow -interactive C:\\Python27\\Python.exe "$NORIBEN_PATH" -d -t $DELAY --cmd "C:\\Malware\\Malware.exe" --output "$LOG_PATH"
 if [ $? -gt 0 ]; then
     echo "[!] File did not execute in VM correctly."
     exit
 fi
 
-if [ ! -z $NORIBEN_DEBUG ]; then "$VMRUN" -T ws -gu $VM_USER -gp $VM_PASS runProgramInGuest "$VMX" "$ZIP_PATH" -j C:\\NoribenReports.zip "$LOG_PATH\\*.*"; fi
-"$VMRUN" -T ws -gu $VM_USER -gp $VM_PASS runProgramInGuest "$VMX" "$ZIP_PATH" -j C:\\NoribenReports.zip "$LOG_PATH\\*.*"
+if [ ! -z $NORIBEN_DEBUG ]; then "$VMRUN" -T ws -gu $VM_USER -gp $VM_PASS runProgramInGuest "$VMX" -activeWindow -interactive "$ZIP_PATH" -j C:\\NoribenReports.zip "$LOG_PATH\\*.*"; fi
+"$VMRUN" -T ws -gu $VM_USER -gp $VM_PASS runProgramInGuest "$VMX" -activeWindow -interactive "$ZIP_PATH" -j C:\\NoribenReports.zip "$LOG_PATH\\*.*"
 if [ $? -eq 12 ]; then
     echo "[!] ERROR: No files found in Noriben output folder to ZIP."
     exit

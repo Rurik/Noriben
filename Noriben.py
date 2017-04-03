@@ -57,10 +57,12 @@
 #       names. Added support to find default PMC from script working directory.
 # Version 1.6.4 - 7 Dec 16 -
 #       A handful of bug fixes related to bad Internet access. Small variable updates.
-# Version 1.7.0 - 4 Feb 17
+# Version 1.7.0 - 4 Feb 17 -
 #       Default hash method is not SHA256. An argument and global var allow to
 #       override hash. Numerous filters added. PEP8 cleanup, multiple small fixes to
 #       code and implementation styles.
+# Version 1.7.1 - 3 Apr 17 -
+#       Small updates. Change --filter to not find default if a bad one is specified.
 #
 # TODO:
 # * Upload files directly to VirusTotal (1.7.X feature?)
@@ -128,7 +130,12 @@ global_whitelist = [r'VMwareUser.exe',      # VMware User Tools
                     r'idaq.exe',            # IDA Pro
                     r'ngen.exe',            # Windows Native Image Generator
                     r'ngentask.exe',        # Windows Native Image Generator
-                    r'consent.exe']         # Windows UAC prompt
+                    r'consent.exe',         # Windows UAC prompt
+                    r'taskhost.exe',
+                    r'SearchIndexer.exe'
+                    r'RepUx.exe',
+                    r'RepMgr64.exe',
+                    r'EcatService.exe']
 
 cmd_whitelist = [r'%SystemRoot%\system32\wbem\wmiprvse.exe',
                  r'%SystemRoot%\system32\wscntfy.exe',
@@ -143,7 +150,8 @@ cmd_whitelist = [r'%SystemRoot%\system32\wbem\wmiprvse.exe',
                  r'%WinDir%\System32\mobsync.exe',
                  r'/Processid:{AB8902B4-09CA-4BB6-B78D-A8F59079A8D5}',  # Thumbnail server
                  r'/Processid:{F9717507-6651-4EDB-BFF7-AE615179BCCF}',  # DCOM error
-                 r'\??\%WinDir%\system32\conhost.exe -'
+                 # r'\??\%WinDir%\system32\conhost.exe -'
+                 r'\??\%WinDir%\system32\conhost.exe .*-.*-.*-.*'  # Experimental
                  ] + global_whitelist
 
 file_whitelist = [r'procmon.exe',
@@ -167,6 +175,7 @@ file_whitelist = [r'procmon.exe',
                   r'%AppData%\Microsoft\Proof\*',
                   r'%AppData%\Microsoft\Templates\*',
                   r'%LocalAppData%\Google\Drive\sync_config.db*',
+                  r'%LocalAppData%\GDIPFONTCACHEV1.DAT',
                   r'MAILSLOT\NET\NETLOGON',
                   r'%ProgramFiles%\Capture\*',
                   r'%SystemDrive%\Python',
@@ -182,9 +191,11 @@ file_whitelist = [r'procmon.exe',
                   r'%UserProfile%\Recent\*',
                   r'%UserProfile%\Local Settings\History\History.IE5\*',
                   r'%WinDir%\AppCompat\Programs\RecentFileCache.bcf',
+                  r'%WinDir%\System32\config\systemprofile\AppData\LocalLow\Microsoft\CryptnetUrlCache\MetaData\*',
                   r'%WinDir%\System32\spool\drivers\*',
                   r'%WinDir%\Temp\fwtsqmfile00.sqm',  # Software Quality Metrics (SQM) from iphlpsvc
-                  r'Windows\Temporary Internet Files\counters.dat'
+                  r'Windows\Temporary Internet Files\counters.dat',
+                  r'Program Files.*\confer\*'
                   ] + global_whitelist
 
 reg_whitelist = [r'CaptureProcessMonitor',
@@ -195,6 +206,7 @@ reg_whitelist = [r'CaptureProcessMonitor',
                  r'wscntfy.exe',
                  r'wuauclt.exe',
                  r'PROCMON',
+                 r'}\DefaultObjectStore\*',
 
                  r'HKCR$',
                  r'HKCR\AllFilesystemObjects\shell',
@@ -300,6 +312,7 @@ reg_whitelist = [r'CaptureProcessMonitor',
 net_whitelist = [r'hasplms.exe'  # Hasp dongle beacons
                  # r'192.168.2.',                     # Example for blocking net ranges
                  # r'Verizon_router.home']            # Example for blocking local domains
+                 # r' -> .*\..*\..*\..*:1900
                  ] + global_whitelist
 
 hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89',  # WinXP ntdll.dll
@@ -315,7 +328,7 @@ hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89',  # WinXP ntdll.dll
 
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '1.7.0'                                                    #
+__VERSION__ = '1.7.1'                                                    #
 path_general_list = []                                                   #
 virustotal_upload = True if virustotal_api_key else False  # TODO        #
 use_virustotal = True if virustotal_api_key and has_internet else False  #
@@ -579,7 +592,7 @@ def file_exists(fname):
     Results:
         boolean value if file exists
     """
-    return os.path.exists(fname) and os.access(fname, os.X_OK)
+    return os.path.exists(fname) and os.access(fname, os.F_OK)
 
 
 def check_procmon():
@@ -1060,7 +1073,7 @@ def main():
                         help='Generalize file paths to their environment variables. Default: %s' % generalize_paths,
                         required=False)
     parser.add_argument('--cmd', help='Command line to execute (in quotes)', required=False)
-    parser.add_argument('-d', dest='debug', action='store_true', help='Enable debug tracebacks', required=False)
+    parser.add_argument('-d', '--debug', action='store_true', help='Enable debugging', required=False)
     args = parser.parse_args()
     report = list()
     timeline = list()
@@ -1087,23 +1100,26 @@ def main():
         if file_exists(args.filter):
             pmc_file = args.filter
         else:
-            pmc_file = 'ProcmonConfiguration.PMC'
+            pmc_file = ''
     else:
         pmc_file = 'ProcmonConfiguration.PMC'
     pmc_file_cwd = os.path.join(script_cwd, pmc_file)
 
-    if not file_exists(pmc_file):
-        if not file_exists(pmc_file_cwd):
-            use_pmc = False
-            print('[!] Filter file %s not found. Continuing without filters.' % pmc_file)
+    if pmc_file:
+        if not file_exists(pmc_file):
+            if not file_exists(pmc_file_cwd):
+                use_pmc = False
+                print('[!] Filter file %s not found. Continuing without filters.' % pmc_file)
+            else:
+                use_pmc = True
+                pmc_file = pmc_file_cwd
+                print('[*] Using filter file: %s' % pmc_file)
         else:
             use_pmc = True
-            pmc_file = pmc_file_cwd
             print('[*] Using filter file: %s' % pmc_file)
+            log_debug('[*] Using filter file: %s' % pmc_file)
     else:
-        use_pmc = True
-        print('[*] Using filter file: %s' % pmc_file)
-    log_debug('[*] Using filter file: %s' % pmc_file)
+        use_pmc = False
 
     # Find a valid procmon executable.
     procmonexe = check_procmon()
