@@ -1,4 +1,5 @@
 ## Noriben Malware Analysis Sandbox
+[![Black Hat Arsenal](https://www.toolswatch.org/badges/arsenal/2011.svg)](https://www.toolswatch.org/blackhat-arsenal-us-2011-archive/)
 
 <pre>
 Contact Information:
@@ -19,7 +20,8 @@ For a more detailed explanation, see <a href="http://www.slideshare.net/bbaskin/
 http://ghettoforensics.blogspot.com/2013/04/noriben-your-personal-portable-malware.html
 
 
-Like it? Buy me a beer! :) <a href='https://pledgie.com/campaigns/22876'><img alt='Click here to lend your support to: Open Source Software and make a donation at pledgie.com !' src='https://pledgie.com/campaigns/22876.png?skin_name=chrome' border='0' ></a>
+Like it? Buy me a beer! :)
+<a href='https://pledgie.com/campaigns/22876'><img alt='Click here to lend your support to: Open Source Software and make a donation at pledgie.com !' src='https://pledgie.com/campaigns/22876.png?skin_name=chrome' border='0' ></a>
 
 
 # Cool Features
