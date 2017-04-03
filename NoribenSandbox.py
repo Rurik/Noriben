@@ -18,8 +18,8 @@ import time
 debug = False
 timeout_seconds = 300
 VMRUN = os.path.expanduser(r"/Applications/VMware\ Fusion.app/Contents/Library/vmrun")
-VMX = os.path.expanduser(r"~/VMs/Win7_VICTIM.vmwarevm/Win7_VICTIM.vmx")
-VM_SNAPSHOT = "Ransomware_3.0.0.1208"
+VMX = os.path.expanduser(r"~/VMs/Windows.vmwarevm/Windows.vmx")
+VM_SNAPSHOT = "YourVMSnapshotNameHere"
 VM_USER = "Admin"
 VM_PASS = "password"
 noribenPath = "C:\\\\Users\\\\{}\\\\Desktop".format(VM_USER)
