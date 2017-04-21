@@ -16,20 +16,23 @@ import sys
 import time
 
 debug = False
-timeout_seconds = 300
+timeoutSeconds = 300
 VMRUN = os.path.expanduser(r"/Applications/VMware\ Fusion.app/Contents/Library/vmrun")
 VMX = os.path.expanduser(r"~/VMs/Windows.vmwarevm/Windows.vmx")
-VM_SNAPSHOT = "YourVMSnapshotNameHere"
+VM_SNAPSHOT = "YourVMSnapshotNameHere
 VM_USER = "Admin"
 VM_PASS = "password"
 noribenPath = "C:\\\\Users\\\\{}\\\\Desktop".format(VM_USER)
-noribenScript = '{}\\\\Noriben.py'.format(noribenPath)
+guestNoribenPath = '{}\\\\Noriben.py'.format(noribenPath)
 procmonConfigPath = '{}\\\\ProcmonConfiguration.pmc'.format(noribenPath)
-LOG_PATH = "C:\\\\Noriben_Logs"
-ZIP_PATH = "C:\\\\Program Files\\\\VMware\\\\VMware Tools\\\\zip.exe"
-python_path = "C:\\\\Python27\\\\python.exe"
-malware_base = "C:\\\\Malware\\\\malware_"
-host_noriben = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), 'Noriben.py')
+# reportPathStructure = '{}/NoribenReports_{}.zip'
+reportPathStructure = '{}/{}_NoribenReport.zip'  # (hostMalwarePath, hostMalwareNameBase)
+hostScreenshotPathStructure = '{}/{}.png'  # (hostMalwarePath, hostMalwareNameBase)
+guestLogPath = "C:\\\\Noriben_Logs"
+guestZipPath = "C:\\\\Program Files\\\\VMware\\\\VMware Tools\\\\zip.exe"
+guestPythonPath = "C:\\\\Python27\\\\python.exe"
+hostNoribenPath = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), 'Noriben.py')
+guestMalwarePath = "C:\\\\Malware\\\\malware_"
 
 
 def file_exists(fname):
@@ -38,7 +41,9 @@ def file_exists(fname):
 
 def main():
     global debug
-    global timeout_seconds
+    global timeoutSeconds
+    global VM_SNAPSHOT
+
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', '--file', help='filename', required=True)
     parser.add_argument('-d', '--debug', dest='debug', action='store_true', help='Show all commands for debugging',
@@ -52,6 +57,8 @@ def main():
     parser.add_argument('--nolog', action='store_true', required=False)
     parser.add_argument('--norevert', action='store_true', required=False)
     parser.add_argument('--update', action='store_true', required=False)
+    parser.add_argument('--screenshot', action='store_true', required=False)
+    parser.add_argument('-s', '--snapshot', required=False)
     parser.add_argument('--defense', action='store_true', required=False)  # Particular to Carbon Black Defense
 
     args = parser.parse_args()
@@ -63,6 +70,9 @@ def main():
     if args.dontrun:
         dontrun = True
 
+    if args.snapshot:
+        VM_SNAPSHOT = args.snapshot
+
     if args.dontrunnothing:
         dontrunnothing = True
     else:
@@ -71,7 +81,7 @@ def main():
     malware_file = args.file
 
     if args.timeout:
-        timeout_seconds = args.timeout
+        timeoutSeconds = args.timeout
 
     magic_result = magic.from_file(malware_file)
     if not magic_result.startswith('PE32') or 'DLL' in magic_result:
@@ -79,17 +89,21 @@ def main():
             dontrun = True
             print('[*] Disabling automatic running due to magic signature: {}'.format(magic_result))
 
-    filename_base = os.path.split(malware_file)[-1].split('.')[0]
+    hostMalwareNameBase = os.path.split(malware_file)[-1].split('.')[0]
     if dontrun:
-        filename = '{}{}'.format(malware_base, filename_base)
+        filename = '{}{}'.format(guestMalwarePath, hostMalwareNameBase)
     elif 'DOS batch' in magic_result:
-        filename = '{}{}.bat'.format(malware_base, filename_base)
+        filename = '{}{}.bat'.format(guestMalwarePath, hostMalwareNameBase)
     else:
-        filename = '{}{}.exe'.format(malware_base, filename_base)
-    filename_path = os.path.dirname(malware_file)
+        filename = '{}{}.exe'.format(guestMalwarePath, hostMalwareNameBase)
+    hostMalwarePath = os.path.dirname(malware_file)
 
-    cmd_base = '{} -T ws -gu {} -gp {} runProgramInGuest {} -activeWindow -interactive'.format(VMRUN, VM_USER, VM_PASS,
-                                                                                               VMX)
+    if not args.screenshot:
+        active = '-activeWindow'
+    else:
+        active = ''
+    cmd_base = '{} -T ws -gu {} -gp {} runProgramInGuest {} {} -interactive'.format(VMRUN, VM_USER, VM_PASS, VMX,
+                                                                                    active)
 
     if not args.norevert:
         cmd = "{} -T ws revertToSnapshot \"{}\" {}".format(VMRUN, VMX, VM_SNAPSHOT)
@@ -127,19 +141,19 @@ def main():
         stdout = subprocess.Popen(cmd, shell=True)
         stdout.wait()
 
-    if args.update and file_exists(host_noriben):
+    if args.update and file_exists(hostNoribenPath):
         cmd = '{} -gu {} -gp {} copyFileFromHostToGuest "{}" "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX,
-                                                                               host_noriben,
-                                                                               noribenScript)
+                                                                               hostNoribenPath,
+                                                                               guestNoribenPath)
         if debug: print(cmd)
         stdout = subprocess.Popen(cmd, shell=True)
         stdout.wait()
 
     # Run Noriben
-    cmd = '{} {} "{}" -t {}'.format(cmd_base, python_path, noribenScript, timeout_seconds)
+    cmd = '{} {} "{}" -t {}'.format(cmd_base, guestPythonPath, guestNoribenPath, timeoutSeconds)
 
     if not dontrun:
-        cmd = '{} --cmd {} --output "{}"'.format(cmd, filename, LOG_PATH)
+        cmd = '{} --cmd {} --output "{}"'.format(cmd, filename, guestLogPath)
 
     if debug:
         cmd = '{} -d'.format(cmd)
@@ -149,25 +163,33 @@ def main():
     stdout.wait()
 
     if not dontrun:
-        cmd = '{} "{}" -j C:\\\\NoribenReports.zip {}\\\\*.*'.format(cmd_base, ZIP_PATH, LOG_PATH)
+        cmd = '{} "{}" -j C:\\\\NoribenReports.zip {}\\\\*.*'.format(cmd_base, guestZipPath, guestLogPath)
         if debug: print(cmd)
         stdout = subprocess.Popen(cmd, shell=True)
         stdout.wait()
 
         if args.defense:
-            # Get Carbon Black Defense confer.log. This is an example if you want to include additional files.
-            cmd = '{} "{}" -j C:\\\\NoribenReports.zip "C:\\\\Program Files\\\\Confer\\\\confer.log"'.format(cmd_base,
-                                                                                                             ZIP_PATH,
-                                                                                                             LOG_PATH)
+            # Get Carbon Black Defense log. This is an example if you want to include additional files.
+            cmd = '{} "{}" -j C:\\\\NoribenReports.zip "C:\\\\Program Files\\\\Confer\\\\confer.log"'.format(
+                                                                                                        cmd_base,
+                                                                                                        guestZipPath,
+                                                                                                        guestLogPath)
             if debug: print(cmd)
             stdout = subprocess.Popen(cmd, shell=True)
             stdout.wait()
 
         if not args.nolog:
-            report_path = '{}/NoribenReports_{}.zip'.format(filename_path, filename_base)
+            hostReportPath = reportPathStructure.format(hostMalwarePath, hostMalwareNameBase)
             cmd = '{} -gu {} -gp {} copyFileFromGuestToHost {} C:\\\\NoribenReports.zip {}'.format(VMRUN, VM_USER,
                                                                                                    VM_PASS, VMX,
-                                                                                                   report_path)
+                                                                                                   hostReportPath)
+            if debug: print(cmd)
+            stdout = subprocess.Popen(cmd, shell=True)
+            stdout.wait()
+
+        if args.screenshot:
+            hostScreenshotPath = hostScreenshotPathStructure.format(hostMalwarePath, hostMalwareNameBase)
+            cmd = '{} -gu {} -gp {} captureScreen {} {}'.format(VMRUN, VM_USER, VM_PASS, VMX, hostScreenshotPath)
             if debug: print(cmd)
             stdout = subprocess.Popen(cmd, shell=True)
             stdout.wait()
