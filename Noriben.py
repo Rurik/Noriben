@@ -63,6 +63,12 @@
 #       code and implementation styles.
 # Version 1.7.1 - 3 Apr 17 -
 #       Small updates. Change --filter to not find default if a bad one is specified.
+# Version 1.7.2 - 21 Apr 17 -
+#       Fixed Debug output to go to a log file continually, so output is stored if
+#       unexpected exit. Check for PML and Config file between executions to account
+#       for destructive malware that erases during runtime. Added headless option for
+#       automated runs, so that screenshot can be grabbed w/o output on screen.
+#
 #
 # TODO:
 # * Upload files directly to VirusTotal (1.7.X feature?)
@@ -309,7 +315,7 @@ reg_whitelist = [r'CaptureProcessMonitor',
                  r'UserAssist\{CEBFF5CD-ACE2-4F4F-9178-9926F41749EA}'
                  ] + global_whitelist
 
-net_whitelist = [r'hasplms.exe'  # Hasp dongle beacons
+net_whitelist = [r'hasplms.exe'                       # Hasp dongle beacons
                  # r'192.168.2.',                     # Example for blocking net ranges
                  # r'Verizon_router.home']            # Example for blocking local domains
                  # r' -> .*\..*\..*\..*:1900
@@ -328,7 +334,7 @@ hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89',  # WinXP ntdll.dll
 
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '1.7.1'                                                    #
+__VERSION__ = '1.7.2'                                                    #
 path_general_list = []                                                   #
 virustotal_upload = True if virustotal_api_key else False  # TODO        #
 use_virustotal = True if virustotal_api_key and has_internet else False  #
@@ -341,6 +347,8 @@ output_dir = ''                                                          #
 time_exec = 0                                                            #
 time_process = 0                                                         #
 script_cwd = ''                                                          #
+debug_file = ''                                                          #
+headless = False                                                         #
 ##########################################################################
 
 
@@ -356,7 +364,19 @@ def log_debug(msg):
     """
     global debug_messages
     if msg and debug:
-        debug_messages.append(msg + '\r\n')
+        print(msg)
+
+        if debug_file:  # File already set, check for message buffer
+            if debug_messages:  # If buffer, write and erase buffer
+                hdbg = open(debug_file, 'a')
+                for item in debug_messages:
+                    hdbg.write(item)
+                hdbg.close()
+                debug_messages = list()
+            else:
+                open(debug_file, 'a').write('{}\n'.format(msg))
+        else:  # Output file hasn't been set yet, append to buffer
+            debug_messages.append(msg + '\r\n')
 
 
 def generalize_vars_init():
@@ -575,6 +595,10 @@ def open_file_with_assoc(fname):
     Results:
         None
     """
+    if headless:
+        # Headless is for automated runs, don't open results on VM
+        return
+
     if os.name == 'mac':
         subprocess.call(('open', fname))
     elif os.name == 'nt':
@@ -697,8 +721,11 @@ def process_pml_to_csv(procmonexe, pml_file, pmc_file, csv_file):
     time_convert_start = time.time()
 
     log_debug('[*] Converting session to CSV: %s' % csv_file)
+    if not file_exists(pml_file):
+        print('[!] Error detected. PML file was not found: %s' % pml_file)
+        sys.exit(1)
     cmdline = '"%s" /OpenLog "%s" /saveas "%s"' % (procmonexe, pml_file, csv_file)
-    if use_pmc:
+    if use_pmc and file_exists(pmc_file):
         cmdline += ' /LoadConfig "%s"' % pmc_file
     log_debug('[*] Running cmdline: %s' % cmdline)
     stdnull = subprocess.Popen(cmdline)
@@ -723,7 +750,7 @@ def launch_procmon_capture(procmonexe, pml_file, pmc_file):
     time_exec = time.time()
 
     cmdline = '"%s" /BackingFile "%s" /Quiet /Minimized' % (procmonexe, pml_file)
-    if use_pmc:
+    if use_pmc and file_exists(pmc_file):
         cmdline += ' /LoadConfig "%s"' % pmc_file
     log_debug('[*] Running cmdline: %s' % cmdline)
     subprocess.Popen(cmdline)
@@ -1035,8 +1062,7 @@ def parse_csv(csv_file, report, timeline):
         vt_out.close()
 
     if debug and debug_messages:
-        debug_file = os.path.join(output_dir, os.path.splitext(csv_file)[0] + '.log')
-        debug_out = open(debug_file, 'wb')
+        debug_out = open(debug_file, 'a')
         for message in debug_messages:
             debug_out.write(message)
         debug_out.close()
@@ -1056,6 +1082,8 @@ def main():
     global output_dir
     global script_cwd
     global hash_type
+    global debug_file
+    global headless
 
     print('--===[ Noriben v%s' % __VERSION__)
     print('--===[ @bbaskin')
@@ -1066,6 +1094,8 @@ def main():
     parser.add_argument('-f', '--filter', help='Specify alternate Procmon Filter PMC', required=False)
     parser.add_argument('--hash', help='Specify hash whitelist file', required=False)
     parser.add_argument('--hashtype', help='Specify hash type', required=False, choices=valid_hash_types)
+    parser.add_argument('--headless', action='store_true', help='Do not open results on VM after processing',
+                        required=False)
     parser.add_argument('-t', '--timeout', help='Number of seconds to collect activity', required=False, type=int)
     parser.add_argument('--output', help='Folder to store output files', required=False)
     parser.add_argument('--yara', help='Folder containing YARA rules', required=False)
@@ -1086,6 +1116,9 @@ def main():
     if args.generalize_paths:
         generalize_paths = True
         generalize_vars_init()
+
+    if args.headless:
+        headless = True
 
     if args.hashtype:
         hash_type = args.hashtype
@@ -1166,6 +1199,7 @@ def main():
             # Reparse an existing PML
             csv_file = os.path.join(output_dir, os.path.splitext(args.pml)[0] + '.csv')
             txt_file = os.path.join(output_dir, os.path.splitext(args.pml)[0] + '.txt')
+            debug_file = os.path.join(output_dir, os.path.splitext(args.pml)[0] + '.log')
             timeline_file = os.path.join(output_dir, os.path.splitext(args.pml)[0] + '_timeline.csv')
 
             process_pml_to_csv(procmonexe, args.pml, pmc_file, csv_file)
@@ -1193,6 +1227,7 @@ def main():
         if file_exists(args.csv):
             # Reparse an existing CSV
             txt_file = os.path.splitext(args.csv)[0] + '.txt'
+            debug_file = os.path.splitext(args.csv)[0] + '.log'
             timeline_file = os.path.splitext(args.csv)[0] + '_timeline.csv'
 
             parse_csv(args.csv, report, timeline)
@@ -1223,6 +1258,8 @@ def main():
     pml_file = os.path.join(output_dir, 'Noriben_%s.pml' % session_id)
     csv_file = os.path.join(output_dir, 'Noriben_%s.csv' % session_id)
     txt_file = os.path.join(output_dir, 'Noriben_%s.txt' % session_id)
+    debug_file = os.path.join(output_dir, 'Noriben_%s.log' % session_id)
+
     timeline_file = os.path.join(output_dir, 'Noriben_%s_timeline.csv' % session_id)
     print('[*] Procmon session saved to: %s' % pml_file)
 

@@ -38,6 +38,12 @@ guestMalwarePath = "C:\\\\Malware\\\\malware_"
 def file_exists(fname):
     return os.path.exists(fname) and os.access(fname, os.F_OK)
 
+def execute(cmd):
+    if debug:
+        print(cmd)
+    stdout = subprocess.Popen(cmd, shell=True)
+    stdout.wait()
+    return stdout.returncode
 
 def main():
     global debug
@@ -97,6 +103,8 @@ def main():
     else:
         filename = '{}{}.exe'.format(guestMalwarePath, hostMalwareNameBase)
     hostMalwarePath = os.path.dirname(malware_file)
+    if hostMalwarePath == '':
+        hostMalwarePath = '.'
 
     if not args.screenshot:
         active = '-activeWindow'
@@ -107,28 +115,40 @@ def main():
 
     if not args.norevert:
         cmd = "{} -T ws revertToSnapshot \"{}\" {}".format(VMRUN, VMX, VM_SNAPSHOT)
-        if debug: print(cmd)
-        stdout = subprocess.Popen(cmd, shell=True)
-        stdout.wait()
+        returncode = execute(cmd)
+        if returncode:
+            print('[!] Error: Possible unknown snapshot: {}'.format(VM_SNAPSHOT))
+            quit()
+
 
     cmd = '{} -T ws start "{}"'.format(VMRUN, VMX)
-    if debug: print(cmd)
-    stdout = subprocess.Popen(cmd, shell=True)
-    stdout.wait()
+    returncode = execute(cmd)
+    if returncode:
+        print('[!] Unknown error trying to start VM. Error {}'.format(returncode))
+        quit()
+
 
     if args.net:
         # Experimental. Doesn't quite work right.
         cmd = '{} -gu {} -gp {} writeVariable ethernet0.startConnected'.format(VMRUN, VM_USER, VM_PASS)
-        if debug: print(cmd)
-        stdout = subprocess.Popen(cmd, shell=True)
-        stdout.wait()
+        returncode = execute(cmd)
         quit()
 
     cmd = '{} -gu {} -gp {} copyFileFromHostToGuest "{}" "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX, malware_file,
                                                                            filename)
-    if debug: print(cmd)
-    stdout = subprocess.Popen(cmd, shell=True)
-    stdout.wait()
+    returncode = execute(cmd)
+    if returncode:
+        print('[!] Unknown error trying to copy file to guest. Error {}'.format(returncode))
+        quit()
+
+    if args.update and file_exists(hostNoribenPath):
+        cmd = '{} -gu {} -gp {} copyFileFromHostToGuest "{}" "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX,
+                                                                               hostNoribenPath,
+                                                                               guestNoribenPath)
+        returncode = execute(cmd)
+        if returncode:
+            print('[!] Unknown error trying to copy updated Noriben to guest. Continuing. Error {}'.format(returncode))
+            quit()
 
     if dontrunnothing:
         quit()
@@ -137,20 +157,14 @@ def main():
 
     if args.raw:
         cmd = '{} C:\\\\windows\\\\system32\\\\cmd.exe "/c del {}"'.format(cmd_base, procmonConfigPath)
-        if debug: print(cmd)
-        stdout = subprocess.Popen(cmd, shell=True)
-        stdout.wait()
+        returncode = execute(cmd)
+        if returncode:
+            print('[!] Unknown error trying to execute command in guest. Error {}'.format(returncode))
+            quit()
 
-    if args.update and file_exists(hostNoribenPath):
-        cmd = '{} -gu {} -gp {} copyFileFromHostToGuest "{}" "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX,
-                                                                               hostNoribenPath,
-                                                                               guestNoribenPath)
-        if debug: print(cmd)
-        stdout = subprocess.Popen(cmd, shell=True)
-        stdout.wait()
 
     # Run Noriben
-    cmd = '{} {} "{}" -t {}'.format(cmd_base, guestPythonPath, guestNoribenPath, timeoutSeconds)
+    cmd = '{} {} "{}" -t {} --headless'.format(cmd_base, guestPythonPath, guestNoribenPath, timeoutSeconds)
 
     if not dontrun:
         cmd = '{} --cmd {} --output "{}"'.format(cmd, filename, guestLogPath)
@@ -158,42 +172,44 @@ def main():
     if debug:
         cmd = '{} -d'.format(cmd)
 
-    if debug: print(cmd)
-    stdout = subprocess.Popen(cmd, shell=True)
-    stdout.wait()
+    returncode = execute(cmd)
+    if returncode:
+        print('[!] Unknown error in running Noriben. Error {}'.format(returncode))
+        quit()
 
     if not dontrun:
+        zipFailed = False
         cmd = '{} "{}" -j C:\\\\NoribenReports.zip {}\\\\*.*'.format(cmd_base, guestZipPath, guestLogPath)
-        if debug: print(cmd)
-        stdout = subprocess.Popen(cmd, shell=True)
-        stdout.wait()
+        returncode = execute(cmd)
+        if returncode:
+            print('[!] Unknown error trying to zip report archive. Error {}'.format(returncode))
+            zipFailed = True
 
-        if args.defense:
+        if args.defense and not zipFailed:
             # Get Carbon Black Defense log. This is an example if you want to include additional files.
             cmd = '{} "{}" -j C:\\\\NoribenReports.zip "C:\\\\Program Files\\\\Confer\\\\confer.log"'.format(
                                                                                                         cmd_base,
                                                                                                         guestZipPath,
                                                                                                         guestLogPath)
-            if debug: print(cmd)
-            stdout = subprocess.Popen(cmd, shell=True)
-            stdout.wait()
+            returncode = execute(cmd)
+            if returncode:
+                print('[!] Unknown error trying to add additional file to archive. Continuing. Error {}'.format(returncode))
 
-        if not args.nolog:
+        if not args.nolog and not zipFailed:
             hostReportPath = reportPathStructure.format(hostMalwarePath, hostMalwareNameBase)
             cmd = '{} -gu {} -gp {} copyFileFromGuestToHost {} C:\\\\NoribenReports.zip {}'.format(VMRUN, VM_USER,
                                                                                                    VM_PASS, VMX,
                                                                                                    hostReportPath)
-            if debug: print(cmd)
-            stdout = subprocess.Popen(cmd, shell=True)
-            stdout.wait()
+            returncode = execute(cmd)
+            if returncode:
+                print('[!] Unknown error trying to copy file from guest. Continuing. Error {}'.format(returncode))
 
         if args.screenshot:
             hostScreenshotPath = hostScreenshotPathStructure.format(hostMalwarePath, hostMalwareNameBase)
             cmd = '{} -gu {} -gp {} captureScreen {} {}'.format(VMRUN, VM_USER, VM_PASS, VMX, hostScreenshotPath)
-            if debug: print(cmd)
-            stdout = subprocess.Popen(cmd, shell=True)
-            stdout.wait()
-
+            returncode = execute(cmd)
+            if returncode:
+                print('[!] Unknown error trying to create screenshot. Error {}'.format(returncode))
 
 if __name__ == '__main__':
     main()
