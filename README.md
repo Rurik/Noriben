@@ -11,13 +11,19 @@ brian _at_ thebaskins _dot_ com
 Noriben is a Python-based script that works in conjunction with Sysinternals Procmon to automatically collect, analyze, and report on runtime indicators of malware. In a nutshell, it allows you to run your malware, hit a keypress, and get a simple text report of the sample's activities.
 
 
-Noriben allows you to not only run malware similar to a sandbox, but to also log system-wide events while you manually run malware in ways particular to making it run. For example, it can listen as you run malware that requires varying command line options. Or, watch the system as you step through malware in a debugger.
+Noriben allows you to not only run malware similar to a sandbox, but to also log system-wide events while you manually run malware in ways particular to making it run. For example, it can listen as you run malware that requires varying command line options, or user interaction. Or, to watch the system as you step through malware in a debugger.
+
+Video of debugging a VM-checking malware and still get sandbox results:
+
+[![Noriben running against malware checking for VM ](https://img.youtube.com/vi/kmCzAmqMeTY/0.jpg)](https://www.youtube.com/watch?v=kmCzAmqMeTY)
 
 
 Noriben only requires Sysinternals procmon.exe (or procmon64.exe) to operate. It requires no pre-filtering (though it would greatly help) as it contains numerous white list items to reduce unwanted noise from system activity.
 
+
 For a more detailed explanation, see <a href="http://www.slideshare.net/bbaskin/bh15-arsenal-noriben">my slide deck</a> from Black Hat 2015 Arsenal. And a more detailed blog post:
 http://ghettoforensics.blogspot.com/2013/04/noriben-your-personal-portable-malware.html
+
 
 I've also included a much desired frontend operator, NoribenSandbox.py. This script allows you to automate the execution of Noriben within a guest VM and retrieve the reports. It currently runs on OSX (but will be ported) and is responsible for: spinning up a predefined VM and snapshot, copying the malware to the VM, starting Noriben and the malware, waiting a predetermined period of time, copying the results to the host as a ZIP, and taking a screen capture of the VM. You can even use --update to automatically copy the newest Noriben from your host, so that you don't have to continually make new snapshots when you make a change to the script.
 
