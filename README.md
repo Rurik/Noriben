@@ -13,7 +13,7 @@ Noriben is a Python-based script that works in conjunction with Sysinternals Pro
 
 Noriben allows you to not only run malware similar to a sandbox, but to also log system-wide events while you manually run malware in ways particular to making it run. For example, it can listen as you run malware that requires varying command line options, or user interaction. Or, to watch the system as you step through malware in a debugger.
 
-Video of debugging a VM-checking malware and still get sandbox results:
+Video of debugging a VM-checking malware and still get sandbox results (mis-clicks due to a mouse pointer that was 5 pixels off :))
 
 [![Noriben running against malware checking for VM ](https://img.youtube.com/vi/kmCzAmqMeTY/0.jpg)](https://www.youtube.com/watch?v=kmCzAmqMeTY)
 
