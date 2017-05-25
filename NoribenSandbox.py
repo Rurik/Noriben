@@ -19,7 +19,7 @@ debug = False
 timeoutSeconds = 300
 VMRUN = os.path.expanduser(r"/Applications/VMware\ Fusion.app/Contents/Library/vmrun")
 VMX = os.path.expanduser(r"~/VMs/Windows.vmwarevm/Windows.vmx")
-VM_SNAPSHOT = "YourVMSnapshotNameHere
+VM_SNAPSHOT = "YourVMSnapshotNameHere"
 VM_USER = "Admin"
 VM_PASS = "password"
 noribenPath = "C:\\\\Users\\\\{}\\\\Desktop".format(VM_USER)
@@ -89,7 +89,13 @@ def main():
     if args.timeout:
         timeoutSeconds = args.timeout
 
-    magic_result = magic.from_file(malware_file)
+    try:
+        magic_result = magic.from_file(malware_file)
+    except magic.MagicException as err:
+        dontrun = False
+        magic_result = ''
+        print('[!] Error in running magic against file: {}'.format(err))
+        
     if not magic_result.startswith('PE32') or 'DLL' in magic_result:
         if 'DOS batch' not in magic_result:
             dontrun = True
