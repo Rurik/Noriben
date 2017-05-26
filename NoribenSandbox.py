@@ -14,25 +14,28 @@ import os
 import subprocess
 import sys
 import time
+import codecs
 
 debug = False
 timeoutSeconds = 300
-VMRUN = os.path.expanduser(r"/Applications/VMware\ Fusion.app/Contents/Library/vmrun")
-VMX = os.path.expanduser(r"~/VMs/Windows.vmwarevm/Windows.vmx")
-VM_SNAPSHOT = "YourVMSnapshotNameHere"
-VM_USER = "Admin"
-VM_PASS = "password"
-noribenPath = "C:\\\\Users\\\\{}\\\\Desktop".format(VM_USER)
+VMRUN = os.path.expanduser(r'C:\Program Files (x86)\VMware\VMware Workstation\vmrun.exe')
+#VMRUN = os.path.expanduser(r'/Applications/VMware\ Fusion.app/Contents/Library/vmrun')
+VMX = r'E:\VMs\Windows.vmwarevm\Windows.vmx'
+#VMX = os.path.expanduser(r'~/VMs/Windows.vmwarevm/Windows.vmx')
+VM_SNAPSHOT = 'YourVMSnapshotNameHere'
+VM_USER = 'Admin'
+VM_PASS = 'password'
+noribenPath = 'C:\\\\Users\\\\{}\\\\Desktop'.format(VM_USER)
 guestNoribenPath = '{}\\\\Noriben.py'.format(noribenPath)
 procmonConfigPath = '{}\\\\ProcmonConfiguration.pmc'.format(noribenPath)
 # reportPathStructure = '{}/NoribenReports_{}.zip'
 reportPathStructure = '{}/{}_NoribenReport.zip'  # (hostMalwarePath, hostMalwareNameBase)
 hostScreenshotPathStructure = '{}/{}.png'  # (hostMalwarePath, hostMalwareNameBase)
-guestLogPath = "C:\\\\Noriben_Logs"
-guestZipPath = "C:\\\\Program Files\\\\VMware\\\\VMware Tools\\\\zip.exe"
-guestPythonPath = "C:\\\\Python27\\\\python.exe"
+guestLogPath = 'C:\\\\Noriben_Logs'
+guestZipPath = 'C:\\\\Program Files\\\\VMware\\\\VMware Tools\\\\zip.exe'
+guestPythonPath = 'C:\\\\Python27\\\\python.exe'
 hostNoribenPath = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), 'Noriben.py')
-guestMalwarePath = "C:\\\\Malware\\\\malware_"
+guestMalwarePath = 'C:\\\\Malware\\\\malware_'
 
 
 def file_exists(fname):
@@ -49,7 +52,7 @@ def main():
     global debug
     global timeoutSeconds
     global VM_SNAPSHOT
-
+    
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', '--file', help='filename', required=True)
     parser.add_argument('-d', '--debug', dest='debug', action='store_true', help='Show all commands for debugging',
@@ -59,15 +62,20 @@ def main():
     parser.add_argument('-xx', '--dontrunnothing', dest='dontrunnothing', action='store_true', help='Run nothing',
                         required=False)
     parser.add_argument('--raw', dest='raw', action='store_true', help='Remove ProcMon filters', required=False)
-    parser.add_argument('--net', action='store_true', required=False)
-    parser.add_argument('--nolog', action='store_true', required=False)
-    parser.add_argument('--norevert', action='store_true', required=False)
-    parser.add_argument('--update', action='store_true', required=False)
-    parser.add_argument('--screenshot', action='store_true', required=False)
-    parser.add_argument('-s', '--snapshot', required=False)
-    parser.add_argument('--defense', action='store_true', required=False)  # Particular to Carbon Black Defense
-
+    parser.add_argument('--net', action='store_true', help='Unsupported feature', required=False)
+    parser.add_argument('--nolog', action='store_true', help='Do not extract logs back', required=False)
+    parser.add_argument('--norevert', action='store_true', help='Do not revert to snapshot', required=False)
+    parser.add_argument('--update', action='store_true', help='Update Noriben.py in guest', required=False)
+    parser.add_argument('--screenshot', action='store_true', help='Take screenshot after execution (PNG)', required=False)
+    parser.add_argument('-s', '--snapshot', help='Specify VM Snapshot to revert to', required=False)
+    parser.add_argument('--nonoriben', action='store_true', help='Do not run Noriben in guest', required=False)  # Do not run Noriben script
+    parser.add_argument('--defense', action='store_true', help='Extract Carbon Black Defense log to host', required=False)  # Particular to Carbon Black Defense. Use as example of adding your own files
+    
     args = parser.parse_args()
+
+    if not file_exists(VMRUN):
+        print('[!] Path to vmrun does not exist: {}'.format(VMRUN))
+        quit()
 
     if args.debug:
         debug = True
@@ -90,13 +98,17 @@ def main():
         timeoutSeconds = args.timeout
 
     try:
-        magic_result = magic.from_file(malware_file)
+        magic_handle = magic.Magic(magic_file=r'magic')
+        magic_result = magic_handle.from_file(malware_file)
     except magic.MagicException as err:
         dontrun = False
         magic_result = ''
+        if err.message == b'could not find any magic files!':
+            print('[!] Windows Error: magic files not in path. See Dependencies on:',
+                  'https://github.com/ahupp/python-magic')
         print('[!] Error in running magic against file: {}'.format(err))
         
-    if not magic_result.startswith('PE32') or 'DLL' in magic_result:
+    if magic_result and (not magic_result.startswith('PE32') or 'DLL' in magic_result):
         if 'DOS batch' not in magic_result:
             dontrun = True
             print('[*] Disabling automatic running due to magic signature: {}'.format(magic_result))
@@ -116,18 +128,18 @@ def main():
         active = '-activeWindow'
     else:
         active = ''
-    cmd_base = '{} -T ws -gu {} -gp {} runProgramInGuest {} {} -interactive'.format(VMRUN, VM_USER, VM_PASS, VMX,
+    cmd_base = '"{}" -T ws -gu {} -gp {} runProgramInGuest {} {} -interactive'.format(VMRUN, VM_USER, VM_PASS, VMX,
                                                                                     active)
 
     if not args.norevert:
-        cmd = "{} -T ws revertToSnapshot \"{}\" {}".format(VMRUN, VMX, VM_SNAPSHOT)
+        cmd = '"{}" -T ws revertToSnapshot \"{}\" {}'.format(VMRUN, VMX, VM_SNAPSHOT)
         returncode = execute(cmd)
         if returncode:
             print('[!] Error: Possible unknown snapshot: {}'.format(VM_SNAPSHOT))
             quit()
 
 
-    cmd = '{} -T ws start "{}"'.format(VMRUN, VMX)
+    cmd = '"{}" -T ws start "{}"'.format(VMRUN, VMX)
     returncode = execute(cmd)
     if returncode:
         print('[!] Unknown error trying to start VM. Error {}'.format(returncode))
@@ -136,24 +148,28 @@ def main():
 
     if args.net:
         # Experimental. Doesn't quite work right.
-        cmd = '{} -gu {} -gp {} writeVariable ethernet0.startConnected'.format(VMRUN, VM_USER, VM_PASS)
+        cmd = '"{}" -gu {} -gp {} writeVariable ethernet0.startConnected'.format(VMRUN, VM_USER, VM_PASS)
         returncode = execute(cmd)
         quit()
 
-    cmd = '{} -gu {} -gp {} copyFileFromHostToGuest "{}" "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX, malware_file,
+    cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest "{}" "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX, malware_file,
                                                                            filename)
     returncode = execute(cmd)
     if returncode:
         print('[!] Unknown error trying to copy file to guest. Error {}'.format(returncode))
         quit()
 
-    if args.update and file_exists(hostNoribenPath):
-        cmd = '{} -gu {} -gp {} copyFileFromHostToGuest "{}" "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX,
-                                                                               hostNoribenPath,
-                                                                               guestNoribenPath)
-        returncode = execute(cmd)
-        if returncode:
-            print('[!] Unknown error trying to copy updated Noriben to guest. Continuing. Error {}'.format(returncode))
+    if args.update:
+        if file_exists(hostNoribenPath):
+            cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest "{}" "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX,
+                                                                                   hostNoribenPath,
+                                                                                   guestNoribenPath)
+            returncode = execute(cmd)
+            if returncode:
+                print('[!] Unknown error trying to copy updated Noriben to guest. Continuing. Error {}'.format(returncode))
+                quit()
+        else:
+            print('[!] Noriben.py on host not found: {}'.format(hostNoribenPath))
             quit()
 
     if dontrunnothing:
@@ -170,10 +186,10 @@ def main():
 
 
     # Run Noriben
-    cmd = '{} {} "{}" -t {} --headless'.format(cmd_base, guestPythonPath, guestNoribenPath, timeoutSeconds)
+    cmd = '{} {} "{}" -t {} --headless --output "{}" '.format(cmd_base, guestPythonPath, guestNoribenPath, timeoutSeconds, guestLogPath)
 
     if not dontrun:
-        cmd = '{} --cmd {} --output "{}"'.format(cmd, filename, guestLogPath)
+        cmd = '{} --cmd {} '.format(cmd, filename)
 
     if debug:
         cmd = '{} -d'.format(cmd)
@@ -192,18 +208,17 @@ def main():
             zipFailed = True
 
         if args.defense and not zipFailed:
+            defenseFile = "C:\\\\Program Files\\\\Confer\\\\confer.log"
             # Get Carbon Black Defense log. This is an example if you want to include additional files.
-            cmd = '{} "{}" -j C:\\\\NoribenReports.zip "C:\\\\Program Files\\\\Confer\\\\confer.log"'.format(
-                                                                                                        cmd_base,
-                                                                                                        guestZipPath,
-                                                                                                        guestLogPath)
+            cmd = '{} "{}" -j C:\\\\NoribenReports.zip {}'.format(cmd_base, guestZipPath, guestLogPath,
+                                                                  defenseFile)
             returncode = execute(cmd)
             if returncode:
                 print('[!] Unknown error trying to add additional file to archive. Continuing. Error {}'.format(returncode))
 
         if not args.nolog and not zipFailed:
             hostReportPath = reportPathStructure.format(hostMalwarePath, hostMalwareNameBase)
-            cmd = '{} -gu {} -gp {} copyFileFromGuestToHost {} C:\\\\NoribenReports.zip {}'.format(VMRUN, VM_USER,
+            cmd = '"{}" -gu {} -gp {} copyFileFromGuestToHost {} C:\\\\NoribenReports.zip {}'.format(VMRUN, VM_USER,
                                                                                                    VM_PASS, VMX,
                                                                                                    hostReportPath)
             returncode = execute(cmd)
@@ -212,7 +227,7 @@ def main():
 
         if args.screenshot:
             hostScreenshotPath = hostScreenshotPathStructure.format(hostMalwarePath, hostMalwareNameBase)
-            cmd = '{} -gu {} -gp {} captureScreen {} {}'.format(VMRUN, VM_USER, VM_PASS, VMX, hostScreenshotPath)
+            cmd = '"{}" -gu {} -gp {} captureScreen {} {}'.format(VMRUN, VM_USER, VM_PASS, VMX, hostScreenshotPath)
             returncode = execute(cmd)
             if returncode:
                 print('[!] Unknown error trying to create screenshot. Error {}'.format(returncode))
