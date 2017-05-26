@@ -9,7 +9,7 @@
 # This is definitely a work in progress. However, efforts made to make it clear per PyCharm code inspection.
 
 import argparse
-import magic  # pip python-magic
+import magic  # pip python-magic and libmagic
 import os
 import subprocess
 import sys
@@ -27,7 +27,6 @@ VM_PASS = 'password'
 noribenPath = 'C:\\\\Users\\\\{}\\\\Desktop'.format(VM_USER)
 guestNoribenPath = '{}\\\\Noriben.py'.format(noribenPath)
 procmonConfigPath = '{}\\\\ProcmonConfiguration.pmc'.format(noribenPath)
-# reportPathStructure = '{}/NoribenReports_{}.zip'
 reportPathStructure = '{}/{}_NoribenReport.zip'  # (hostMalwarePath, hostMalwareNameBase)
 hostScreenshotPathStructure = '{}/{}.png'  # (hostMalwarePath, hostMalwareNameBase)
 guestLogPath = 'C:\\\\Noriben_Logs'
@@ -155,7 +154,7 @@ def main():
         sys.exit(returnCode)
 
     if args.net:
-        # Experimental. Doesn't quite work right.
+        # Experimental. Doesn't quite work right. Don't use.
         cmd = '"{}" -gu {} -gp {} writeVariable ethernet0.startConnected'.format(VMRUN, VM_USER, VM_PASS)
         returnCode = execute(cmd)
         sys.exit(returnCode)
