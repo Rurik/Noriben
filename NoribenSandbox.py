@@ -222,7 +222,7 @@ def main():
             cmd = '{} "{}" -j C:\\\\NoribenReports.zip "{}"'.format(cmd_base, guestZipPath, defenseFile)
             returnCode = execute(cmd)
             if returnCode:
-                print(('[!] Unknown error trying to add additional file to archive. Continuing. ' \
+                print(('[!] Unknown error trying to add additional file to archive. Continuing. '
                        'Error {}; File: {}'.format(returnCode, defenseFile)))
 
         if not args.nolog and not zipFailed:
