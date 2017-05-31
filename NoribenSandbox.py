@@ -62,10 +62,12 @@ def main():
     parser.add_argument('-x', '--dontrun', dest='dontrun', action='store_true', help='Do not run file', required=False)
     parser.add_argument('-xx', '--dontrunnothing', dest='dontrunnothing', action='store_true', help='Run nothing',
                         required=False)
-    parser.add_argument('--raw', dest='raw', action='store_true', help='Remove ProcMon filters', required=False)
+    parser.add_argument('--dir', help='Run all executables from a specified directory', required=False)
+    parser.add_argument('--magic', help='Specify file magic database (may be necessary for Windows)', required=False)
     parser.add_argument('--net', action='store_true', help='Unsupported feature', required=False)
     parser.add_argument('--nolog', action='store_true', help='Do not extract logs back', required=False)
     parser.add_argument('--norevert', action='store_true', help='Do not revert to snapshot', required=False)
+    parser.add_argument('--raw', dest='raw', action='store_true', help='Remove ProcMon filters', required=False)
     parser.add_argument('--update', action='store_true', help='Update Noriben.py in guest', required=False)
     parser.add_argument('--screenshot', action='store_true', help='Take screenshot after execution (PNG)',
                         required=False)
@@ -107,7 +109,10 @@ def main():
         timeoutSeconds = args.timeout
 
     try:
-        magic_handle = magic.Magic()
+        if args.magic and file_exists(args.magic):
+            magic_handle = magic.Magic(magic_file=args.magic)
+        else:
+            magic_handle = magic.Magic()
         magic_result = magic_handle.from_file(malware_file)
     except magic.MagicException as err:
         dontrun = False
@@ -115,6 +120,7 @@ def main():
         if err.message == b'could not find any magic files!':
             print('[!] Windows Error: magic files not in path. See Dependencies on:',
                   'https://github.com/ahupp/python-magic')
+            print('[!] You may need to manually specify magic file location using --magic')
         print('[!] Error in running magic against file: {}'.format(err))
         
     if magic_result and (not magic_result.startswith('PE32') or 'DLL' in magic_result):
@@ -137,11 +143,11 @@ def main():
         active = '-activeWindow'
     else:
         active = ''
-    cmd_base = '"{}" -T ws -gu {} -gp {} runProgramInGuest {} {} -interactive'.format(VMRUN, VM_USER, VM_PASS, VMX,
+    cmd_base = '"{}" -T ws -gu {} -gp {} runProgramInGuest "{}" {} -interactive'.format(VMRUN, VM_USER, VM_PASS, VMX,
                                                                                       active)
 
     if not args.norevert:
-        cmd = '"{}" -T ws revertToSnapshot \"{}\" {}'.format(VMRUN, VMX, VM_SNAPSHOT)
+        cmd = '"{}" -T ws revertToSnapshot "{}" {}'.format(VMRUN, VMX, VM_SNAPSHOT)
         returnCode = execute(cmd)
         if returnCode:
             print('[!] Error: Possible unknown snapshot: {}'.format(VM_SNAPSHOT))
@@ -226,7 +232,7 @@ def main():
 
         if not args.nolog and not zipFailed:
             hostReportPath = reportPathStructure.format(hostMalwarePath, hostMalwareNameBase)
-            cmd = '"{}" -gu {} -gp {} copyFileFromGuestToHost {} C:\\\\NoribenReports.zip "{}"'.format(VMRUN, VM_USER,
+            cmd = '"{}" -gu {} -gp {} copyFileFromGuestToHost "{}" C:\\\\NoribenReports.zip "{}"'.format(VMRUN, VM_USER,
                                                                                                        VM_PASS, VMX,
                                                                                                        hostReportPath)
             returnCode = execute(cmd)
@@ -235,7 +241,7 @@ def main():
 
         if args.screenshot:
             hostScreenshotPath = hostScreenshotPathStructure.format(hostMalwarePath, hostMalwareNameBase)
-            cmd = '"{}" -gu {} -gp {} captureScreen {} "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX, hostScreenshotPath)
+            cmd = '"{}" -gu {} -gp {} captureScreen "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX, hostScreenshotPath)
             returnCode = execute(cmd)
             if returnCode:
                 print('[!] Unknown error trying to create screenshot. Error {}'.format(returnCode))
