@@ -10,7 +10,7 @@
 # This is definitely a work in progress. However, efforts made to make it clear per PyCharm code inspection.
 
 import argparse
-import io
+# import io
 import magic  # pip python-magic and libmagic
 import os
 import subprocess
@@ -38,7 +38,7 @@ hostNoribenPath = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), 'N
 guestMalwarePath = 'C:\\\\Malware\\\\malware_'
 
 dontrun = False
-execTime = 0
+
 
 def file_exists(fname):
     return os.path.exists(fname) and os.access(fname, os.F_OK)
@@ -72,7 +72,8 @@ def run_file(args, magicResult, malware_file):
         active = '-activeWindow'
     else:
         active = ''
-    cmd_base = '"{}" -T ws -gu {} -gp {} runProgramInGuest "{}" {} -interactive'.format(VMRUN, VM_USER, VM_PASS, VMX, active)
+    cmd_base = '"{}" -T ws -gu {} -gp {} runProgramInGuest "{}" {} -interactive'.format(VMRUN, VM_USER, VM_PASS, VMX,
+                                                                                        active)
     if not args.norevert:
         cmd = '"{}" -T ws revertToSnapshot "{}" {}'.format(VMRUN, VMX, VM_SNAPSHOT)
         returnCode = execute(cmd)
@@ -154,8 +155,8 @@ def run_file(args, magicResult, malware_file):
         if not args.nolog and not zipFailed:
             hostReportPath = reportPathStructure.format(hostMalwarePath, hostMalwareNameBase)
             cmd = '"{}" -gu {} -gp {} copyFileFromGuestToHost "{}" C:\\\\NoribenReports.zip "{}"'.format(VMRUN, VM_USER,
-                                                                                                       VM_PASS, VMX,
-                                                                                                       hostReportPath)
+                                                                                                         VM_PASS, VMX,
+                                                                                                         hostReportPath)
             returnCode = execute(cmd)
             if returnCode:
                 print('[!] Unknown error trying to copy file from guest. Continuing. Error {}'.format(returnCode))
@@ -178,9 +179,6 @@ def getMagic(magicHandle, filename):
                   'https://github.com/ahupp/python-magic')
             print('[!] You may need to manually specify magic file location using --magic')
         print('[!] Error in running magic against file: {}'.format(err))
-        if args.dir:
-            print('[!] Directory mode will not function without a magic database. Exiting')
-            sys.exit(1)
     return magicResult
 
 
@@ -272,7 +270,7 @@ def main():
 
     if args.dir and file_exists(args.dir):
         files = list()
-        #sys.stdout = io.TextIOWrapper(sys.stdout.detach(), sys.stdout.encoding, 'replace')
+        # sys.stdout = io.TextIOWrapper(sys.stdout.detach(), sys.stdout.encoding, 'replace')
         for (root, subdirs, filenames) in os.walk(args.dir):
             files.append(filenames)
             if not args.recursive:
@@ -281,7 +279,7 @@ def main():
         for filename in files[0]:
             # Front load magic processing to avoid unnecessary calls to run_file
             magicResult = getMagic(magicHandle, os.path.join(args.dir, filename))
-            if magicResult and magicResult.startswith('PE32') and not 'DLL' in magicResult:
+            if magicResult and magicResult.startswith('PE32') and 'DLL' not in magicResult:
                 if debug:
                     print(magicResult)
                 execTime = time.time()
