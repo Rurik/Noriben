@@ -1,5 +1,6 @@
 # Noriben Sandbox Automation Script
 # V 1.0 - 3 Apr 17
+# V 1.1 - 5 Jun 17
 # Responsible for:
 # * Copying malware into a known VM
 # * Running malware sample
@@ -9,6 +10,7 @@
 # This is definitely a work in progress. However, efforts made to make it clear per PyCharm code inspection.
 
 import argparse
+import io
 import magic  # pip python-magic and libmagic
 import os
 import subprocess
@@ -18,9 +20,9 @@ import time
 debug = False
 timeoutSeconds = 300
 # VMRUN = os.path.expanduser(r'C:\Program Files (x86)\VMware\VMware Workstation\vmrun.exe')
-VMRUN = os.path.expanduser(r'/Applications/VMware Fusion.app/Contents/Library/vmrun')
 # VMX = r'E:\VMs\Windows.vmwarevm\Windows.vmx'
-VMX = os.path.expanduser(r'~/VMs/Windows.vmwarevm/Windowns.vmx')
+VMRUN = os.path.expanduser(r'/Applications/VMware Fusion.app/Contents/Library/vmrun')
+VMX = os.path.expanduser(r'~/VMs/Windows.vmwarevm/Windows.vmx')
 VM_SNAPSHOT = 'YourVMSnapshotNameHere'
 VM_USER = 'Admin'
 VM_PASS = 'password'
@@ -35,6 +37,8 @@ guestPythonPath = 'C:\\\\Python27\\\\python.exe'
 hostNoribenPath = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), 'Noriben.py')
 guestMalwarePath = 'C:\\\\Malware\\\\malware_'
 
+dontrun = False
+execTime = 0
 
 def file_exists(fname):
     return os.path.exists(fname) and os.access(fname, os.F_OK)
@@ -47,91 +51,14 @@ def execute(cmd):
     stdout.wait()
     return stdout.returncode
 
-
-def main():
-    global debug
-    global timeoutSeconds
-    global VM_SNAPSHOT
-    global VMX
     
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-f', '--file', help='filename', required=True)
-    parser.add_argument('-d', '--debug', dest='debug', action='store_true', help='Show all commands for debugging',
-                        required=False)
-    parser.add_argument('-t', '--timeout', help='Number of seconds to collect activity', required=False, type=int)
-    parser.add_argument('-x', '--dontrun', dest='dontrun', action='store_true', help='Do not run file', required=False)
-    parser.add_argument('-xx', '--dontrunnothing', dest='dontrunnothing', action='store_true', help='Run nothing',
-                        required=False)
-    parser.add_argument('--dir', help='Run all executables from a specified directory', required=False)
-    parser.add_argument('--magic', help='Specify file magic database (may be necessary for Windows)', required=False)
-    parser.add_argument('--net', action='store_true', help='Unsupported feature', required=False)
-    parser.add_argument('--nolog', action='store_true', help='Do not extract logs back', required=False)
-    parser.add_argument('--norevert', action='store_true', help='Do not revert to snapshot', required=False)
-    parser.add_argument('--raw', dest='raw', action='store_true', help='Remove ProcMon filters', required=False)
-    parser.add_argument('--update', action='store_true', help='Update Noriben.py in guest', required=False)
-    parser.add_argument('--screenshot', action='store_true', help='Take screenshot after execution (PNG)',
-                        required=False)
-    parser.add_argument('-s', '--snapshot', help='Specify VM Snapshot to revert to', required=False)
-    parser.add_argument('--vmx', help='Specify VM VMX', required=False)
-    parser.add_argument('--nonoriben', action='store_true', help='Do not run Noriben in guest',
-                        required=False)  # Do not run Noriben script
-    parser.add_argument('--defense', action='store_true', help='Extract Carbon Black Defense log to host',
-                        required=False)  # Particular to Carbon Black Defense. Use as example of adding your own files
+def run_file(args, magicResult, malware_file):
+    global dontrun
     
-    args = parser.parse_args()
-
-    if not file_exists(VMRUN):
-        print('[!] Path to vmrun does not exist: {}'.format(VMRUN))
-        sys.exit()
-
-    if args.debug:
-        debug = True
-
-    dontrun = False
-    if args.dontrun:
-        dontrun = True
-
-    if args.snapshot:
-        VM_SNAPSHOT = args.snapshot
-
-    if args.vmx:
-        if file_exists(os.path.expanduser(args.vmx)):
-            VMX = os.path.expanduser(args.vmx)
-
-    if args.dontrunnothing:
-        dontrunnothing = True
-    else:
-        dontrunnothing = False
-
-    malware_file = args.file
-
-    if args.timeout:
-        timeoutSeconds = args.timeout
-
-    try:
-        if args.magic and file_exists(args.magic):
-            magic_handle = magic.Magic(magic_file=args.magic)
-        else:
-            magic_handle = magic.Magic()
-        magic_result = magic_handle.from_file(malware_file)
-    except magic.MagicException as err:
-        dontrun = False
-        magic_result = ''
-        if err.message == b'could not find any magic files!':
-            print('[!] Windows Error: magic files not in path. See Dependencies on:',
-                  'https://github.com/ahupp/python-magic')
-            print('[!] You may need to manually specify magic file location using --magic')
-        print('[!] Error in running magic against file: {}'.format(err))
-        
-    if magic_result and (not magic_result.startswith('PE32') or 'DLL' in magic_result):
-        if 'DOS batch' not in magic_result:
-            dontrun = True
-            print('[*] Disabling automatic running due to magic signature: {}'.format(magic_result))
-
     hostMalwareNameBase = os.path.split(malware_file)[-1].split('.')[0]
     if dontrun:
         filename = '{}{}'.format(guestMalwarePath, hostMalwareNameBase)
-    elif 'DOS batch' in magic_result:
+    elif 'DOS batch' in magicResult:
         filename = '{}{}.bat'.format(guestMalwarePath, hostMalwareNameBase)
     else:
         filename = '{}{}.exe'.format(guestMalwarePath, hostMalwareNameBase)
@@ -139,13 +66,13 @@ def main():
     if hostMalwarePath == '':
         hostMalwarePath = '.'
 
+    print('[*] Processing: {}'.format(hostMalwareNameBase))
+
     if not args.screenshot:
         active = '-activeWindow'
     else:
         active = ''
-    cmd_base = '"{}" -T ws -gu {} -gp {} runProgramInGuest "{}" {} -interactive'.format(VMRUN, VM_USER, VM_PASS, VMX,
-                                                                                      active)
-
+    cmd_base = '"{}" -T ws -gu {} -gp {} runProgramInGuest "{}" {} -interactive'.format(VMRUN, VM_USER, VM_PASS, VMX, active)
     if not args.norevert:
         cmd = '"{}" -T ws revertToSnapshot "{}" {}'.format(VMRUN, VMX, VM_SNAPSHOT)
         returnCode = execute(cmd)
@@ -157,12 +84,6 @@ def main():
     returnCode = execute(cmd)
     if returnCode:
         print('[!] Unknown error trying to start VM. Error {}'.format(returnCode))
-        sys.exit(returnCode)
-
-    if args.net:
-        # Experimental. Doesn't quite work right. Don't use.
-        cmd = '"{}" -gu {} -gp {} writeVariable ethernet0.startConnected'.format(VMRUN, VM_USER, VM_PASS)
-        returnCode = execute(cmd)
         sys.exit(returnCode)
 
     cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest "{}" "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX, malware_file,
@@ -186,7 +107,7 @@ def main():
             print('[!] Noriben.py on host not found: {}'.format(hostNoribenPath))
             sys.exit(returnCode)
 
-    if dontrunnothing:
+    if args.dontrunnothing:
         sys.exit(returnCode)
 
     time.sleep(5)
@@ -245,6 +166,128 @@ def main():
             returnCode = execute(cmd)
             if returnCode:
                 print('[!] Unknown error trying to create screenshot. Error {}'.format(returnCode))
+
+
+def getMagic(magicHandle, filename):
+    try:
+        magicResult = magicHandle.from_file(filename)
+    except magic.MagicException as err:
+        magicResult = ''
+        if err.message == b'could not find any magic files!':
+            print('[!] Windows Error: magic files not in path. See Dependencies on:',
+                  'https://github.com/ahupp/python-magic')
+            print('[!] You may need to manually specify magic file location using --magic')
+        print('[!] Error in running magic against file: {}'.format(err))
+        if args.dir:
+            print('[!] Directory mode will not function without a magic database. Exiting')
+            sys.exit(1)
+    return magicResult
+
+
+def main():
+    global debug
+    global timeoutSeconds
+    global VM_SNAPSHOT
+    global VMX
+    global dontrun
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-f', '--file', help='filename', required=False)
+    parser.add_argument('-d', '--debug', dest='debug', action='store_true', help='Show all commands for debugging',
+                        required=False)
+    parser.add_argument('-t', '--timeout', help='Number of seconds to collect activity', required=False, type=int)
+    parser.add_argument('-x', '--dontrun', dest='dontrun', action='store_true', help='Do not run file', required=False)
+    parser.add_argument('-xx', '--dontrunnothing', dest='dontrunnothing', action='store_true', help='Run nothing',
+                        required=False)
+    parser.add_argument('--dir', help='Run all executables from a specified directory', required=False)
+    parser.add_argument('--recursive', action='store_true', help='Recursively process a directory', required=False)
+    parser.add_argument('--magic', help='Specify file magic database (may be necessary for Windows)', required=False)
+    parser.add_argument('--nolog', action='store_true', help='Do not extract logs back', required=False)
+    parser.add_argument('--norevert', action='store_true', help='Do not revert to snapshot', required=False)
+    parser.add_argument('--raw', action='store_true', help='Remove ProcMon filters', required=False)
+    parser.add_argument('--update', action='store_true', help='Update Noriben.py in guest', required=False)
+    parser.add_argument('--screenshot', action='store_true', help='Take screenshot after execution (PNG)',
+                        required=False)
+    parser.add_argument('-s', '--snapshot', help='Specify VM Snapshot to revert to', required=False)
+    parser.add_argument('--vmx', help='Specify VM VMX', required=False)
+    parser.add_argument('--nonoriben', action='store_true', help='Do not run Noriben in guest, just malware',
+                        required=False)  # Do not run Noriben script
+    parser.add_argument('--defense', action='store_true', help='Extract Carbon Black Defense log to host',
+                        required=False)  # Particular to Carbon Black Defense. Use as example of adding your own files
+
+    args = parser.parse_args()
+
+    if not args.file and not args.dir:
+        print('[!] A filename or directory name are required')
+        sys.exit(1)
+    
+    if args.recursive and not args.dir:
+        print('[!] Directory Recursive option specified, but not a directory')
+        sys.exit(1)
+    
+    if not file_exists(VMRUN):
+        print('[!] Path to vmrun does not exist: {}'.format(VMRUN))
+        sys.exit(1)
+
+    if args.debug:
+        debug = True
+
+    try:
+        if args.magic and file_exists(args.magic):
+            magicHandle = magic.Magic(magic_file=args.magic)
+        else:
+            magicHandle = magic.Magic()
+    except magic.MagicException as err:
+        dontrun = True
+        if err.message == b'could not find any magic files!':
+            print('[!] Windows Error: magic files not in path. See Dependencies on:',
+                  'https://github.com/ahupp/python-magic')
+            print('[!] You may need to manually specify magic file location using --magic')
+        print('[!] Error in running magic against file: {}'.format(err))
+        if args.dir:
+            print('[!] Directory mode will not function without a magic database. Exiting')
+            sys.exit(1)
+
+    if args.dontrun:
+        dontrun = True
+
+    if args.snapshot:
+        VM_SNAPSHOT = args.snapshot
+
+    if args.vmx:
+        if file_exists(os.path.expanduser(args.vmx)):
+            VMX = os.path.expanduser(args.vmx)
+
+    if args.timeout:
+        timeoutSeconds = args.timeout
+
+    if not args.dir and args.file and file_exists(args.file):
+        magicResult = getMagic(magicHandle, args.file)
+
+        if magicResult and (not magicResult.startswith('PE32') or 'DLL' in magicResult):
+            if 'DOS batch' not in magicResult:
+                dontrun = True
+                print('[*] Disabling automatic running due to magic signature: {}'.format(magicResult))
+        run_file(args, magicResult, args.file)
+
+    if args.dir and file_exists(args.dir):
+        files = list()
+        #sys.stdout = io.TextIOWrapper(sys.stdout.detach(), sys.stdout.encoding, 'replace')
+        for (root, subdirs, filenames) in os.walk(args.dir):
+            files.append(filenames)
+            if not args.recursive:
+                break
+
+        for filename in files[0]:
+            # Front load magic processing to avoid unnecessary calls to run_file
+            magicResult = getMagic(magicHandle, os.path.join(args.dir, filename))
+            if magicResult and magicResult.startswith('PE32') and not 'DLL' in magicResult:
+                if debug:
+                    print(magicResult)
+                execTime = time.time()
+                run_file(args, magicResult, os.path.join(args.dir, filename))
+                execTimeDiff = time.time() - execTime
+                print('[*] Completed. Execution Time: {}'.format(execTimeDiff))
 
 if __name__ == '__main__':
     main()
