@@ -73,7 +73,7 @@ def run_file(args, magicResult, malware_file):
     else:
         active = ''
     cmdBase = '"{}" -T ws -gu {} -gp {} runProgramInGuest "{}" {} -interactive'.format(VMRUN, VM_USER, VM_PASS, VMX,
-                                                                                        active)
+                                                                                       active)
     if not args.norevert:
         cmd = '"{}" -T ws revertToSnapshot "{}" {}'.format(VMRUN, VMX, VM_SNAPSHOT)
         returnCode = execute(cmd)
@@ -187,6 +187,7 @@ def getMagic(magicHandle, filename):
 
     
 def runScript(args, cmdBase):
+    sourcePath = ''
     with open(args.post, encoding='utf-8') as hScript:
         for line in hScript:
             if debug:
