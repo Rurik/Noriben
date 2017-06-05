@@ -19,10 +19,10 @@ import time
 
 debug = False
 timeoutSeconds = 300
-# VMRUN = os.path.expanduser(r'C:\Program Files (x86)\VMware\VMware Workstation\vmrun.exe')
-# VMX = r'E:\VMs\Windows.vmwarevm\Windows.vmx'
-VMRUN = os.path.expanduser(r'/Applications/VMware Fusion.app/Contents/Library/vmrun')
-VMX = os.path.expanduser(r'~/VMs/Windows.vmwarevm/Windows.vmx')
+VMRUN = os.path.expanduser(r'C:\Program Files (x86)\VMware\VMware Workstation\vmrun.exe')
+VMX = r'E:\VMs\Windows.vmwarevm\Windows.vmx'
+# VMRUN = os.path.expanduser(r'/Applications/VMware Fusion.app/Contents/Library/vmrun')
+# VMX = os.path.expanduser(r'~/VMs/Windows.vmwarevm/Windows.vmx')
 VM_SNAPSHOT = 'YourVMSnapshotNameHere'
 VM_USER = 'Admin'
 VM_PASS = 'password'
@@ -72,7 +72,7 @@ def run_file(args, magicResult, malware_file):
         active = '-activeWindow'
     else:
         active = ''
-    cmd_base = '"{}" -T ws -gu {} -gp {} runProgramInGuest "{}" {} -interactive'.format(VMRUN, VM_USER, VM_PASS, VMX,
+    cmdBase = '"{}" -T ws -gu {} -gp {} runProgramInGuest "{}" {} -interactive'.format(VMRUN, VM_USER, VM_PASS, VMX,
                                                                                         active)
     if not args.norevert:
         cmd = '"{}" -T ws revertToSnapshot "{}" {}'.format(VMRUN, VMX, VM_SNAPSHOT)
@@ -84,14 +84,14 @@ def run_file(args, magicResult, malware_file):
     cmd = '"{}" -T ws start "{}"'.format(VMRUN, VMX)
     returnCode = execute(cmd)
     if returnCode:
-        print('[!] Unknown error trying to start VM. Error {}'.format(returnCode))
+        print('[!] Unknown error trying to start VM. Error {}'.format(hex(returnCode)))
         sys.exit(returnCode)
 
     cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest "{}" "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX, malware_file,
                                                                              filename)
     returnCode = execute(cmd)
     if returnCode:
-        print('[!] Unknown error trying to copy file to guest. Error {}'.format(returnCode))
+        print('[!] Unknown error trying to copy file to guest. Error {}'.format(hex(returnCode)))
         sys.exit(returnCode)
 
     if args.update:
@@ -114,14 +114,14 @@ def run_file(args, magicResult, malware_file):
     time.sleep(5)
 
     if args.raw:
-        cmd = '{} C:\\\\windows\\\\system32\\\\cmd.exe "/c del {}"'.format(cmd_base, procmonConfigPath)
+        cmd = '{} C:\\\\windows\\\\system32\\\\cmd.exe "/c del {}"'.format(cmdBase, procmonConfigPath)
         returnCode = execute(cmd)
         if returnCode:
-            print('[!] Unknown error trying to execute command in guest. Error {}'.format(returnCode))
+            print('[!] Unknown error trying to execute command in guest. Error {}'.format(hex(returnCode)))
             sys.exit(returnCode)
 
     # Run Noriben
-    cmd = '{} {} "{}" -t {} --headless --output "{}" '.format(cmd_base, guestPythonPath, guestNoribenPath,
+    cmd = '{} {} "{}" -t {} --headless --output "{}" '.format(cmdBase, guestPythonPath, guestNoribenPath,
                                                               timeoutSeconds, guestLogPath)
 
     if not dontrun:
@@ -132,21 +132,25 @@ def run_file(args, magicResult, malware_file):
 
     returnCode = execute(cmd)
     if returnCode:
-        print('[!] Unknown error in running Noriben. Error {}'.format(returnCode))
+        print('[!] Unknown error in running Noriben. Error {}'.format(hex(returnCode)))
         sys.exit(returnCode)
 
     if not dontrun:
+    
+        if args.post and file_exists(args.post):
+            runScript(args, cmdBase)
+    
         zipFailed = False
-        cmd = '{} "{}" -j C:\\\\NoribenReports.zip "{}\\\\*.*"'.format(cmd_base, guestZipPath, guestLogPath)
+        cmd = '{} "{}" -j C:\\\\NoribenReports.zip "{}\\\\*.*"'.format(cmdBase, guestZipPath, guestLogPath)
         returnCode = execute(cmd)
         if returnCode:
-            print('[!] Unknown error trying to zip report archive. Error {}'.format(returnCode))
+            print('[!] Unknown error trying to zip report archive. Error {}'.format(hex(returnCode)))
             zipFailed = True
 
         if args.defense and not zipFailed:
             defenseFile = "C:\\\\Program Files\\\\Confer\\\\confer.log"
             # Get Carbon Black Defense log. This is an example if you want to include additional files.
-            cmd = '{} "{}" -j C:\\\\NoribenReports.zip "{}"'.format(cmd_base, guestZipPath, defenseFile)
+            cmd = '{} "{}" -j C:\\\\NoribenReports.zip "{}"'.format(cmdBase, guestZipPath, defenseFile)
             returnCode = execute(cmd)
             if returnCode:
                 print(('[!] Unknown error trying to add additional file to archive. Continuing. '
@@ -159,14 +163,14 @@ def run_file(args, magicResult, malware_file):
                                                                                                          hostReportPath)
             returnCode = execute(cmd)
             if returnCode:
-                print('[!] Unknown error trying to copy file from guest. Continuing. Error {}'.format(returnCode))
+                print('[!] Unknown error trying to copy file from guest. Continuing. Error {}'.format(hex(returnCode)))
 
         if args.screenshot:
             hostScreenshotPath = hostScreenshotPathStructure.format(hostMalwarePath, hostMalwareNameBase)
             cmd = '"{}" -gu {} -gp {} captureScreen "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX, hostScreenshotPath)
             returnCode = execute(cmd)
             if returnCode:
-                print('[!] Unknown error trying to create screenshot. Error {}'.format(returnCode))
+                print('[!] Unknown error trying to create screenshot. Error {}'.format(hex(returnCode)))
 
 
 def getMagic(magicHandle, filename):
@@ -180,6 +184,42 @@ def getMagic(magicHandle, filename):
             print('[!] You may need to manually specify magic file location using --magic')
         print('[!] Error in running magic against file: {}'.format(err))
     return magicResult
+
+    
+def runScript(args, cmdBase):
+    with open(args.post, encoding='utf-8') as hScript:
+        for line in hScript:
+            if debug:
+                print('[*] Script: {}'.format(line.strip()))
+            if line.startswith('#'):
+                pass
+            elif line.lower().startswith('collect'):
+                try:
+                    sourcePath = line.split()[1]
+                except IndexError:
+                    print('[!] Ignoring bad script line: {}'.format(line.strip()))
+                copyFileToZip(cmdBase, sourcePath)
+            else:
+                cmd = '{} "{}"'.format(cmdBase, line.strip())
+                returnCode = execute(cmd)
+                if returnCode:
+                    print('[!] Unknown error trying to run script command. Error {}'.format(hex(returnCode)))
+    quit()
+
+
+def copyFileToZip(cmdBase, filename):
+    cmd = '"{}" -gu {} -gp {} fileExistsInGuest "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX, filename)
+    returnCode = execute(cmd)
+    if returnCode:
+        print('[!] File does not exist in guest. Continuing. File: {}'.format(filename))
+        return returnCode
+
+    cmd = '{} "{}" -j C:\\\\NoribenReports.zip "{}"'.format(cmdBase, guestZipPath, filename)
+    returnCode = execute(cmd)
+    if returnCode:
+        print(('[!] Unknown error trying to add additional file to archive. Continuing. '
+               'Error {}; File: {}'.format(returnCode, filename)))
+    return returnCode
 
 
 def main():
@@ -202,6 +242,7 @@ def main():
     parser.add_argument('--magic', help='Specify file magic database (may be necessary for Windows)', required=False)
     parser.add_argument('--nolog', action='store_true', help='Do not extract logs back', required=False)
     parser.add_argument('--norevert', action='store_true', help='Do not revert to snapshot', required=False)
+    parser.add_argument('--post', help='post-execution script', required=False)
     parser.add_argument('--raw', action='store_true', help='Remove ProcMon filters', required=False)
     parser.add_argument('--update', action='store_true', help='Update Noriben.py in guest', required=False)
     parser.add_argument('--screenshot', action='store_true', help='Take screenshot after execution (PNG)',
