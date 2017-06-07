@@ -1,0 +1,5 @@
+# Run calc. You'll have to manually close it to continue
+C:\windows\system32\calc.exe
+# Collect files
+collect c:\windows\system32\drivers\etc\hosts
+collect "C:\Windows\System32\winevt\Logs\System.evtx"
