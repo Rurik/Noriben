@@ -212,8 +212,7 @@ def runScript(args, cmdBase):
 
 def copyFileToZip(cmdBase, filename):
     # This is a two-step process as zip.exe will not allow direct zipping of some system files.
-    # Therefore, first copy file to log folder and then add to the zip. However, runProgramInGuest
-    # doesn't have a clean way of running /c copy, so sticking with the somewhat broken last stage.
+    # Therefore, first copy file to log folder and then add to the zip. 
 
     cmd = '"{}" -gu {} -gp {} fileExistsInGuest "{}" {}'.format(VMRUN, VM_USER, VM_PASS, VMX, filename)
     returnCode = execute(cmd)
@@ -221,14 +220,12 @@ def copyFileToZip(cmdBase, filename):
         print('[!] File does not exist in guest. Continuing. File: {}'.format(filename))
         return returnCode
 
-    """
-    cmd = '{} C:\\\\windows\\\\system32\\\\cmd.exe /c copy {} {}'.format(cmdBase, filename, guestLogPath)
+    cmd = '{} C:\\\\windows\\\\system32\\\\xcopy.exe {} {}'.format(cmdBase, filename, guestLogPath)
     returnCode = execute(cmd)
     if returnCode:
         print(('[!] Unknown error trying to copy file to log folder. Continuing. '
                'Error {}; File: {}'.format(returnCode, filename)))
     return returnCode
-    """
 
     cmd = '{} "{}" -j C:\\\\NoribenReports.zip {}'.format(cmdBase, guestZipPath, filename)
     returnCode = execute(cmd)
