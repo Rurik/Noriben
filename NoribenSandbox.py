@@ -10,7 +10,8 @@
 # This is definitely a work in progress. However, efforts made to make it clear per PyCharm code inspection.
 
 import argparse
-# import io
+import io
+import glob
 import magic  # pip python-magic and libmagic
 import os
 import subprocess
@@ -19,9 +20,9 @@ import time
 
 debug = False
 timeoutSeconds = 300
-VMRUN = os.path.expanduser(r'C:\Program Files (x86)\VMware\VMware Workstation\vmrun.exe')
+# VMRUN = os.path.expanduser(r'C:\Program Files (x86)\VMware\VMware Workstation\vmrun.exe')
 VMX = r'E:\VMs\Windows.vmwarevm\Windows.vmx'
-# VMRUN = os.path.expanduser(r'/Applications/VMware Fusion.app/Contents/Library/vmrun')
+VMRUN = os.path.expanduser(r'/Applications/VMware Fusion.app/Contents/Library/vmrun')
 # VMX = os.path.expanduser(r'~/VMs/Windows.vmwarevm/Windows.vmx')
 VM_SNAPSHOT = 'YourVMSnapshotNameHere'
 VM_USER = 'Admin'
@@ -188,7 +189,9 @@ def getMagic(magicHandle, filename):
     
 def runScript(args, cmdBase):
     sourcePath = ''
-    with open(args.post, encoding='utf-8') as hScript:
+
+    # if sys.version_info[0] == '2':
+    with io.open(args.post, encoding='utf-8') as hScript:
         for line in hScript:
             if debug:
                 print('[*] Script: {}'.format(line.strip()))
@@ -196,7 +199,7 @@ def runScript(args, cmdBase):
                 pass
             elif line.lower().startswith('collect'):
                 try:
-                    sourcePath = line.split()[1]
+                    sourcePath = line.split('collect ')[1].strip()
                 except IndexError:
                     print('[!] Ignoring bad script line: {}'.format(line.strip()))
                 copyFileToZip(cmdBase, sourcePath)
@@ -205,17 +208,29 @@ def runScript(args, cmdBase):
                 returnCode = execute(cmd)
                 if returnCode:
                     print('[!] Unknown error trying to run script command. Error {}'.format(hex(returnCode)))
-    quit()
 
 
 def copyFileToZip(cmdBase, filename):
-    cmd = '"{}" -gu {} -gp {} fileExistsInGuest "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX, filename)
+    # This is a two-step process as zip.exe will not allow direct zipping of some system files.
+    # Therefore, first copy file to log folder and then add to the zip. However, runProgramInGuest
+    # doesn't have a clean way of running /c copy, so sticking with the somewhat broken last stage.
+
+    cmd = '"{}" -gu {} -gp {} fileExistsInGuest "{}" {}'.format(VMRUN, VM_USER, VM_PASS, VMX, filename)
     returnCode = execute(cmd)
     if returnCode:
         print('[!] File does not exist in guest. Continuing. File: {}'.format(filename))
         return returnCode
 
-    cmd = '{} "{}" -j C:\\\\NoribenReports.zip "{}"'.format(cmdBase, guestZipPath, filename)
+    """
+    cmd = '{} C:\\\\windows\\\\system32\\\\cmd.exe /c copy {} {}'.format(cmdBase, filename, guestLogPath)
+    returnCode = execute(cmd)
+    if returnCode:
+        print(('[!] Unknown error trying to copy file to log folder. Continuing. '
+               'Error {}; File: {}'.format(returnCode, filename)))
+    return returnCode
+    """
+
+    cmd = '{} "{}" -j C:\\\\NoribenReports.zip {}'.format(cmdBase, guestZipPath, filename)
     returnCode = execute(cmd)
     if returnCode:
         print(('[!] Unknown error trying to add additional file to archive. Continuing. '
@@ -310,22 +325,25 @@ def main():
                 print('[*] Disabling automatic running due to magic signature: {}'.format(magicResult))
         run_file(args, magicResult, args.file)
 
-    if args.dir and file_exists(args.dir):
+    if args.dir:  # and file_exists(args.dir):
         files = list()
         # sys.stdout = io.TextIOWrapper(sys.stdout.detach(), sys.stdout.encoding, 'replace')
-        for (root, subdirs, filenames) in os.walk(args.dir):
-            files.append(filenames)
-            if not args.recursive:
-                break
+        for result in glob.iglob(args.dir):
+            for (root, subdirs, filenames) in os.walk(result):
+                for fname in filenames:
+                    files.append(os.path.join(root, fname))
 
-        for filename in files[0]:
+                if not args.recursive:
+                    break
+
+        for filename in files:
             # Front load magic processing to avoid unnecessary calls to run_file
-            magicResult = getMagic(magicHandle, os.path.join(args.dir, filename))
+            magicResult = getMagic(magicHandle, filename)
             if magicResult and magicResult.startswith('PE32') and 'DLL' not in magicResult:
                 if debug:
-                    print(magicResult)
+                    print('{}: {}'.format(filename, magicResult))
                 execTime = time.time()
-                run_file(args, magicResult, os.path.join(args.dir, filename))
+                run_file(args, magicResult, filename)
                 execTimeDiff = time.time() - execTime
                 print('[*] Completed. Execution Time: {}'.format(execTimeDiff))
 
