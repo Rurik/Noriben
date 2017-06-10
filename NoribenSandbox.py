@@ -20,9 +20,9 @@ import time
 
 debug = False
 timeoutSeconds = 300
-# VMRUN = os.path.expanduser(r'C:\Program Files (x86)\VMware\VMware Workstation\vmrun.exe')
+VMRUN = os.path.expanduser(r'C:\Program Files (x86)\VMware\VMware Workstation\vmrun.exe')
 VMX = r'E:\VMs\Windows.vmwarevm\Windows.vmx'
-VMRUN = os.path.expanduser(r'/Applications/VMware Fusion.app/Contents/Library/vmrun')
+# VMRUN = os.path.expanduser(r'/Applications/VMware Fusion.app/Contents/Library/vmrun')
 # VMX = os.path.expanduser(r'~/VMs/Windows.vmwarevm/Windows.vmx')
 VM_SNAPSHOT = 'YourVMSnapshotNameHere'
 VM_USER = 'Admin'
@@ -48,6 +48,7 @@ def file_exists(fname):
 def execute(cmd):
     if debug:
         print(cmd)
+    time.sleep(2)
     stdout = subprocess.Popen(cmd, shell=True)
     stdout.wait()
     return stdout.returncode
@@ -67,7 +68,7 @@ def run_file(args, magicResult, malware_file):
     if hostMalwarePath == '':
         hostMalwarePath = '.'
 
-    print('[*] Processing: {}'.format(hostMalwareNameBase))
+    print('[*] Processing: {}'.format(malware_file))
 
     if not args.screenshot:
         active = '-activeWindow'
@@ -260,6 +261,7 @@ def main():
     parser.add_argument('--update', action='store_true', help='Update Noriben.py in guest', required=False)
     parser.add_argument('--screenshot', action='store_true', help='Take screenshot after execution (PNG)',
                         required=False)
+    parser.add_argument('--skip', action='store_true', help='Skip already executed files', required=False)
     parser.add_argument('-s', '--snapshot', help='Specify VM Snapshot to revert to', required=False)
     parser.add_argument('--vmx', help='Specify VM VMX', required=False)
     parser.add_argument('--nonoriben', action='store_true', help='Do not run Noriben in guest, just malware',
@@ -334,6 +336,11 @@ def main():
                     break
 
         for filename in files:
+            # This is HACKY. MUST FIX SOON
+            if args.skip and file_exists(filename + '_NoribenReport.zip'):
+                print('[!] Report already run for file: {}'.format(filename))
+                continue
+            
             # Front load magic processing to avoid unnecessary calls to run_file
             magicResult = getMagic(magicHandle, filename)
             if magicResult and magicResult.startswith('PE32') and 'DLL' not in magicResult:
