@@ -87,14 +87,16 @@ def run_file(args, magicResult, malware_file):
     returnCode = execute(cmd)
     if returnCode:
         print('[!] Unknown error trying to start VM. Error {}'.format(hex(returnCode)))
-        sys.exit(returnCode)
+        #sys.exit(returnCode)
+        return returnCode
 
     cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest "{}" "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX, malware_file,
                                                                              filename)
     returnCode = execute(cmd)
     if returnCode:
         print('[!] Unknown error trying to copy file to guest. Error {}'.format(hex(returnCode)))
-        sys.exit(returnCode)
+        #sys.exit(returnCode)
+        return returnCode
 
     if args.update:
         if file_exists(hostNoribenPath):
@@ -105,10 +107,11 @@ def run_file(args, magicResult, malware_file):
             if returnCode:
                 print('[!] Unknown error trying to copy updated Noriben to guest. Continuing. Error {}'.format(
                       returnCode))
-                sys.exit(returnCode)
+                                
         else:
             print('[!] Noriben.py on host not found: {}'.format(hostNoribenPath))
-            sys.exit(returnCode)
+            #sys.exit(returnCode)
+            return returnCode
 
     if args.dontrunnothing:
         sys.exit(returnCode)
@@ -120,7 +123,8 @@ def run_file(args, magicResult, malware_file):
         returnCode = execute(cmd)
         if returnCode:
             print('[!] Unknown error trying to execute command in guest. Error {}'.format(hex(returnCode)))
-            sys.exit(returnCode)
+            #sys.exit(returnCode)
+            return returnCode
 
     # Run Noriben
     cmd = '{} {} "{}" -t {} --headless --output "{}" '.format(cmdBase, guestPythonPath, guestNoribenPath,
@@ -135,7 +139,8 @@ def run_file(args, magicResult, malware_file):
     returnCode = execute(cmd)
     if returnCode:
         print('[!] Unknown error in running Noriben. Error {}'.format(hex(returnCode)))
-        sys.exit(returnCode)
+        #sys.exit(returnCode)
+        return returnCode
 
     if not dontrun:
     
