@@ -48,15 +48,15 @@ def file_exists(fname):
 def execute(cmd):
     if debug:
         print(cmd)
-    time.sleep(2)
+    time.sleep(2)  # Extra sleep buffer as vmrun sometimes tripped over itself
     stdout = subprocess.Popen(cmd, shell=True)
     stdout.wait()
     return stdout.returncode
 
-    
+
 def run_file(args, magicResult, malware_file):
     global dontrun
-    
+
     hostMalwareNameBase = os.path.split(malware_file)[-1].split('.')[0]
     if dontrun:
         filename = '{}{}'.format(guestMalwarePath, hostMalwareNameBase)
@@ -138,10 +138,10 @@ def run_file(args, magicResult, malware_file):
         sys.exit(returnCode)
 
     if not dontrun:
-    
+
         if args.post and file_exists(args.post):
             runScript(args, cmdBase)
-    
+
         zipFailed = False
         cmd = '{} "{}" -j C:\\\\NoribenReports.zip "{}\\\\*.*"'.format(cmdBase, guestZipPath, guestLogPath)
         returnCode = execute(cmd)
@@ -187,7 +187,7 @@ def getMagic(magicHandle, filename):
         print('[!] Error in running magic against file: {}'.format(err))
     return magicResult
 
-    
+
 def runScript(args, cmdBase):
     sourcePath = ''
 
@@ -213,7 +213,7 @@ def runScript(args, cmdBase):
 
 def copyFileToZip(cmdBase, filename):
     # This is a two-step process as zip.exe will not allow direct zipping of some system files.
-    # Therefore, first copy file to log folder and then add to the zip. 
+    # Therefore, first copy file to log folder and then add to the zip.
 
     cmd = '"{}" -gu {} -gp {} fileExistsInGuest "{}" {}'.format(VMRUN, VM_USER, VM_PASS, VMX, filename)
     returnCode = execute(cmd)
@@ -226,14 +226,14 @@ def copyFileToZip(cmdBase, filename):
     if returnCode:
         print(('[!] Unknown error trying to copy file to log folder. Continuing. '
                'Error {}; File: {}'.format(returnCode, filename)))
-    return returnCode
+        return returnCode
 
     cmd = '{} "{}" -j C:\\\\NoribenReports.zip {}'.format(cmdBase, guestZipPath, filename)
     returnCode = execute(cmd)
     if returnCode:
         print(('[!] Unknown error trying to add additional file to archive. Continuing. '
                'Error {}; File: {}'.format(returnCode, filename)))
-    return returnCode
+        return returnCode
 
 
 def main():
@@ -274,11 +274,11 @@ def main():
     if not args.file and not args.dir:
         print('[!] A filename or directory name are required')
         sys.exit(1)
-    
+
     if args.recursive and not args.dir:
         print('[!] Directory Recursive option specified, but not a directory')
         sys.exit(1)
-    
+
     if not file_exists(VMRUN):
         print('[!] Path to vmrun does not exist: {}'.format(VMRUN))
         sys.exit(1)
@@ -340,7 +340,7 @@ def main():
             if args.skip and file_exists(filename + '_NoribenReport.zip'):
                 print('[!] Report already run for file: {}'.format(filename))
                 continue
-            
+
             # Front load magic processing to avoid unnecessary calls to run_file
             magicResult = getMagic(magicHandle, filename)
             if magicResult and magicResult.startswith('PE32') and 'DLL' not in magicResult:
