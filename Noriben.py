@@ -1158,7 +1158,7 @@ def main():
     procmonexe = check_procmon()
     if not procmonexe:
         print('[!] Unable to find Procmon (%s) in path.' % procmon)
-        sys.exit(1)
+        sys.exit(2)
 
     # Check to see if specified output folder exists. If not, make it.
     # This only works one path deep. In future, may make it recursive.
@@ -1169,7 +1169,7 @@ def main():
                 os.mkdir(output_dir)
             except WindowsError:
                 print('[!] Fatal: Unable to create output directory: %s' % output_dir)
-                sys.exit(1)
+                sys.exit(3)
     else:
         output_dir = ''
     log_debug('[*] Log output directory: %s' % output_dir)
@@ -1205,7 +1205,7 @@ def main():
             process_pml_to_csv(procmonexe, args.pml, pmc_file, csv_file)
             if not file_exists(csv_file):
                 print('[!] Error detected. Could not create CSV file: %s' % csv_file)
-                sys.exit(1)
+                sys.exit(5)
 
             parse_csv(csv_file, report, timeline)
 
@@ -1216,11 +1216,11 @@ def main():
             codecs.open(timeline_file, 'w', 'utf-8').write('\r\n'.join(timeline))
 
             open_file_with_assoc(txt_file)
-            sys.exit()
+            sys.exit(0)
         else:
             print('[!] PML file does not exist: %s\n' % args.pml)
             parser.print_usage()
-            sys.exit(1)
+            sys.exit(6)
 
     # Check if user-specified to rescan a CSV
     if args.csv:
@@ -1239,10 +1239,10 @@ def main():
             codecs.open(timeline_file, 'w', 'utf-8').write('\r\n'.join(timeline))
 
             open_file_with_assoc(txt_file)
-            sys.exit()
+            sys.exit(0)
         else:
             parser.print_usage()
-            sys.exit(1)
+            sys.exit(10)
 
     if args.timeout:
         timeout_seconds = args.timeout
@@ -1265,14 +1265,18 @@ def main():
 
     if exe_cmdline and not file_exists(exe_cmdline):
         print('[!] Error: Specified malware executable does not exist: %s' % exe_cmdline)
-        sys.exit(1)
+        sys.exit(7)
 
     print('[*] Launching Procmon ...')
     launch_procmon_capture(procmonexe, pml_file, pmc_file)
 
     if exe_cmdline:
         print('[*] Launching command line: %s' % exe_cmdline)
-        subprocess.Popen(exe_cmdline)
+        try:
+            subprocess.Popen(exe_cmdline)
+        except WindowsError:  # Occurs if VMWare bug removes Owner from file
+            print('[!] Error executing file. Windows is refusing execution based upon permissions.')
+            sys.exit(8)
     else:
         print('[*] Procmon is running. Run your executable now.')
 
@@ -1302,13 +1306,13 @@ def main():
     print('[*] Procmon terminated')
     if not file_exists(pml_file):
         print('[!] Error creating PML file!')
-        sys.exit(1)
+        sys.exit(8)
 
     # PML created, now convert it to a CSV for parsing
     process_pml_to_csv(procmonexe, pml_file, pmc_file, csv_file)
     if not file_exists(csv_file):
         print('[!] Error detected. Could not create CSV file: %s' % csv_file)
-        sys.exit(1)
+        sys.exit(9)
 
     # Process CSV file, results in 'report' and 'timeline' output lists
     parse_csv(csv_file, report, timeline)
