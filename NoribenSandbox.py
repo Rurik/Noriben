@@ -37,8 +37,24 @@ guestZipPath = 'C:\\\\Program Files\\\\VMware\\\\VMware Tools\\\\zip.exe'
 guestPythonPath = 'C:\\\\Python27\\\\python.exe'
 hostNoribenPath = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), 'Noriben.py')
 guestMalwarePath = 'C:\\\\Malware\\\\malware_'
-
+errorTolerance = 5
 dontrun = False
+
+noribenErrors = {1:'PML file was not found',
+                 2:'Unable to find procmon.exe',
+                 3:'Unable to create output directory',
+                 4:'Windows is refusing execution based upon permissions',
+                 5:'Could not create CSV',
+                 6:'Could not find malware file',
+                 7:'Error creatign CSV',
+                 8:'Error creating PML',
+                 9:'Unknown error',
+                 10:'Invalid arguments given'}
+
+def get_error(code):
+    if code in noribenErrors:
+        return noribenErrors[code]
+    return 'Unexpected Error'
 
 
 def file_exists(fname):
@@ -56,6 +72,7 @@ def execute(cmd):
 
 def run_file(args, magicResult, malware_file):
     global dontrun
+    global errorCount
 
     hostMalwareNameBase = os.path.split(malware_file)[-1].split('.')[0]
     if dontrun:
@@ -86,16 +103,18 @@ def run_file(args, magicResult, malware_file):
     cmd = '"{}" -T ws start "{}"'.format(VMRUN, VMX)
     returnCode = execute(cmd)
     if returnCode:
-        print('[!] Unknown error trying to start VM. Error {}'.format(hex(returnCode)))
+        print('[!] Error trying to start VM. Error {}: {}'.format(hex(returnCode), get_error(returnCode)))
         #sys.exit(returnCode)
+        errorCount += 1
         return returnCode
 
     cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest "{}" "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX, malware_file,
                                                                              filename)
     returnCode = execute(cmd)
     if returnCode:
-        print('[!] Unknown error trying to copy file to guest. Error {}'.format(hex(returnCode)))
+        print('[!] Error trying to copy file to guest. Error {}: {}'.format(hex(returnCode), get_error(returnCode)))
         #sys.exit(returnCode)
+        errorCount += 1
         return returnCode
 
     if args.update:
@@ -105,12 +124,12 @@ def run_file(args, magicResult, malware_file):
                                                                                      guestNoribenPath)
             returnCode = execute(cmd)
             if returnCode:
-                print('[!] Unknown error trying to copy updated Noriben to guest. Continuing. Error {}'.format(
-                      returnCode))
+                print('[!] Error trying to copy updated Noriben to guest. Continuing. Error {}: {}'.format(hex(returnCode), get_error(returnCode)))
                                 
         else:
             print('[!] Noriben.py on host not found: {}'.format(hostNoribenPath))
             #sys.exit(returnCode)
+            errorCount += 1
             return returnCode
 
     if args.dontrunnothing:
@@ -122,8 +141,9 @@ def run_file(args, magicResult, malware_file):
         cmd = '{} C:\\\\windows\\\\system32\\\\cmd.exe "/c del {}"'.format(cmdBase, procmonConfigPath)
         returnCode = execute(cmd)
         if returnCode:
-            print('[!] Unknown error trying to execute command in guest. Error {}'.format(hex(returnCode)))
+            print('[!] Error trying to execute command in guest. Error {}: {}'.format(hex(returnCode), get_error(returnCode)))
             #sys.exit(returnCode)
+            errorCount += 1
             return returnCode
 
     # Run Noriben
@@ -138,12 +158,12 @@ def run_file(args, magicResult, malware_file):
 
     returnCode = execute(cmd)
     if returnCode:
-        print('[!] Unknown error in running Noriben. Error {}'.format(hex(returnCode)))
+        print('[!] Error in running Noriben. Error {}: {}'.format(hex(returnCode), get_error(returnCode)))
         #sys.exit(returnCode)
+        errorCount += 1
         return returnCode
 
     if not dontrun:
-
         if args.post and file_exists(args.post):
             runScript(args, cmdBase)
 
@@ -151,7 +171,7 @@ def run_file(args, magicResult, malware_file):
         cmd = '{} "{}" -j C:\\\\NoribenReports.zip "{}\\\\*.*"'.format(cmdBase, guestZipPath, guestLogPath)
         returnCode = execute(cmd)
         if returnCode:
-            print('[!] Unknown error trying to zip report archive. Error {}'.format(hex(returnCode)))
+            print('[!] Error trying to zip report archive. Error {}: {}'.format(hex(returnCode), get_error(returnCode)))
             zipFailed = True
 
         if args.defense and not zipFailed:
@@ -160,7 +180,7 @@ def run_file(args, magicResult, malware_file):
             cmd = '{} "{}" -j C:\\\\NoribenReports.zip "{}"'.format(cmdBase, guestZipPath, defenseFile)
             returnCode = execute(cmd)
             if returnCode:
-                print(('[!] Unknown error trying to add additional file to archive. Continuing. '
+                print(('[!] Error trying to add additional file to archive. Continuing. '
                        'Error {}; File: {}'.format(returnCode, defenseFile)))
 
         if not args.nolog and not zipFailed:
@@ -170,14 +190,14 @@ def run_file(args, magicResult, malware_file):
                                                                                                          hostReportPath)
             returnCode = execute(cmd)
             if returnCode:
-                print('[!] Unknown error trying to copy file from guest. Continuing. Error {}'.format(hex(returnCode)))
+                print('[!] Error trying to copy file from guest. Continuing. Error {}: {}'.format(hex(returnCode), get_error(returnCode)))
 
         if args.screenshot:
             hostScreenshotPath = hostScreenshotPathStructure.format(hostMalwarePath, hostMalwareNameBase)
             cmd = '"{}" -gu {} -gp {} captureScreen "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX, hostScreenshotPath)
             returnCode = execute(cmd)
             if returnCode:
-                print('[!] Unknown error trying to create screenshot. Error {}'.format(hex(returnCode)))
+                print('[!] Error trying to create screenshot. Error {}: {}'.format(hex(returnCode), get_error(returnCode)))
 
 
 def getMagic(magicHandle, filename):
@@ -213,7 +233,7 @@ def runScript(args, cmdBase):
                 cmd = '{} "{}"'.format(cmdBase, line.strip())
                 returnCode = execute(cmd)
                 if returnCode:
-                    print('[!] Unknown error trying to run script command. Error {}'.format(hex(returnCode)))
+                    print('[!] Error trying to run script command. Error {}: {}'.format(hex(returnCode), get_error(returnCode)))
 
 
 def copyFileToZip(cmdBase, filename):
@@ -224,20 +244,23 @@ def copyFileToZip(cmdBase, filename):
     returnCode = execute(cmd)
     if returnCode:
         print('[!] File does not exist in guest. Continuing. File: {}'.format(filename))
+        errorCount += 1
         return returnCode
 
     cmd = '{} C:\\\\windows\\\\system32\\\\xcopy.exe {} {}'.format(cmdBase, filename, guestLogPath)
     returnCode = execute(cmd)
     if returnCode:
-        print(('[!] Unknown error trying to copy file to log folder. Continuing. '
+        print(('[!] Error trying to copy file to log folder. Continuing. '
                'Error {}; File: {}'.format(returnCode, filename)))
+        errorCount += 1
         return returnCode
 
     cmd = '{} "{}" -j C:\\\\NoribenReports.zip {}'.format(cmdBase, guestZipPath, filename)
     returnCode = execute(cmd)
     if returnCode:
-        print(('[!] Unknown error trying to add additional file to archive. Continuing. '
+        print(('[!] Error trying to add additional file to archive. Continuing. '
                'Error {}; File: {}'.format(returnCode, filename)))
+        errorCount += 1
         return returnCode
 
 
@@ -247,6 +270,7 @@ def main():
     global VM_SNAPSHOT
     global VMX
     global dontrun
+    global errorCount
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', '--file', help='filename', required=False)
@@ -269,6 +293,7 @@ def main():
     parser.add_argument('--skip', action='store_true', help='Skip already executed files', required=False)
     parser.add_argument('-s', '--snapshot', help='Specify VM Snapshot to revert to', required=False)
     parser.add_argument('--vmx', help='Specify VM VMX', required=False)
+    parser.add_argument('--ignore', help='Ignore files or folders that contain this term', required=False)
     parser.add_argument('--nonoriben', action='store_true', help='Do not run Noriben in guest, just malware',
                         required=False)  # Do not run Noriben script
     parser.add_argument('--defense', action='store_true', help='Extract Carbon Black Defense log to host',
@@ -329,19 +354,30 @@ def main():
                 print('[*] Disabling automatic running due to magic signature: {}'.format(magicResult))
         run_file(args, magicResult, args.file)
 
+
     if args.dir:  # and file_exists(args.dir):
+        errorCount = 0
         files = list()
         # sys.stdout = io.TextIOWrapper(sys.stdout.detach(), sys.stdout.encoding, 'replace')
         for result in glob.iglob(args.dir):
             for (root, subdirs, filenames) in os.walk(result):
                 for fname in filenames:
-                    files.append(os.path.join(root, fname))
+                    ignore = False
+                    if args.ignore:
+                        for item in args.ignore.split(','):
+                            if item.lower() in root.lower() or item.lower() in fname.lower():
+                                ignore = True
+                    if not ignore:
+                        files.append(os.path.join(root, fname))
 
                 if not args.recursive:
                     break
 
         for filename in files:
-            # This is HACKY. MUST FIX SOON
+            if errorCount >= errorTolerance:
+                print('[!] Too many errors encountered in this run. Exiting.')
+                sys.exit(100)
+            # TODO: This is HACKY. MUST FIX SOON
             if args.skip and file_exists(filename + '_NoribenReport.zip'):
                 print('[!] Report already run for file: {}'.format(filename))
                 continue

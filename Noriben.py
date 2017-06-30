@@ -1220,7 +1220,7 @@ def main():
         else:
             print('[!] PML file does not exist: %s\n' % args.pml)
             parser.print_usage()
-            sys.exit(6)
+            sys.exit(1)
 
     # Check if user-specified to rescan a CSV
     if args.csv:
@@ -1265,7 +1265,7 @@ def main():
 
     if exe_cmdline and not file_exists(exe_cmdline):
         print('[!] Error: Specified malware executable does not exist: %s' % exe_cmdline)
-        sys.exit(7)
+        sys.exit(6)
 
     print('[*] Launching Procmon ...')
     launch_procmon_capture(procmonexe, pml_file, pmc_file)
@@ -1276,7 +1276,7 @@ def main():
             subprocess.Popen(exe_cmdline)
         except WindowsError:  # Occurs if VMWare bug removes Owner from file
             print('[!] Error executing file. Windows is refusing execution based upon permissions.')
-            sys.exit(8)
+            sys.exit(4)
     else:
         print('[*] Procmon is running. Run your executable now.')
 
@@ -1312,7 +1312,7 @@ def main():
     process_pml_to_csv(procmonexe, pml_file, pmc_file, csv_file)
     if not file_exists(csv_file):
         print('[!] Error detected. Could not create CSV file: %s' % csv_file)
-        sys.exit(9)
+        sys.exit(7)
 
     # Process CSV file, results in 'report' and 'timeline' output lists
     parse_csv(csv_file, report, timeline)
