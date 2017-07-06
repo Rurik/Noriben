@@ -8,15 +8,18 @@ import zipfile
 exts = ('txt', 'csv')
 
 def search_archive(args):
+    fname = ''
     if not args.log in exts:
-            fname = args.log
+        fname = args.log
+
     archive_name = '{}/{}'.format(args.file.split(os.sep)[-2], args.file.split(os.sep)[-1].split('_Noriben')[0])
+
+    if '_NoribenReport.zip' not in args.file:  #TODO: This is a hack
+        return
+
     try:
         archive = zipfile.ZipFile(args.file)
     except zipfile.BadZipfile:
-        return
-        
-    if '_NoribenReport.zip' not in args.file:  #TODO: This is a hack
         return
 
     contents = ''
@@ -24,38 +27,40 @@ def search_archive(args):
         if not fname:
             if fn.startswith('Noriben') and fn.endswith(args.log):
                 txt = archive.open(fn, 'r')
-                contents = txt.read()
+                contents = txt.readlines()
                 break
         else:
             if fn == fname:
                 txt = archive.open(fn, 'r')
-                contents = txt.read()
+                contents = txt.readlines()
                 break
     if not contents:
-        print('ERROR')
-        sys.exit(1)
+    #    print('[!] {} not found in archive {}'.format(args.log, args.file))
+        return 1
 
     resultsFound = False
-    for line in contents.split('\n'):
+    for line in contents:
+        line = unicode(line.strip())
         if args.search:
+            #args.search = bytes(mystring, 'utf-8')
             if args.insensitive:
                 if args.search.lower() in line.lower():
                     resultsFound = True
                     if args.hide:
-                        print(line.strip())
+                        print(line)
                     else:
                         print('{}: {}'.format(archive_name, line.strip()))
             elif args.search in line:
                 resultsFound = True
                 if args.hide:
-                    print(line.strip())
+                    print(line)
                 else:
                     print('{}: {}'.format(archive_name, line.strip()))
         else:
             print(line)
-    
-    if not resultsFound:
-        print('{}: Not blocked by Defense!'.format(archive_name))
+
+    #if not resultsFound:
+    #    print('{}: Not blocked by Defense!'.format(archive_name))
         #if 'CreateProcess' in line and ('vss' in line.lower() or 'wmic' in line.lower()):
 
 
@@ -72,10 +77,11 @@ def main():
 
     args = parser.parse_args()
     files = list()
-    
+
     if not args.file and not args.dir:
         print('You\'re holding it wrong')
         sys.exit(1)
+
     if args.file:
         search_archive(args)
         sys.exit(0)

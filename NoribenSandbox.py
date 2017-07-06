@@ -18,12 +18,13 @@ import subprocess
 import sys
 import time
 
+vmrun_os = {'windows': os.path.expanduser(r'C:\Program Files (x86)\VMware\VMware Workstation\vmrun.exe'),
+            'mac': os.path.expanduser(r'/Applications/VMware Fusion.app/Contents/Library/vmrun')}
 debug = False
 timeoutSeconds = 300
-VMRUN = os.path.expanduser(r'C:\Program Files (x86)\VMware\VMware Workstation\vmrun.exe')
 VMX = r'E:\VMs\Windows.vmwarevm\Windows.vmx'
-# VMRUN = os.path.expanduser(r'/Applications/VMware Fusion.app/Contents/Library/vmrun')
 # VMX = os.path.expanduser(r'~/VMs/Windows.vmwarevm/Windows.vmx')
+VMRUN = vmrun_os['windows']
 VM_SNAPSHOT = 'YourVMSnapshotNameHere'
 VM_USER = 'Admin'
 VM_PASS = 'password'
@@ -125,7 +126,7 @@ def run_file(args, magicResult, malware_file):
             returnCode = execute(cmd)
             if returnCode:
                 print('[!] Error trying to copy updated Noriben to guest. Continuing. Error {}: {}'.format(hex(returnCode), get_error(returnCode)))
-                                
+
         else:
             print('[!] Noriben.py on host not found: {}'.format(hostNoribenPath))
             #sys.exit(returnCode)
@@ -268,6 +269,7 @@ def main():
     global debug
     global timeoutSeconds
     global VM_SNAPSHOT
+    global VMRUN
     global VMX
     global dontrun
     global errorCount
@@ -296,18 +298,30 @@ def main():
     parser.add_argument('--ignore', help='Ignore files or folders that contain this term', required=False)
     parser.add_argument('--nonoriben', action='store_true', help='Do not run Noriben in guest, just malware',
                         required=False)  # Do not run Noriben script
+    parser.add_argument('--os', help='Specify Windows or Mac for that specific vmrun path', required=False)
     parser.add_argument('--defense', action='store_true', help='Extract Carbon Black Defense log to host',
                         required=False)  # Particular to Carbon Black Defense. Use as example of adding your own files
 
     args = parser.parse_args()
 
     if not args.file and not args.dir:
-        print('[!] A filename or directory name are required')
+        print('[!] A filename or directory name are required. Run with --help for more options')
         sys.exit(1)
 
     if args.recursive and not args.dir:
         print('[!] Directory Recursive option specified, but not a directory')
         sys.exit(1)
+
+    if args.os:
+        if args.os in vmrun_os:
+            try:
+                VMRUN = vmrun_os[args.os.lower()]
+            except KeyError:
+                print('[!] Unable to find vmrun entry for value: {}'.format(args.os))
+                sys.exit(1)
+        else:
+            print('[!] Unable to find vmrun entry for value: {}'.format(args.os))
+            sys.exit(1)
 
     if not file_exists(VMRUN):
         print('[!] Path to vmrun does not exist: {}'.format(VMRUN))
