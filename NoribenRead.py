@@ -12,7 +12,11 @@ def search_archive(args):
     if not args.log in exts:
         fname = args.log
 
-    archive_name = '{}/{}'.format(args.file.split(os.sep)[-2], args.file.split(os.sep)[-1].split('_Noriben')[0])
+    try:
+        archive_name = '{}/{}'.format(args.file.split(os.sep)[-2], args.file.split(os.sep)[-1].split('_Noriben')[0])
+    except IndexError:
+        print('Error {}'.format(args.file))
+        sys.exit(1)
 
     if '_NoribenReport.zip' not in args.file:  #TODO: This is a hack
         return
@@ -40,7 +44,10 @@ def search_archive(args):
 
     resultsFound = False
     for line in contents:
-        line = unicode(line.strip())
+        try:
+            line = unicode(line.strip())
+        except UnicodeDecodeError:
+            pass
         if args.search:
             #args.search = bytes(mystring, 'utf-8')
             if args.insensitive:

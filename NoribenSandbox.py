@@ -274,6 +274,8 @@ def main():
     global dontrun
     global errorCount
 
+    errorCount = 0
+
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', '--file', help='filename', required=False)
     parser.add_argument('-d', '--debug', dest='debug', action='store_true', help='Show all commands for debugging',
@@ -370,7 +372,6 @@ def main():
 
 
     if args.dir:  # and file_exists(args.dir):
-        errorCount = 0
         files = list()
         # sys.stdout = io.TextIOWrapper(sys.stdout.detach(), sys.stdout.encoding, 'replace')
         for result in glob.iglob(args.dir):
