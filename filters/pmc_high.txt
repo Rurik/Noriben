@@ -1,0 +1,141 @@
+Category is Read
+Category is Read Metadata
+Detail begins with Desired Access: Generic Read,
+Detail begins with Desired Access: Generic Read/Execute,
+Detail begins with Desired Access: Read Attributes,
+Detail begins with Desired Access: Read Data/List Directory,
+Detail begins with Desired Access: Synchronize,
+Detail is Control: IOCTL_MOUNTDEV_QUERY_DEVICE_NAME
+Detail is Desired Access: Generic Read, Disposition: 
+Detail is Desired Access: Generic Read, Disposition: Open, Options: Open Requiring Oplock, Attributes: N, ShareMode: Read, AllocationSize: n/a, OpenResult: Opened
+Detail is Desired Access: Generic Read, Disposition: Open, Options: Synchronous IO Non-Alert, Non-Directory File, Attributes: N, ShareMode: Read, Delete, AllocationSize: n/a, OpenResult: Opened
+Detail is Desired Access: Generic Read, Disposition: Open, Options: Synchronous IO Non-Alert, Non-Directory File, Attributes: n/a, ShareMode: Read, Delete, AllocationSize: n/a, Impersonating: NT AUTHORITY\SYSTEM, OpenResult: Opened
+Detail is Desired Access: Read Attributes, Disposition: Open, Options: Open For Backup, Open Reparse Point, Attributes: n/a, ShareMode: Read, Write, Delete, AllocationSize: n/a, Impersonating: NT AUTHORITY\SYSTEM, OpenResult: Opened
+Detail is Desired Access: Read Attributes, Disposition: Open, Options: Open Reparse Point, Attributes: n/a, ShareMode: Read, Write, Delete, AllocationSize: n/a
+Detail is Desired Access: Read Attributes, Disposition: Open, Options: Open Reparse Point, Attributes: n/a, ShareMode: Read, Write, Delete, AllocationSize: n/a, Impersonating: WIN7-VICTIM\Admin
+Detail is Desired Access: Read Attributes, Disposition: Open, Options: Open Reparse Point, Attributes: n/a, ShareMode: Read, Write, Delete, AllocationSize: n/a, OpenResult: Opened
+Detail is Desired Access: Read Attributes, Read Control, Disposition: Open, Options: Open Reparse Point, Attributes: n/a, ShareMode: Read, Write, Delete, AllocationSize: n/a, OpenResult: Opened
+Detail is Desired Access: Read Attributes, Synchronize, Disposition: Open, Options: Synchronous IO Alert, Attributes: n/a, ShareMode: Read, Write, AllocationSize: n/a, OpenResult: Opened
+Detail is Desired Access: Read Attributes, Synchronize, Disposition: Open, Options: Synchronous IO Non-Alert, Attributes: n/a, ShareMode: Read, Write, AllocationSize: n/a, OpenResult: Opened
+Detail is Desired Access: Read Attributes, Synchronize, Disposition: Open, Options: Synchronous IO Non-Alert, Attributes: n/a, ShareMode: Read, Write, Delete, AllocationSize: n/a, OpenResult: Opened
+Detail is Desired Access: Read Attributes, Synchronize, Disposition: Open, Options: Synchronous IO Non-Alert, Non-Directory File, Attributes: n/a, ShareMode: Read, Write, AllocationSize: n/a
+Detail is Desired Access: Read Attributes, Synchronize, Disposition: Open, Options: Synchronous IO Non-Alert, Non-Directory File, Attributes: n/a, ShareMode: Read, Write, AllocationSize: n/a, OpenResult: Opened
+Detail is Desired Access: Read Attributes, Synchronize, Disposition: Open, Options: Synchronous IO Non-Alert, Open Reparse Point, Attributes: N, ShareMode: Read, Write, AllocationSize: n/a, OpenResult: Opened
+Detail is Desired Access: Read Control, Disposition: Open, Options: Open Reparse Point, Attributes: n/a, ShareMode: Read, Write, Delete, AllocationSize: n/a, OpenResult: Opened
+Detail is Desired Access: Read Data/List Directory, 
+Detail is Desired Access: Read Data/List Directory, Execute/Traverse, Synchronize, Disposition: Open, Options: Synchronous IO Non-Alert, Non-Directory File, Attributes: n/a, ShareMode: Read, Delete, AllocationSize: n/a, OpenResult: Opened
+Detail is Desired Access: Read Data/List Directory, Read Attributes, Synchronize, Disposition: Open, Options: Synchronous IO Non-Alert, Attributes: n/a, ShareMode: Read, Write, Delete, AllocationSize: n/a, OpenResult: Opened
+Detail is Desired Access: Read Data/List Directory, Synchronize, Disposition: Open, Options: Directory, Synchronous IO Non-Alert, Attributes: n/a, ShareMode: Read, Write, Delete, AllocationSize: n/a, OpenResult: Opened
+Detail is Desired Access: Read Data/List Directory, Synchronize, Disposition: Open, Options: Synchronous IO Non-Alert, Non-Directory File, Attributes: n/a, ShareMode: Read, Delete, AllocationSize: n/a, OpenResult: Opened
+Detail is Desired Access: Synchronize, Disposition: Open, Options: Directory, Synchronous IO Non-Alert, Attributes: n/a, ShareMode: None, AllocationSize: n/a, OpenResult: Opened
+Detail is Desired Access: Synchronize, Disposition: Open, Options: Directory, Synchronous IO Non-Alert, Open For Free Space Query, Attributes: n/a, ShareMode: None, AllocationSize: n/a, OpenResult: Opened
+Detail is Type: REG_NONE, Length: 0
+Image Path begins with C:\Tools\SysinternalsSuite\
+Image Path is C:\Program Files (x86)\Google\Update\1.3.32.7\GoogleCrashHandler.exe
+Image Path is C:\Program Files (x86)\Google\Update\GoogleUpdate.exe
+Image Path is C:\Program Files\VMware\VMware Tools\vmtoolsd.exe
+Image Path is C:\Program Files\Windows Media Player\wmpnetwk.exe
+Image Path is C:\Tools\SysInternals Suite\procmon.exe
+Image Path is C:\Windows\System32\mobsync.exe
+Image Path is C:\Windows\system32\SearchFilterHost.exe
+Image Path is C:\Windows\system32\SearchIndexer.exe
+Image Path is C:\Windows\system32\SearchProtocolHost.exe
+Image Path is C:\Windows\System32\slui.exe
+Image Path is C:\Windows\System32\spoolsv.exe
+Image Path is C:\Windows\system32\taskhost.exe
+Image Path is C:\Windows\system32\wbem\WmiApSrv.exe
+Image Path is C:\Windows\System32\wsqmcons.exe
+Operation begins with FASTIO_
+Operation begins with IRP_MJ_
+Operation is CloseFile
+Operation is CreateFileMapping
+Operation is FileSystemControl
+Operation is FlushBuffersFile
+Operation is Load Image
+Operation is LockFile
+Operation is NotifyChangeDirectory
+Operation is Process Profiling
+Operation is QueryAttributeInformationVolume
+Operation is QueryBasicInformationFile
+Operation is QueryInformationVolume
+Operation is QueryOpen
+Operation is QuerySizeInformationVolume
+Operation is QueryStandardInformationFile
+Operation is RegCloseKey
+Operation is RegEnumValue
+Operation is RegFlushKey
+Operation is RegOpenKey
+Operation is RegQueryValue
+Operation is RegSetInfoKey
+Operation is SetBasicInformationFile
+Operation is SetEndOfFileInformationFile
+Operation is TCP Accept
+Operation is TCP Connect
+Operation is TCP Disconnect
+Operation is TCP Reconnect
+Operation is Thread Create
+Operation is Thread Exit
+Operation is UnlockFileSingle
+Operation is WriteFile
+Path begins with 127.0.0.1:5357 -
+Path begins with C:\Program Files\Capture
+Path begins with C:\Program Files\Confer\
+Path begins with C:\Users\Admin\AppData\Local\Microsoft\Windows\Explorer\thumbcache
+Path begins with C:\WINDOWS\Prefetch\
+Path begins with C:\Windows\ServiceProfiles\LocalService\NTUSER.DAT
+Path begins with C:\Windows\ServiceProfiles\NetworkService\NTUSER.DAT
+Path begins with C:\Windows\System32\config\DEFAULT
+Path begins with C:\Windows\System32\config\SOFTWARE
+Path begins with C:\Windows\System32\config\SYSTEM
+Path begins with C:\Windows\System32\config\systemprofile\AppData\LocalLow\Microsoft\CryptnetUrlCache\
+Path begins with HKCR\AllFilesystemObjects\shell\
+Path begins with HKCU\Software\Classes\Local Settings\MuiCache\
+Path begins with HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2\
+Path begins with HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist\
+Path begins with HKCU\Software\Microsoft\Windows\Shell\
+Path begins with HKCU\Software\Microsoft\Windows\ShellNoRoam\BagMRU\
+Path begins with HKCU\Software\Microsoft\Windows\ShellNoRoam\Bags\
+Path begins with HKLM\SOFTWARE\Microsoft\WBEM\
+Path begins with HKLM\System\CurrentControlSet\Deleted Device IDs\
+Path begins with HKLM\System\CurrentControlSet\Enum\Root\LEGACY_CAPTUREPROCESSMONITOR\
+Path begins with HKLM\System\CurrentControlSet\Enum\Root\LEGACY_CAPTUREREGISTRYMONITOR\
+Path begins with HKLM\System\CurrentControlSet\Services\CaptureProcessMonitor\
+Path begins with HKLM\System\CurrentControlSet\Services\CaptureRegistryMonitor\
+Path contains $Extend
+Path ends with $AttrDef
+Path ends with $BadClus
+Path ends with $Bitmap
+Path ends with $Boot
+Path ends with $LogFile
+Path ends with $Mft
+Path ends with $MftMirr
+Path ends with $Root
+Path ends with $Secure
+Path ends with $UpCase
+Path ends with $Volume
+Path ends with 255.250:1900
+Path ends with pagefile.sys
+Path is C:\$Directory
+Path is C:\$LogFile
+Path is c:\Documents and Settings\Administrator\NTUSER.DAT
+Path is C:\System Volume Information\Syscache.hve
+Path is C:\System Volume Information\Syscache.hve.LOG1
+Path is C:\Users\Admin\AppData\Local\Microsoft\Windows\UsrClass.dat
+Path is C:\Users\Admin\AppData\Local\Microsoft\Windows\UsrClass.dat.LOG1
+Path is C:\Users\Admin\NTUSER.DAT
+Path is C:\Users\Admin\ntuser.dat.LOG1
+Path is C:\Windows\AppCompat\Programs\RecentFileCache.bcf
+Path is C:\Windows\SoftwareDistribution\DataStore\DataStore.edb
+Path is C:\Windows\SoftwareDistribution\DataStore\Logs\edb.chk
+Path is C:\Windows\SoftwareDistribution\DataStore\Logs\edb.log
+Path is C:\WINDOWS\system32\wbem\Logs\wbemcore.log
+Path is c:\WINDOWS\system32\wbem\Logs\wmiprov.log
+Path is HKCU\SessionInformation\ProgramCount
+Path is HKCU\Software\Microsoft\Internet Explorer\Toolbar\Locked
+Path is HKLM\SOFTWARE\Microsoft\Cryptography\RNG\Seed
+Path is HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\BITS\StateIndex
+Process Name is EcatService.exe
+Process Name is procmon64.exe
+Process Name is RepMgr64.exe
+Process Name is TPAutoConnect.exe
+Process Name is TPAutoConnSvc.exe

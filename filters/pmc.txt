@@ -1,0 +1,88 @@
+Category is Read
+Category is Read Metadata
+Event Class is Profiling
+Image Path begins with C:\Tools\SysinternalsSuite\
+Image Path is C:\Program Files\VMware\VMware Tools\TPAutoConnect.exe
+Image Path is C:\Program Files\VMware\VMware Tools\TPAutoConnSvc.exe
+Image Path is C:\Program Files\VMware\VMware Tools\vmtoolsd.exe
+Image Path is C:\Program Files\VMware\VMware Tools\VMware CAF\pme\bin\ManagementAgentHost.exe
+Image Path is C:\Windows\CarbonBlack\cb.exe
+Image Path is C:\Windows\system32\SearchIndexer.exe
+Image Path is C:\Windows\system32\SearchProtocolHost.exe
+Image Path is C:\Windows\System32\spoolsv.exe
+Image Path is C:\Windows\system32\taskeng.exe
+Image Path is C:\Windows\system32\wbem\WmiApSrv.exe
+Image Path is C:\Windows\system32\wbem\wmiprvse.exe
+Image Path is C:\Windows\system32\wermgr.exe
+Image Path is C:\Windows\SysWOW64\Macromed\Flash\FlashPlayerUpdateService.exe
+Operation begins with FASTIO_
+Operation begins with IRP_MJ_
+Operation is CreateFileMapping
+Operation is Load Image
+Operation is NotifyChangeDirectory
+Operation is QueryBasicInformationFile
+Operation is QueryOpen
+Operation is QueryStandardInformationFile
+Operation is RegCloseKey
+Operation is RegEnumValue
+Operation is RegOpenKey
+Operation is RegQueryValue
+Operation is SetBasicInformationFile
+Operation is SetEndOfFileInformationFile
+Operation is Thread Exit
+Path begins with C:\Program Files\Capture
+Path begins with C:\Windows\CarbonBlack
+Path begins with C:\WINDOWS\Prefetch\
+Path begins with C:\Windows\System32\config\S
+Path begins with C:\Windows\System32\winevt\Logs
+Path begins with HKCR\AllFilesystemObjects\shell\
+Path begins with HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2\
+Path begins with HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartPage\NewShortcuts
+Path begins with HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist\
+Path begins with HKCU\Software\Microsoft\Windows\Shell\
+Path begins with HKCU\Software\Microsoft\Windows\ShellNoRoam\BagMRU\
+Path begins with HKCU\Software\Microsoft\Windows\ShellNoRoam\Bags\
+Path begins with HKLM\SOFTWARE\Microsoft\WBEM\
+Path begins with HKLM\System\CurrentControlSet\Deleted Device IDs\
+Path begins with HKLM\System\CurrentControlSet\Enum\Root\LEGACY_CAPTUREPROCESSMONITOR\
+Path begins with HKLM\System\CurrentControlSet\Enum\Root\LEGACY_CAPTUREREGISTRYMONITOR\
+Path begins with HKLM\System\CurrentControlSet\Services\CaptureProcessMonitor\
+Path begins with HKLM\System\CurrentControlSet\Services\CaptureRegistryMonitor\
+Path contains $Extend
+Path ends with $AttrDef
+Path ends with $BadClus
+Path ends with $Bitmap
+Path ends with $Boot
+Path ends with $LogFile
+Path ends with $Mft
+Path ends with $MftMirr
+Path ends with $Root
+Path ends with $Secure
+Path ends with $UpCase
+Path ends with $Volume
+Path ends with pagefile.sys
+Path is C:\$Directory
+Path is C:\$LogFile
+Path is C:\Boot\BCD
+Path is C:\Boot\BCD.LOG
+Path is c:\Documents and Settings\Administrator\NTUSER.DAT
+Path is C:\System Volume Information\Syscache.hve
+Path is C:\System Volume Information\Syscache.hve.LOG1
+Path is C:\Users\Admin\AppData\Local\Microsoft\Windows\UsrClass.dat
+Path is C:\Users\Admin\AppData\Local\Microsoft\Windows\UsrClass.dat.LOG1
+Path is C:\Users\Admin\NTUSER.DAT
+Path is C:\Users\Admin\ntuser.dat.LOG1
+Path is C:\Windows\ServiceProfiles\LocalService\NTUSER.DAT
+Path is C:\Windows\ServiceProfiles\LocalService\NTUSER.DAT.LOG1
+Path is C:\Windows\ServiceProfiles\NetworkService\NTUSER.DAT
+Path is C:\Windows\ServiceProfiles\NetworkService\NTUSER.DAT.LOG1
+Path is C:\Windows\System32\config\DEFAULT
+Path is C:\Windows\System32\config\DEFAULT.LOG1
+Path is C:\Windows\System32\config\SOFTWARE
+Path is C:\Windows\System32\config\SOFTWARE.LOG1
+Path is C:\WINDOWS\system32\wbem\Logs\wbemcore.log
+Path is c:\WINDOWS\system32\wbem\Logs\wmiprov.log
+Path is HKCU\SessionInformation\ProgramCount
+Path is HKCU\Software\Microsoft\Internet Explorer\Toolbar\Locked
+Path is HKLM\SOFTWARE\Microsoft\Cryptography\RNG\Seed
+Process Name is Procmon64.exe
