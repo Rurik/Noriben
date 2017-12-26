@@ -68,6 +68,9 @@
 #       unexpected exit. Check for PML and Config file between executions to account
 #       for destructive malware that erases during runtime. Added headless option for
 #       automated runs, so that screenshot can be grabbed w/o output on screen.
+# Version 1.7.3 - 26 Dec 17 -
+#       Fixed bug where a changed procmon binary was not added to the whitelist, and
+#       would therefore be included in the output.
 #
 #
 # TODO:
@@ -335,7 +338,7 @@ hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89',  # WinXP ntdll.dll
 
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '1.7.2'                                                    #
+__VERSION__ = '1.7.3'                                                    #
 path_general_list = []                                                   #
 virustotal_upload = True if virustotal_api_key else False  # TODO        #
 use_virustotal = True if virustotal_api_key and has_internet else False  #
