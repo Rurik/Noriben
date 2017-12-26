@@ -141,7 +141,8 @@ global_whitelist = [r'VMwareUser.exe',      # VMware User Tools
                     r'SearchIndexer.exe'
                     r'RepUx.exe',
                     r'RepMgr64.exe',
-                    r'EcatService.exe']
+                    r'EcatService.exe',
+                    procmon]
 
 cmd_whitelist = [r'%SystemRoot%\system32\wbem\wmiprvse.exe',
                  r'%SystemRoot%\system32\wscntfy.exe',
