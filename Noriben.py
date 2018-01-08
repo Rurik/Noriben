@@ -71,6 +71,9 @@
 # Version 1.7.3 - 26 Dec 17 -
 #       Fixed bug where a changed procmon binary was not added to the whitelist, and
 #       would therefore be included in the output.
+# Version 1.7.3b - 7 Jan 18 -
+#       Implemented --troubleshoot option to pause the program upon exit so that the
+#       error messages can be seen manually
 #
 #
 # TODO:
@@ -107,7 +110,8 @@ try:
     has_internet = True
 except ImportError:
     has_internet = False
-    print('[!] Python module "requests" not found. Internet functionality is now disabled.')
+    print('''[!] Python module "requests" not found. Internet functionality is now disabled.\n
+             This is acceptable if you do not wish to upload data to VirusTotal.''')
 
 
 # The below are customizable variables. Change these as you see fit.
@@ -115,6 +119,7 @@ procmon = 'procmon.exe'  # Change this if you have a renamed procmon.exe
 generalize_paths = True  # Generalize paths to their base environment variable
 enable_timeline = True   # Create a second, compact CSV with events in order
 debug = False
+troubleshoot = False     # If True, pause before all exit's
 timeout_seconds = 0      # Set to 0 to manually end monitoring with Ctrl-C
 virustotal_api_key = ''               # Set API here
 if os.path.exists('virustotal.api'):  # Or put it in here
@@ -338,7 +343,7 @@ hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89',  # WinXP ntdll.dll
 
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '1.7.3'                                                    #
+__VERSION__ = '1.7.3b'                                                   #
 path_general_list = []                                                   #
 virustotal_upload = True if virustotal_api_key else False  # TODO        #
 use_virustotal = True if virustotal_api_key and has_internet else False  #
@@ -355,6 +360,21 @@ debug_file = ''                                                          #
 headless = False                                                         #
 ##########################################################################
 
+
+def terminate_self(error):
+    from six.moves import input
+    """
+    Implemented for better troubleshooting.
+    
+    Arguments:
+        error: Int of error code to return to system parent
+    Result:
+        none
+    """
+    print('[*] Exiting with error code: {}'.format(error))
+    if troubleshoot:
+        input('[*] Paused for troubleshooting. Press enter to close Noriben.')
+    sys.exit(error)
 
 def log_debug(msg):
     """
@@ -727,7 +747,7 @@ def process_pml_to_csv(procmonexe, pml_file, pmc_file, csv_file):
     log_debug('[*] Converting session to CSV: %s' % csv_file)
     if not file_exists(pml_file):
         print('[!] Error detected. PML file was not found: %s' % pml_file)
-        sys.exit(1)
+        terminate_self(1)
     cmdline = '"%s" /OpenLog "%s" /saveas "%s"' % (procmonexe, pml_file, csv_file)
     if use_pmc and file_exists(pmc_file):
         cmdline += ' /LoadConfig "%s"' % pmc_file
@@ -1088,6 +1108,7 @@ def main():
     global hash_type
     global debug_file
     global headless
+    global troubleshoot
 
     print('--===[ Noriben v%s' % __VERSION__)
     print('--===[ @bbaskin')
@@ -1108,6 +1129,7 @@ def main():
                         required=False)
     parser.add_argument('--cmd', help='Command line to execute (in quotes)', required=False)
     parser.add_argument('-d', '--debug', action='store_true', help='Enable debugging', required=False)
+    parser.add_argument('--troubleshoot', action='store_true', help='Pause before exiting for troubleshooting', required=False)
     args = parser.parse_args()
     report = list()
     timeline = list()
@@ -1115,6 +1137,9 @@ def main():
 
     if args.debug:
         debug = True
+    
+    if args.troubleshoot:
+        troubleshoot = True
 
     # Check to see if string generalization is wanted
     if args.generalize_paths:
@@ -1162,7 +1187,7 @@ def main():
     procmonexe = check_procmon()
     if not procmonexe:
         print('[!] Unable to find Procmon (%s) in path.' % procmon)
-        sys.exit(2)
+        terminate_self(2)
 
     # Check to see if specified output folder exists. If not, make it.
     # This only works one path deep. In future, may make it recursive.
@@ -1173,7 +1198,7 @@ def main():
                 os.mkdir(output_dir)
             except WindowsError:
                 print('[!] Fatal: Unable to create output directory: %s' % output_dir)
-                sys.exit(3)
+                terminate_self(3)
     else:
         output_dir = ''
     log_debug('[*] Log output directory: %s' % output_dir)
@@ -1209,7 +1234,7 @@ def main():
             process_pml_to_csv(procmonexe, args.pml, pmc_file, csv_file)
             if not file_exists(csv_file):
                 print('[!] Error detected. Could not create CSV file: %s' % csv_file)
-                sys.exit(5)
+                terminate_self(5)
 
             parse_csv(csv_file, report, timeline)
 
@@ -1220,11 +1245,11 @@ def main():
             codecs.open(timeline_file, 'w', 'utf-8').write('\r\n'.join(timeline))
 
             open_file_with_assoc(txt_file)
-            sys.exit(0)
+            terminate_self(0)
         else:
             print('[!] PML file does not exist: %s\n' % args.pml)
             parser.print_usage()
-            sys.exit(1)
+            terminate_self(1)
 
     # Check if user-specified to rescan a CSV
     if args.csv:
@@ -1243,10 +1268,10 @@ def main():
             codecs.open(timeline_file, 'w', 'utf-8').write('\r\n'.join(timeline))
 
             open_file_with_assoc(txt_file)
-            sys.exit(0)
+            terminate_self(0)
         else:
             parser.print_usage()
-            sys.exit(10)
+            terminate_self(10)
 
     if args.timeout:
         timeout_seconds = args.timeout
@@ -1269,7 +1294,7 @@ def main():
 
     if exe_cmdline and not file_exists(exe_cmdline):
         print('[!] Error: Specified malware executable does not exist: %s' % exe_cmdline)
-        sys.exit(6)
+        terminate_self(6)
 
     print('[*] Launching Procmon ...')
     launch_procmon_capture(procmonexe, pml_file, pmc_file)
@@ -1280,7 +1305,7 @@ def main():
             subprocess.Popen(exe_cmdline)
         except WindowsError:  # Occurs if VMWare bug removes Owner from file
             print('[!] Error executing file. Windows is refusing execution based upon permissions.')
-            sys.exit(4)
+            terminate_self(4)
     else:
         print('[*] Procmon is running. Run your executable now.')
 
@@ -1310,13 +1335,13 @@ def main():
     print('[*] Procmon terminated')
     if not file_exists(pml_file):
         print('[!] Error creating PML file!')
-        sys.exit(8)
+        terminate_self(8)
 
     # PML created, now convert it to a CSV for parsing
     process_pml_to_csv(procmonexe, pml_file, pmc_file, csv_file)
     if not file_exists(csv_file):
         print('[!] Error detected. Could not create CSV file: %s' % csv_file)
-        sys.exit(7)
+        terminate_self(7)
 
     # Process CSV file, results in 'report' and 'timeline' output lists
     parse_csv(csv_file, report, timeline)
@@ -1327,6 +1352,7 @@ def main():
     codecs.open(timeline_file, 'w', 'utf-8').write('\r\n'.join(timeline))
 
     open_file_with_assoc(txt_file)
+    terminate_self(0)
     # End of main()
 
 if __name__ == '__main__':
