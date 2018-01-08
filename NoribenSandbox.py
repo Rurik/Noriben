@@ -1,6 +1,8 @@
 # Noriben Sandbox Automation Script
 # V 1.0 - 3 Apr 17
 # V 1.1 - 5 Jun 17
+# V 1.1.1 - 8 Jan 18
+#
 # Responsible for:
 # * Copying malware into a known VM
 # * Running malware sample
@@ -331,6 +333,10 @@ def main():
 
     if args.debug:
         debug = True
+
+    if not VM_PASS:
+        print('[!] VM_PASS must be set. VMware requires guest accounts to have passwords for remote access.')
+        sys.exit(1)
 
     try:
         if args.magic and file_exists(args.magic):
