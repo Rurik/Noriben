@@ -362,7 +362,6 @@ headless = False                                                         #
 
 
 def terminate_self(error):
-    from six.moves import input
     """
     Implemented for better troubleshooting.
     
@@ -373,7 +372,11 @@ def terminate_self(error):
     """
     print('[*] Exiting with error code: {}'.format(error))
     if troubleshoot:
-        input('[*] Paused for troubleshooting. Press enter to close Noriben.')
+        errormsg = '[*] Paused for troubleshooting. Press enter to close Noriben.'
+        if sys.version_info > (3, 0):
+            input(errormsg)
+        else:
+            raw_input(errormsg)
     sys.exit(error)
 
 def log_debug(msg):
