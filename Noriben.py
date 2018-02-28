@@ -74,7 +74,8 @@
 # Version 1.7.3b - 7 Jan 18 -
 #       Implemented --troubleshoot option to pause the program upon exit so that the
 #       error messages can be seen manually
-#
+# Version 1.7.4 - 28 Feb 18 -
+#       More bug fixes related to global use of renamed procmon binary. Added filters
 #
 # TODO:
 # * Upload files directly to VirusTotal (1.7.X feature?)
@@ -110,8 +111,7 @@ try:
     has_internet = True
 except ImportError:
     has_internet = False
-    print('''[!] Python module "requests" not found. Internet functionality is now disabled.\n
-             This is acceptable if you do not wish to upload data to VirusTotal.''')
+    print('[*] Python module "requests" not found. Internet functionality is now disabled.\n[*] This is acceptable if you do not wish to upload data to VirusTotal.')
 
 
 # The below are customizable variables. Change these as you see fit.
@@ -150,12 +150,12 @@ global_whitelist = [r'VMwareUser.exe',      # VMware User Tools
                     r'RepUx.exe',
                     r'RepMgr64.exe',
                     r'EcatService.exe',
-                    procmon]
+                    procmon,
+                    procmon.split('.')[0]+'64.exe' # Procmon drops embed as <name>+64
+                    ]
 
 cmd_whitelist = [r'%SystemRoot%\system32\wbem\wmiprvse.exe',
                  r'%SystemRoot%\system32\wscntfy.exe',
-                 r'procmon.exe',
-                 r'procmon64.exe',
                  r'wuauclt.exe',
                  r'jqs.exe',
                  r'avgrsa.exe',  # AVG AntiVirus
@@ -169,9 +169,7 @@ cmd_whitelist = [r'%SystemRoot%\system32\wbem\wmiprvse.exe',
                  r'\??\%WinDir%\system32\conhost.exe .*-.*-.*-.*'  # Experimental
                  ] + global_whitelist
 
-file_whitelist = [r'procmon.exe',
-
-                  r'Desired Access: Execute/Traverse',
+file_whitelist = [r'Desired Access: Execute/Traverse',
                   r'Desired Access: Synchronize',
                   r'Desired Access: Generic Read/Execute',
                   r'Desired Access: Read EA',
@@ -189,9 +187,9 @@ file_whitelist = [r'procmon.exe',
                   r'%AllUsersProfile%\Microsoft\RAC',
                   r'%AppData%\Microsoft\Proof\*',
                   r'%AppData%\Microsoft\Templates\*',
+                  r'%AppData%\Microsoft\Windows\Recent\AutomaticDestinations\1b4dd67f29cb1962.automaticDestinations-ms',
                   r'%LocalAppData%\Google\Drive\sync_config.db*',
                   r'%LocalAppData%\GDIPFONTCACHEV1.DAT',
-                  r'MAILSLOT\NET\NETLOGON',
                   r'%ProgramFiles%\Capture\*',
                   r'%SystemDrive%\Python',
                   r'%SystemRoot%\assembly',
@@ -206,16 +204,20 @@ file_whitelist = [r'procmon.exe',
                   r'%UserProfile%\Recent\*',
                   r'%UserProfile%\Local Settings\History\History.IE5\*',
                   r'%WinDir%\AppCompat\Programs\RecentFileCache.bcf',
+                  r'%WinDir%\SoftwareDistribution\DataStore\DataStore.edb',
+                  r'%WinDir%\SoftwareDistribution\DataStore\Logs\edb....',
+                  r'%WinDir%\SoftwareDistribution\ReportingEvents.log',
+                  r'%WinDir%\System32\catroot2\edb....',
                   r'%WinDir%\System32\config\systemprofile\AppData\LocalLow\Microsoft\CryptnetUrlCache\MetaData\*',
                   r'%WinDir%\System32\spool\drivers\*',
                   r'%WinDir%\Temp\fwtsqmfile00.sqm',  # Software Quality Metrics (SQM) from iphlpsvc
+                  r'MAILSLOT\NET\NETLOGON',
                   r'Windows\Temporary Internet Files\counters.dat',
                   r'Program Files.*\confer\*'
                   ] + global_whitelist
 
 reg_whitelist = [r'CaptureProcessMonitor',
                  r'consent.exe',
-                 r'procmon.exe',
                  r'verclsid.exe',
                  r'wmiprvse.exe',
                  r'wscntfy.exe',
@@ -244,6 +246,8 @@ reg_whitelist = [r'CaptureProcessMonitor',
                  r'HKCU\Software\Microsoft\SystemCertificates\Root$',
                  r'HKCU\Software\Microsoft\Windows\CurrentVersion\Applets',
                  r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\CIDOpen',
+                 r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\CIDSave\Modules\GlobalSettings',
+                 r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\ComDlg32\.*MRU.*',
                  r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Modules',
                  r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2',
                  r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU',
@@ -266,7 +270,7 @@ reg_whitelist = [r'CaptureProcessMonitor',
                  r'HKCU\Software\Microsoft\Windows NT\CurrentVersion\Windows\UserSelectedDefault',
                  r'HKCU\Software\Policies$',
                  r'HKCU\Software\Policies\Microsoft$',
-
+                 
                  r'HKLM$',
                  r'HKLM\.*\Enum$',
                  r'HKLM\SOFTWARE$',
@@ -276,6 +280,8 @@ reg_whitelist = [r'CaptureProcessMonitor',
                  r'HKLM\SOFTWARE\Microsoft\Reliability Analysis\RAC',
                  r'HKLM\SOFTWARE\MICROSOFT\SystemCertificates$',
                  r'HKLM\Software\Microsoft\WBEM',
+                 r'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Group Policy\History\PolicyOverdue',
+                 r'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Group Policy\State\Machine\Extension-List',
                  r'HKLM\Software\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products',
                  r'HKLM\Software\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\*',
                  r'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render',
@@ -343,7 +349,7 @@ hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89',  # WinXP ntdll.dll
 
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '1.7.3b'                                                   #
+__VERSION__ = '1.7.4'                                                   #
 path_general_list = []                                                   #
 virustotal_upload = True if virustotal_api_key else False  # TODO        #
 use_virustotal = True if virustotal_api_key and has_internet else False  #
@@ -1307,8 +1313,11 @@ def main():
         try:
             subprocess.Popen(exe_cmdline)
         except WindowsError:  # Occurs if VMWare bug removes Owner from file
+            print('\n[*] Termination of Procmon commencing... please wait')
             print('[!] Error executing file. Windows is refusing execution based upon permissions.')
+            terminate_procmon(procmonexe)
             terminate_self(4)
+
     else:
         print('[*] Procmon is running. Run your executable now.')
 
