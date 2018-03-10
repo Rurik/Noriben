@@ -76,9 +76,11 @@
 #       error messages can be seen manually
 # Version 1.7.4 - 28 Feb 18 -
 #       More bug fixes related to global use of renamed procmon binary. Added filters
+# Version 1.7.5 - 10 Mar 18 -
+#       Another bug fix related to global use of renamed procmon binary. Edge case fix
 #
 # TODO:
-# * Upload files directly to VirusTotal (1.7.X feature?)
+# * Upload files directly to VirusTotal (1.8.X feature?)
 # * extract data directly from registry? (may require python-registry - http://www.williballenthin.com/registry/)
 # * scan for mutexes, preferably in a way that doesn't require wmi/pywin32
 # * Fix CSV issues (see GitHub issue)
@@ -349,7 +351,7 @@ hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89',  # WinXP ntdll.dll
 
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '1.7.4'                                                   #
+__VERSION__ = '1.7.5'                                                   #
 path_general_list = []                                                   #
 virustotal_upload = True if virustotal_api_key else False  # TODO        #
 use_virustotal = True if virustotal_api_key and has_internet else False  #
@@ -757,7 +759,7 @@ def process_pml_to_csv(procmonexe, pml_file, pmc_file, csv_file):
     if not file_exists(pml_file):
         print('[!] Error detected. PML file was not found: %s' % pml_file)
         terminate_self(1)
-    cmdline = '"%s" /OpenLog "%s" /saveas "%s"' % (procmonexe, pml_file, csv_file)
+    cmdline = '"%s" /OpenLog "%s" /SaveApplyFilter /saveas "%s"' % (procmonexe, pml_file, csv_file)
     if use_pmc and file_exists(pmc_file):
         cmdline += ' /LoadConfig "%s"' % pmc_file
     log_debug('[*] Running cmdline: %s' % cmdline)
