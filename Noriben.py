@@ -111,7 +111,7 @@ try:
     has_internet = True
 except ImportError:
     has_internet = False
-    print('[*] Python module "requests" not found. Internet functionality is now disabled.\n[*] This is acceptable if you do not wish to upload data to VirusTotal.')
+    print('[+] Python module "requests" not found. Internet functionality is disabled.\n[+] This is acceptable if you do not wish to upload data to VirusTotal.')
 
 
 # The below are customizable variables. Change these as you see fit.
@@ -840,7 +840,7 @@ def parse_csv(csv_file, report, timeline):
             continue
         line = original_line.strip(whitespace + '"')
         field = line.strip().split('","')
-        log_debug('[*] Parse line. Event: %s' % field[3])
+        # log_debug('[*] Parse line. Event: %s' % field[3])
         try:
             if field[3] in ['Process Create'] and field[5] == 'SUCCESS':
                 cmdline = field[6].split('Command line: ')[1]
