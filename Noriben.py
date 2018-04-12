@@ -80,7 +80,9 @@
 #       Another bug fix related to global use of renamed procmon binary. Edge case fix
 # Version 1.7.6 - 12 Apr 18 -
 #       Some auto PEP-8 formatting. Fixed bug where specific output_dir wouldn't add
-#       to files when specifying a PML or CSV file
+#       to files when specifying a PML or CSV file. Added configuration of new txt
+#       extension in cases where ransomware was encrypting files. CSV, however, cannot
+#       be changed due to limitations in ProcMon
 #
 # TODO:
 # * Upload files directly to VirusTotal (1.8.X feature?)
@@ -133,6 +135,7 @@ if os.path.exists('virustotal.api'):  # Or put it in here
 yara_folder = ''
 hash_type = 'SHA256'
 valid_hash_types = ['MD5', 'SHA1', 'SHA256']
+txt_extension = 'txt'
 
 # Rules for creating rules:
 # 1. Every rule string must begin with the `r` for regular expressions to work.
@@ -356,8 +359,8 @@ hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89',  # WinXP ntdll.dll
 # Below are global internal variables. Do not edit these. ################
 __VERSION__ = '1.7.6'
 path_general_list = []
-virustotal_upload = True if virustotal_api_key else False  # TODO        #
-use_virustotal = True if virustotal_api_key and has_internet else False  #
+virustotal_upload = True if virustotal_api_key else False  # TODO
+use_virustotal = True if virustotal_api_key and has_internet else False
 use_pmc = False
 vt_results = {}
 vt_dump = list()
@@ -369,8 +372,6 @@ time_process = 0
 script_cwd = ''
 debug_file = ''
 headless = False
-
-
 ##########################################################################
 
 
@@ -580,7 +581,7 @@ def yara_import_rules(yara_path):
     if not yara_path[-1] == '\\':
         yara_path += '\\'
 
-    print('[*] Loading YARA rules from folder: %s' % yara_path)
+    print('[*] Loading YARA rules from folder: {}'.format(yara_path))
     files = os.listdir(yara_path)
 
     for file_name in files:
@@ -617,7 +618,7 @@ def yara_filescan(file_path, rules):
     try:
         matches = rules.match(file_path)
     except yara.Error:  # If can't open file
-        log_debug('[!] YARA can\'t open file: %s' % file_path)
+        log_debug('[!] YARA can\'t open file: {}'.format(file_path))
         return ''
     if matches:
         results = '\t[YARA: %s]' % \
@@ -1250,7 +1251,7 @@ def main():
                 output_dir = os.path.dirname(args.pml)
             pml_basename = os.path.splitext(os.path.basename(args.pml))[0]
             csv_file = os.path.join(output_dir, pml_basename + '.csv')
-            txt_file = os.path.join(output_dir, pml_basename + '.txt')
+            txt_file = os.path.join(output_dir, pml_basename + '.' + txt_extension)
             debug_file = os.path.join(output_dir, pml_basename + '.log')
             timeline_file = os.path.join(output_dir, pml_basename + '_timeline.csv')
 
@@ -1281,7 +1282,7 @@ def main():
             if not args.output:
                 output_dir = os.path.dirname(args.csv)
             csv_basename = os.path.splitext(os.path.basename(args.csv))[0]
-            txt_file = os.path.join(output_dir, csv_basename + '.txt')
+            txt_file = os.path.join(output_dir, csv_basename + '.' + txt_extension)
             debug_file = os.path.join(output_dir, csv_basename + '.log')
             timeline_file = os.path.join(output_dir, csv_basename + '_timeline.csv')
 
@@ -1312,7 +1313,7 @@ def main():
     session_id = get_session_name()
     pml_file = os.path.join(output_dir, 'Noriben_%s.pml' % session_id)
     csv_file = os.path.join(output_dir, 'Noriben_%s.csv' % session_id)
-    txt_file = os.path.join(output_dir, 'Noriben_%s.txt' % session_id)
+    txt_file = os.path.join(output_dir, 'Noriben_%s.%s' % (session_id, txt_extension))
     debug_file = os.path.join(output_dir, 'Noriben_%s.log' % session_id)
 
     timeline_file = os.path.join(output_dir, 'Noriben_%s_timeline.csv' % session_id)
