@@ -78,6 +78,9 @@
 #       More bug fixes related to global use of renamed procmon binary. Added filters
 # Version 1.7.5 - 10 Mar 18 -
 #       Another bug fix related to global use of renamed procmon binary. Edge case fix
+# Version 1.7.6 - 12 Apr 18 -
+#       Some auto PEP-8 formatting. Fixed bug where specific output_dir wouldn't add
+#       to files when specifying a PML or CSV file
 #
 # TODO:
 # * Upload files directly to VirusTotal (1.8.X feature?)
@@ -103,6 +106,7 @@ from traceback import format_exc
 
 try:
     import yara
+
     has_yara = True
 except ImportError:
     has_yara = False
@@ -110,11 +114,11 @@ except ImportError:
 try:
     import requests
     import json
+
     has_internet = True
 except ImportError:
     has_internet = False
     print('[+] Python module "requests" not found. Internet functionality is disabled.\n[+] This is acceptable if you do not wish to upload data to VirusTotal.')
-
 
 # The below are customizable variables. Change these as you see fit.
 procmon = 'procmon.exe'  # Change this if you have a renamed procmon.exe
@@ -123,7 +127,7 @@ enable_timeline = True   # Create a second, compact CSV with events in order
 debug = False
 troubleshoot = False     # If True, pause before all exit's
 timeout_seconds = 0      # Set to 0 to manually end monitoring with Ctrl-C
-virustotal_api_key = ''               # Set API here
+virustotal_api_key = ''  # Set API here
 if os.path.exists('virustotal.api'):  # Or put it in here
     virustotal_api_key = open('virustotal.api', 'r').readline().strip()
 yara_folder = ''
@@ -153,7 +157,7 @@ global_whitelist = [r'VMwareUser.exe',      # VMware User Tools
                     r'RepMgr64.exe',
                     r'EcatService.exe',
                     procmon,
-                    procmon.split('.')[0]+'64.exe' # Procmon drops embed as <name>+64
+                    procmon.split('.')[0] + '64.exe'  # Procmon drops embed as <name>+64
                     ]
 
 cmd_whitelist = [r'%SystemRoot%\system32\wbem\wmiprvse.exe',
@@ -272,7 +276,7 @@ reg_whitelist = [r'CaptureProcessMonitor',
                  r'HKCU\Software\Microsoft\Windows NT\CurrentVersion\Windows\UserSelectedDefault',
                  r'HKCU\Software\Policies$',
                  r'HKCU\Software\Policies\Microsoft$',
-                 
+
                  r'HKLM$',
                  r'HKLM\.*\Enum$',
                  r'HKLM\SOFTWARE$',
@@ -349,30 +353,31 @@ hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89',  # WinXP ntdll.dll
                   r'e40fcf943127ddc8fd60554b722d762b',  # msctf.dll
                   r'0da85218e92526972a821587e6a8bf8f']  # imm32.dll
 
-
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '1.7.5'                                                   #
-path_general_list = []                                                   #
+__VERSION__ = '1.7.6'
+path_general_list = []
 virustotal_upload = True if virustotal_api_key else False  # TODO        #
 use_virustotal = True if virustotal_api_key and has_internet else False  #
-use_pmc = False                                                          #
-vt_results = {}                                                          #
-vt_dump = list()                                                         #
-debug_messages = list()                                                  #
-exe_cmdline = ''                                                         #
-output_dir = ''                                                          #
-time_exec = 0                                                            #
-time_process = 0                                                         #
-script_cwd = ''                                                          #
-debug_file = ''                                                          #
-headless = False                                                         #
+use_pmc = False
+vt_results = {}
+vt_dump = list()
+debug_messages = list()
+exe_cmdline = ''
+output_dir = ''
+time_exec = 0
+time_process = 0
+script_cwd = ''
+debug_file = ''
+headless = False
+
+
 ##########################################################################
 
 
 def terminate_self(error):
     """
     Implemented for better troubleshooting.
-    
+
     Arguments:
         error: Int of error code to return to system parent
     Result:
@@ -386,6 +391,7 @@ def terminate_self(error):
         else:
             raw_input(errormsg)
     sys.exit(error)
+
 
 def log_debug(msg):
     """
@@ -1101,6 +1107,8 @@ def parse_csv(csv_file, report, timeline):
         for message in debug_messages:
             debug_out.write(message)
         debug_out.close()
+
+
 # End of parse_csv()
 
 
@@ -1140,7 +1148,8 @@ def main():
                         required=False)
     parser.add_argument('--cmd', help='Command line to execute (in quotes)', required=False)
     parser.add_argument('-d', '--debug', action='store_true', help='Enable debugging', required=False)
-    parser.add_argument('--troubleshoot', action='store_true', help='Pause before exiting for troubleshooting', required=False)
+    parser.add_argument('--troubleshoot', action='store_true', help='Pause before exiting for troubleshooting',
+                        required=False)
     args = parser.parse_args()
     report = list()
     timeline = list()
@@ -1148,7 +1157,7 @@ def main():
 
     if args.debug:
         debug = True
-    
+
     if args.troubleshoot:
         troubleshoot = True
 
@@ -1237,10 +1246,13 @@ def main():
     if args.pml:
         if file_exists(args.pml):
             # Reparse an existing PML
-            csv_file = os.path.join(output_dir, os.path.splitext(args.pml)[0] + '.csv')
-            txt_file = os.path.join(output_dir, os.path.splitext(args.pml)[0] + '.txt')
-            debug_file = os.path.join(output_dir, os.path.splitext(args.pml)[0] + '.log')
-            timeline_file = os.path.join(output_dir, os.path.splitext(args.pml)[0] + '_timeline.csv')
+            if not args.output:
+                output_dir = os.path.dirname(args.pml)
+            pml_basename = os.path.splitext(os.path.basename(args.pml))[0]
+            csv_file = os.path.join(output_dir, pml_basename + '.csv')
+            txt_file = os.path.join(output_dir, pml_basename + '.txt')
+            debug_file = os.path.join(output_dir, pml_basename + '.log')
+            timeline_file = os.path.join(output_dir, pml_basename + '_timeline.csv')
 
             process_pml_to_csv(procmonexe, args.pml, pmc_file, csv_file)
             if not file_exists(csv_file):
@@ -1266,9 +1278,12 @@ def main():
     if args.csv:
         if file_exists(args.csv):
             # Reparse an existing CSV
-            txt_file = os.path.splitext(args.csv)[0] + '.txt'
-            debug_file = os.path.splitext(args.csv)[0] + '.log'
-            timeline_file = os.path.splitext(args.csv)[0] + '_timeline.csv'
+            if not args.output:
+                output_dir = os.path.dirname(args.csv)
+            csv_basename = os.path.splitext(os.path.basename(args.csv))[0]
+            txt_file = os.path.join(output_dir, csv_basename + '.txt')
+            debug_file = os.path.join(output_dir, csv_basename + '.log')
+            timeline_file = os.path.join(output_dir, csv_basename + '_timeline.csv')
 
             parse_csv(args.csv, report, timeline)
 
@@ -1368,6 +1383,7 @@ def main():
     open_file_with_assoc(txt_file)
     terminate_self(0)
     # End of main()
+
 
 if __name__ == '__main__':
     main()
