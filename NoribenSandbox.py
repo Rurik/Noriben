@@ -23,40 +23,44 @@ import time
 vmrun_os = {'windows': os.path.expanduser(r'C:\Program Files (x86)\VMware\VMware Workstation\vmrun.exe'),
             'mac': os.path.expanduser(r'/Applications/VMware Fusion.app/Contents/Library/vmrun')}
 debug = False
-timeoutSeconds = 300
+timeout_seconds = 300
 VMX = r'E:\VMs\Windows.vmwarevm\Windows.vmx'
 # VMX = os.path.expanduser(r'~/VMs/Windows.vmwarevm/Windows.vmx')
 VMRUN = vmrun_os['windows']
 VM_SNAPSHOT = 'YourVMSnapshotNameHere'
 VM_USER = 'Admin'
 VM_PASS = 'password'
-noribenPath = 'C:\\\\Users\\\\{}\\\\Desktop'.format(VM_USER)
-guestNoribenPath = '{}\\\\Noriben.py'.format(noribenPath)
-procmonConfigPath = '{}\\\\ProcmonConfiguration.pmc'.format(noribenPath)
-reportPathStructure = '{}/{}_NoribenReport.zip'  # (hostMalwarePath, hostMalwareNameBase)
-hostScreenshotPathStructure = '{}/{}.png'  # (hostMalwarePath, hostMalwareNameBase)
-guestLogPath = 'C:\\\\Noriben_Logs'
-guestZipPath = 'C:\\\\Program Files\\\\VMware\\\\VMware Tools\\\\zip.exe'
-guestPythonPath = 'C:\\\\Python27\\\\python.exe'
-hostNoribenPath = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), 'Noriben.py')
-guestMalwarePath = 'C:\\\\Malware\\\\malware_'
-errorTolerance = 5
+noriben_path = 'C:\\\\Users\\\\{}\\\\Desktop'.format(VM_USER)
+guest_noriben_path = '{}\\\\Noriben.py'.format(noriben_path)
+procmon_config_path = '{}\\\\ProcmonConfiguration.pmc'.format(noriben_path)
+report_path_structure = '{}/{}_NoribenReport.zip'  # (host_malware_path, host_malware_name_base)
+host_screenshot_path_structure = '{}/{}.png'  # (host_malware_path, host_malware_name_base)
+guest_log_path = 'C:\\\\Noriben_Logs'
+guest_zip_path = 'C:\\\\Program Files\\\\VMware\\\\VMware Tools\\\\zip.exe'
+guest_temp_zip = 'C:\\\\NoribenReports.zip'
+guest_python_path = 'C:\\\\Python27\\\\python.exe'
+host_noriben_path = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), 'Noriben.py')
+guest_malware_path = 'C:\\\\Malware\\\\malware_'
+error_tolerance = 5
 dontrun = False
 
-noribenErrors = {1:'PML file was not found',
-                 2:'Unable to find procmon.exe',
-                 3:'Unable to create output directory',
-                 4:'Windows is refusing execution based upon permissions',
-                 5:'Could not create CSV',
-                 6:'Could not find malware file',
-                 7:'Error creatign CSV',
-                 8:'Error creating PML',
-                 9:'Unknown error',
-                 10:'Invalid arguments given'}
+noriben_errors = {1: 'PML file was not found',
+                 2: 'Unable to find procmon.exe',
+                 3: 'Unable to create output directory',
+                 4: 'Windows is refusing execution based upon permissions',
+                 5: 'Could not create CSV',
+                 6: 'Could not find malware file',
+                 7: 'Error creatign CSV',
+                 8: 'Error creating PML',
+                 9: 'Unknown error',
+                 10: 'Invalid arguments given'}
+
+error_count = 0
+
 
 def get_error(code):
-    if code in noribenErrors:
-        return noribenErrors[code]
+    if code in noriben_errors:
+        return noriben_errors[code]
     return 'Unexpected Error'
 
 
@@ -73,20 +77,20 @@ def execute(cmd):
     return stdout.returncode
 
 
-def run_file(args, magicResult, malware_file):
+def run_file(args, magic_result, malware_file):
     global dontrun
-    global errorCount
+    global error_count
 
-    hostMalwareNameBase = os.path.split(malware_file)[-1].split('.')[0]
+    host_malware_name_base = os.path.split(malware_file)[-1].split('.')[0]
     if dontrun:
-        filename = '{}{}'.format(guestMalwarePath, hostMalwareNameBase)
-    elif 'DOS batch' in magicResult:
-        filename = '{}{}.bat'.format(guestMalwarePath, hostMalwareNameBase)
+        filename = '{}{}'.format(guest_malware_path, host_malware_name_base)
+    elif 'DOS batch' in magic_result:
+        filename = '{}{}.bat'.format(guest_malware_path, host_malware_name_base)
     else:
-        filename = '{}{}.exe'.format(guestMalwarePath, hostMalwareNameBase)
-    hostMalwarePath = os.path.dirname(malware_file)
-    if hostMalwarePath == '':
-        hostMalwarePath = '.'
+        filename = '{}{}.exe'.format(guest_malware_path, host_malware_name_base)
+    host_malware_path = os.path.dirname(malware_file)
+    if host_malware_path == '':
+        host_malware_path = '.'
 
     print('[*] Processing: {}'.format(malware_file))
 
@@ -94,64 +98,62 @@ def run_file(args, magicResult, malware_file):
         active = '-activeWindow'
     else:
         active = ''
-    cmdBase = '"{}" -T ws -gu {} -gp {} runProgramInGuest "{}" {} -interactive'.format(VMRUN, VM_USER, VM_PASS, VMX,
-                                                                                       active)
+    cmd_base = '"{}" -T ws -gu {} -gp {} runProgramInGuest "{}" {} -interactive'.format(VMRUN, VM_USER, VM_PASS, VMX,
+                                                                                        active)
     if not args.norevert:
         cmd = '"{}" -T ws revertToSnapshot "{}" {}'.format(VMRUN, VMX, VM_SNAPSHOT)
-        returnCode = execute(cmd)
-        if returnCode:
+        return_code = execute(cmd)
+        if return_code:
             print('[!] Error: Possible unknown snapshot: {}'.format(VM_SNAPSHOT))
-            sys.exit(returnCode)
+            sys.exit(return_code)
 
     cmd = '"{}" -T ws start "{}"'.format(VMRUN, VMX)
-    returnCode = execute(cmd)
-    if returnCode:
-        print('[!] Error trying to start VM. Error {}: {}'.format(hex(returnCode), get_error(returnCode)))
-        #sys.exit(returnCode)
-        errorCount += 1
-        return returnCode
+    return_code = execute(cmd)
+    if return_code:
+        print('[!] Error trying to start VM. Error {}: {}'.format(hex(return_code), get_error(return_code)))
+        error_count += 1
+        return return_code
 
     cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest "{}" "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX, malware_file,
                                                                              filename)
-    returnCode = execute(cmd)
-    if returnCode:
-        print('[!] Error trying to copy file to guest. Error {}: {}'.format(hex(returnCode), get_error(returnCode)))
-        #sys.exit(returnCode)
-        errorCount += 1
-        return returnCode
+    return_code = execute(cmd)
+    if return_code:
+        print('[!] Error trying to copy file to guest. Error {}: {}'.format(hex(return_code), get_error(return_code)))
+        error_count += 1
+        return return_code
 
     if args.update:
-        if file_exists(hostNoribenPath):
+        if file_exists(host_noriben_path):
             cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest "{}" "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX,
-                                                                                     hostNoribenPath,
-                                                                                     guestNoribenPath)
-            returnCode = execute(cmd)
-            if returnCode:
-                print('[!] Error trying to copy updated Noriben to guest. Continuing. Error {}: {}'.format(hex(returnCode), get_error(returnCode)))
+                                                                                     host_noriben_path,
+                                                                                     guest_noriben_path)
+            return_code = execute(cmd)
+            if return_code:
+                print('[!] Error trying to copy updated Noriben to guest. Continuing. Error {}: {}'.format(
+                    hex(return_code), get_error(return_code)))
 
         else:
-            print('[!] Noriben.py on host not found: {}'.format(hostNoribenPath))
-            #sys.exit(returnCode)
-            errorCount += 1
-            return returnCode
+            print('[!] Noriben.py on host not found: {}'.format(host_noriben_path))
+            error_count += 1
+            return return_code
 
     if args.dontrunnothing:
-        sys.exit(returnCode)
+        sys.exit(return_code)
 
     time.sleep(5)
 
     if args.raw:
-        cmd = '{} C:\\\\windows\\\\system32\\\\cmd.exe "/c del {}"'.format(cmdBase, procmonConfigPath)
-        returnCode = execute(cmd)
-        if returnCode:
-            print('[!] Error trying to execute command in guest. Error {}: {}'.format(hex(returnCode), get_error(returnCode)))
-            #sys.exit(returnCode)
-            errorCount += 1
-            return returnCode
+        cmd = '{} C:\\\\windows\\\\system32\\\\cmd.exe "/c del {}"'.format(cmd_base, procmon_config_path)
+        return_code = execute(cmd)
+        if return_code:
+            print('[!] Error trying to execute command in guest. Error {}: {}'.format(hex(return_code),
+                                                                                      get_error(return_code)))
+            error_count += 1
+            return return_code
 
     # Run Noriben
-    cmd = '{} {} "{}" -t {} --headless --output "{}" '.format(cmdBase, guestPythonPath, guestNoribenPath,
-                                                              timeoutSeconds, guestLogPath)
+    cmd = '{} {} "{}" -t {} --headless --output "{}" '.format(cmd_base, guest_python_path, guest_noriben_path,
+                                                              timeout_seconds, guest_log_path)
 
     if not dontrun:
         cmd = '{} --cmd {} '.format(cmd, filename)
@@ -159,65 +161,67 @@ def run_file(args, magicResult, malware_file):
     if debug:
         cmd = '{} -d'.format(cmd)
 
-    returnCode = execute(cmd)
-    if returnCode:
-        print('[!] Error in running Noriben. Error {}: {}'.format(hex(returnCode), get_error(returnCode)))
-        #sys.exit(returnCode)
-        errorCount += 1
-        return returnCode
+    return_code = execute(cmd)
+    if return_code:
+        print('[!] Error in running Noriben. Error {}: {}'.format(hex(return_code), get_error(return_code)))
+        error_count += 1
+        return return_code
 
     if not dontrun:
         if args.post and file_exists(args.post):
-            runScript(args, cmdBase)
+            run_script(args, cmd_base)
 
-        zipFailed = False
-        cmd = '{} "{}" -j C:\\\\NoribenReports.zip "{}\\\\*.*"'.format(cmdBase, guestZipPath, guestLogPath)
-        returnCode = execute(cmd)
-        if returnCode:
-            print('[!] Error trying to zip report archive. Error {}: {}'.format(hex(returnCode), get_error(returnCode)))
-            zipFailed = True
+        zip_failed = False
+        cmd = '{} "{}" -j {} "{}\\\\*.*"'.format(cmd_base, guest_zip_path, guest_temp_zip, guest_log_path)
+        return_code = execute(cmd)
+        if return_code:
+            print('[!] Error trying to zip report archive. Error {}: {}'.format(hex(return_code),
+                                                                                get_error(return_code)))
+            zip_failed = True
 
-        if args.defense and not zipFailed:
-            defenseFile = "C:\\\\Program Files\\\\Confer\\\\confer.log"
+        if args.defense and not zip_failed:
+            cb_defense_file = "C:\\\\Program Files\\\\Confer\\\\confer.log"
             # Get Carbon Black Defense log. This is an example if you want to include additional files.
-            cmd = '{} "{}" -j C:\\\\NoribenReports.zip "{}"'.format(cmdBase, guestZipPath, defenseFile)
-            returnCode = execute(cmd)
-            if returnCode:
+            cmd = '{} "{}" -j {} "{}"'.format(cmd_base, guest_zip_path, guest_temp_zip, cb_defense_file)
+            return_code = execute(cmd)
+            if return_code:
                 print(('[!] Error trying to add additional file to archive. Continuing. '
-                       'Error {}; File: {}'.format(returnCode, defenseFile)))
+                       'Error {}; File: {}'.format(return_code, cb_defense_file)))
 
-        if not args.nolog and not zipFailed:
-            hostReportPath = reportPathStructure.format(hostMalwarePath, hostMalwareNameBase)
-            cmd = '"{}" -gu {} -gp {} copyFileFromGuestToHost "{}" C:\\\\NoribenReports.zip "{}"'.format(VMRUN, VM_USER,
-                                                                                                         VM_PASS, VMX,
-                                                                                                         hostReportPath)
-            returnCode = execute(cmd)
-            if returnCode:
-                print('[!] Error trying to copy file from guest. Continuing. Error {}: {}'.format(hex(returnCode), get_error(returnCode)))
+        if not args.nolog and not zip_failed:
+            host_report_path = report_path_structure.format(host_malware_path, host_malware_name_base)
+            cmd = '"{}" -gu {} -gp {} copyFileFromGuestToHost "{}" {} "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX,
+                                                                                   guest_temp_zip, host_report_path)
+            return_code = execute(cmd)
+            if return_code:
+                print('[!] Error trying to copy file from guest. Continuing. Error {}: {}'.format(hex(return_code),
+                                                                                                  get_error(return_code)))
 
         if args.screenshot:
-            hostScreenshotPath = hostScreenshotPathStructure.format(hostMalwarePath, hostMalwareNameBase)
-            cmd = '"{}" -gu {} -gp {} captureScreen "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX, hostScreenshotPath)
-            returnCode = execute(cmd)
-            if returnCode:
-                print('[!] Error trying to create screenshot. Error {}: {}'.format(hex(returnCode), get_error(returnCode)))
+            host_screenshot_path = host_screenshot_path_structure.format(host_malware_path, host_malware_name_base)
+            cmd = '"{}" -gu {} -gp {} captureScreen "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX,
+                                                                      host_screenshot_path)
+            return_code = execute(cmd)
+            if return_code:
+                print('[!] Error trying to create screenshot. Error {}: {}'.format(hex(return_code),
+                                                                                   get_error(return_code)))
 
 
-def getMagic(magicHandle, filename):
+def get_magic(magic_handle, filename):
     try:
-        magicResult = magicHandle.from_file(filename)
+        magic_result = magic_handle.from_file(filename)
     except magic.MagicException as err:
-        magicResult = ''
+        magic_result = ''
         if err.message == b'could not find any magic files!':
-            print('[!] Windows Error: magic files not in path. See Dependencies on:',
+            print('[!] Windows Error: magic files not in path. See Dependencies on: ',
                   'https://github.com/ahupp/python-magic')
             print('[!] You may need to manually specify magic file location using --magic')
         print('[!] Error in running magic against file: {}'.format(err))
-    return magicResult
+    return magic_result
 
 
-def runScript(args, cmdBase):
-    sourcePath = ''
+def run_script(args, cmd_base):
+    source_path = ''
 
     # if sys.version_info[0] == '2':
     with io.open(args.post, encoding='utf-8') as hScript:
@@ -228,55 +232,57 @@ def runScript(args, cmdBase):
                 pass
             elif line.lower().startswith('collect'):
                 try:
-                    sourcePath = line.split('collect ')[1].strip()
+                    source_path = line.split('collect ')[1].strip()
                 except IndexError:
                     print('[!] Ignoring bad script line: {}'.format(line.strip()))
-                copyFileToZip(cmdBase, sourcePath)
+                copy_file_to_zip(cmd_base, source_path)
             else:
-                cmd = '{} "{}"'.format(cmdBase, line.strip())
-                returnCode = execute(cmd)
-                if returnCode:
-                    print('[!] Error trying to run script command. Error {}: {}'.format(hex(returnCode), get_error(returnCode)))
+                cmd = '{} "{}"'.format(cmd_base, line.strip())
+                return_code = execute(cmd)
+                if return_code:
+                    print('[!] Error trying to run script command. Error {}: {}'.format(hex(return_code),
+                                                                                        get_error(return_code)))
 
 
-def copyFileToZip(cmdBase, filename):
+def copy_file_to_zip(cmd_base, filename):
     # This is a two-step process as zip.exe will not allow direct zipping of some system files.
     # Therefore, first copy file to log folder and then add to the zip.
+    global error_count
 
     cmd = '"{}" -gu {} -gp {} fileExistsInGuest "{}" {}'.format(VMRUN, VM_USER, VM_PASS, VMX, filename)
-    returnCode = execute(cmd)
-    if returnCode:
+    return_code = execute(cmd)
+    if return_code:
         print('[!] File does not exist in guest. Continuing. File: {}'.format(filename))
-        errorCount += 1
-        return returnCode
+        error_count += 1
+        return return_code
 
-    cmd = '{} C:\\\\windows\\\\system32\\\\xcopy.exe {} {}'.format(cmdBase, filename, guestLogPath)
-    returnCode = execute(cmd)
-    if returnCode:
+    cmd = '{} C:\\\\windows\\\\system32\\\\xcopy.exe {} {}'.format(cmd_base, filename, guest_log_path)
+    return_code = execute(cmd)
+    if return_code:
         print(('[!] Error trying to copy file to log folder. Continuing. '
-               'Error {}; File: {}'.format(returnCode, filename)))
-        errorCount += 1
-        return returnCode
+               'Error {}; File: {}'.format(return_code, filename)))
+        error_count += 1
+        return return_code
 
-    cmd = '{} "{}" -j C:\\\\NoribenReports.zip {}'.format(cmdBase, guestZipPath, filename)
-    returnCode = execute(cmd)
-    if returnCode:
+    cmd = '{} "{}" -j {} {}'.format(cmd_base, guest_zip_path, guest_temp_zip, filename)
+    return_code = execute(cmd)
+    if return_code:
         print(('[!] Error trying to add additional file to archive. Continuing. '
-               'Error {}; File: {}'.format(returnCode, filename)))
-        errorCount += 1
-        return returnCode
+               'Error {}; File: {}'.format(return_code, filename)))
+        error_count += 1
+        return return_code
 
 
 def main():
     global debug
-    global timeoutSeconds
+    global timeout_seconds
     global VM_SNAPSHOT
     global VMRUN
     global VMX
     global dontrun
-    global errorCount
+    global error_count
 
-    errorCount = 0
+    error_count = 0
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', '--file', help='filename', required=False)
@@ -338,15 +344,16 @@ def main():
         print('[!] VM_PASS must be set. VMware requires guest accounts to have passwords for remote access.')
         sys.exit(1)
 
+    magic_handle = None
     try:
         if args.magic and file_exists(args.magic):
-            magicHandle = magic.Magic(magic_file=args.magic)
+            magic_handle = magic.Magic(magic_file=args.magic)
         else:
-            magicHandle = magic.Magic()
+            magic_handle = magic.Magic()
     except magic.MagicException as err:
         dontrun = True
         if err.message == b'could not find any magic files!':
-            print('[!] Windows Error: magic files not in path. See Dependencies on:',
+            print('[!] Windows Error: magic files not in path. See Dependencies on: ',
                   'https://github.com/ahupp/python-magic')
             print('[!] You may need to manually specify magic file location using --magic')
         print('[!] Error in running magic against file: {}'.format(err))
@@ -365,17 +372,16 @@ def main():
             VMX = os.path.expanduser(args.vmx)
 
     if args.timeout:
-        timeoutSeconds = args.timeout
+        timeout_seconds = args.timeout
 
     if not args.dir and args.file and file_exists(args.file):
-        magicResult = getMagic(magicHandle, args.file)
+        magic_result = get_magic(magic_handle, args.file)
 
-        if magicResult and (not magicResult.startswith('PE32') or 'DLL' in magicResult):
-            if 'DOS batch' not in magicResult:
+        if magic_result and (not magic_result.startswith('PE32') or 'DLL' in magic_result):
+            if 'DOS batch' not in magic_result:
                 dontrun = True
-                print('[*] Disabling automatic running due to magic signature: {}'.format(magicResult))
-        run_file(args, magicResult, args.file)
-
+                print('[*] Disabling automatic running due to magic signature: {}'.format(magic_result))
+        run_file(args, magic_result, args.file)
 
     if args.dir:  # and file_exists(args.dir):
         files = list()
@@ -395,7 +401,7 @@ def main():
                     break
 
         for filename in files:
-            if errorCount >= errorTolerance:
+            if error_count >= error_tolerance:
                 print('[!] Too many errors encountered in this run. Exiting.')
                 sys.exit(100)
             # TODO: This is HACKY. MUST FIX SOON
@@ -404,14 +410,15 @@ def main():
                 continue
 
             # Front load magic processing to avoid unnecessary calls to run_file
-            magicResult = getMagic(magicHandle, filename)
-            if magicResult and magicResult.startswith('PE32') and 'DLL' not in magicResult:
+            magic_result = get_magic(magic_handle, filename)
+            if magic_result and magic_result.startswith('PE32') and 'DLL' not in magic_result:
                 if debug:
-                    print('{}: {}'.format(filename, magicResult))
-                execTime = time.time()
-                run_file(args, magicResult, filename)
-                execTimeDiff = time.time() - execTime
-                print('[*] Completed. Execution Time: {}'.format(execTimeDiff))
+                    print('{}: {}'.format(filename, magic_result))
+                exec_time = time.time()
+                run_file(args, magic_result, filename)
+                exec_time_diff = time.time() - exec_time
+                print('[*] Completed. Execution Time: {}'.format(exec_time_diff))
+
 
 if __name__ == '__main__':
     main()

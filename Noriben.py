@@ -58,7 +58,7 @@
 # Version 1.6.4 - 7 Dec 16 -
 #       A handful of bug fixes related to bad Internet access. Small variable updates.
 # Version 1.7.0 - 4 Feb 17 -
-#       Default hash method is not SHA256. An argument and global var allow to
+#       Default hash method is now SHA256. An argument and global var allow to
 #       override hash. Numerous filters added. PEP8 cleanup, multiple small fixes to
 #       code and implementation styles.
 # Version 1.7.1 - 3 Apr 17 -
@@ -83,34 +83,38 @@
 #       to files when specifying a PML or CSV file. Added configuration of new txt
 #       extension in cases where ransomware was encrypting files. CSV, however, cannot
 #       be changed due to limitations in ProcMon
+# Version 1.8.0 - 9 Jun 18
+#       Really, truly, dropping Python 2 support now. Added --config file option to load
+#       global variables from external files. Now uses CSV library. Code cleanup.
+
 #
 # TODO:
-# * Upload files directly to VirusTotal (1.8.X feature?)
+# * Upload files directly to VirusTotal (2.X feature?)
 # * extract data directly from registry? (may require python-registry - http://www.williballenthin.com/registry/)
 # * scan for mutexes, preferably in a way that doesn't require wmi/pywin32
 # * Fix CSV issues (see GitHub issue)
 
-from __future__ import print_function
-
+import argparse
+import ast
 import codecs
+import csv
+import datetime
 import hashlib
-import io
+# import io
 import os
 import re
 import subprocess
+import string
 import sys
 import time
-from argparse import ArgumentParser
-from datetime import datetime
-from string import whitespace
-from time import sleep
-from traceback import format_exc
+import traceback
 
 try:
-    import yara
+    import yara  # pip yara-python
 
     has_yara = True
 except ImportError:
+    yara = None
     has_yara = False
 
 try:
@@ -119,23 +123,35 @@ try:
 
     has_internet = True
 except ImportError:
+    requests = None
+    json = None
     has_internet = False
-    print('[+] Python module "requests" not found. Internet functionality is disabled.\n[+] This is acceptable if you do not wish to upload data to VirusTotal.')
+    print('[+] Python module "requests" not found. Internet functionality is disabled.')
+    print('[+] This is acceptable if you do not wish to upload data to VirusTotal.')
+
+try:
+    import configparser
+except ImportError:
+    print('[!] Python module "configparser" not found. This is likely due to not running with Python 3.')
+    configparser = None
 
 # The below are customizable variables. Change these as you see fit.
-procmon = 'procmon.exe'  # Change this if you have a renamed procmon.exe
-generalize_paths = True  # Generalize paths to their base environment variable
-enable_timeline = True   # Create a second, compact CSV with events in order
-debug = False
-troubleshoot = False     # If True, pause before all exit's
-timeout_seconds = 0      # Set to 0 to manually end monitoring with Ctrl-C
-virustotal_api_key = ''  # Set API here
+config = {
+    'procmon': 'procmon.exe',  # Change this if you have a renamed procmon.exe
+    'generalize_paths': True,  # Generalize paths to their base environment variable
+    'debug': False,
+    'headless': False,
+    'troubleshoot': False,  # If True, pause before all exit's
+    'timeout_seconds': 0,  # Set to 0 to manually end monitoring with Ctrl-C
+    'virustotal_api_key': '',  # Set API here
+    'yara_folder': '',
+    'hash_type': 'SHA256',
+    'txt_extension': 'txt'
+}
+
 if os.path.exists('virustotal.api'):  # Or put it in here
-    virustotal_api_key = open('virustotal.api', 'r').readline().strip()
-yara_folder = ''
-hash_type = 'SHA256'
+    config['virustotal_api_key'] = open('virustotal.api', 'r').readline().strip()
 valid_hash_types = ['MD5', 'SHA1', 'SHA256']
-txt_extension = 'txt'
 
 # Rules for creating rules:
 # 1. Every rule string must begin with the `r` for regular expressions to work.
@@ -146,21 +162,21 @@ txt_extension = 'txt'
 # 3. To find a list of available '%%' variables, type `set` from a command prompt
 
 # These entries are applied to all whitelists
-global_whitelist = [r'VMwareUser.exe',      # VMware User Tools
-                    r'CaptureBAT.exe',      # CaptureBAT Malware Tool
-                    r'SearchIndexer.exe',   # Windows Search Indexer
-                    r'Fakenet.exe',         # Practical Malware Analysis FakeNET
-                    r'idaq.exe',            # IDA Pro
-                    r'ngen.exe',            # Windows Native Image Generator
-                    r'ngentask.exe',        # Windows Native Image Generator
-                    r'consent.exe',         # Windows UAC prompt
+global_whitelist = [r'VMwareUser.exe',  # VMware User Tools
+                    r'CaptureBAT.exe',  # CaptureBAT Malware Tool
+                    r'SearchIndexer.exe',  # Windows Search Indexer
+                    r'Fakenet.exe',  # Practical Malware Analysis FakeNET
+                    r'idaq.exe',  # IDA Pro
+                    r'ngen.exe',  # Windows Native Image Generator
+                    r'ngentask.exe',  # Windows Native Image Generator
+                    r'consent.exe',  # Windows UAC prompt
                     r'taskhost.exe',
-                    r'SearchIndexer.exe'
+                    r'SearchIndexer.exe',
                     r'RepUx.exe',
                     r'RepMgr64.exe',
                     r'EcatService.exe',
-                    procmon,
-                    procmon.split('.')[0] + '64.exe'  # Procmon drops embed as <name>+64
+                    config['procmon'],
+                    config['procmon'].split('.')[0] + '64.exe'  # Procmon drops embed as <name>+64
                     ]
 
 cmd_whitelist = [r'%SystemRoot%\system32\wbem\wmiprvse.exe',
@@ -174,7 +190,6 @@ cmd_whitelist = [r'%SystemRoot%\system32\wbem\wmiprvse.exe',
                  r'%WinDir%\System32\mobsync.exe',
                  r'/Processid:{AB8902B4-09CA-4BB6-B78D-A8F59079A8D5}',  # Thumbnail server
                  r'/Processid:{F9717507-6651-4EDB-BFF7-AE615179BCCF}',  # DCOM error
-                 # r'\??\%WinDir%\system32\conhost.exe -'
                  r'\??\%WinDir%\system32\conhost.exe .*-.*-.*-.*'  # Experimental
                  ] + global_whitelist
 
@@ -339,7 +354,7 @@ reg_whitelist = [r'CaptureProcessMonitor',
                  r'UserAssist\{CEBFF5CD-ACE2-4F4F-9178-9926F41749EA}'
                  ] + global_whitelist
 
-net_whitelist = [r'hasplms.exe'                       # Hasp dongle beacons
+net_whitelist = [r'hasplms.exe'  # Hasp dongle beacons
                  # r'192.168.2.',                     # Example for blocking net ranges
                  # r'Verizon_router.home']            # Example for blocking local domains
                  # r' -> .*\..*\..*\..*:1900
@@ -357,10 +372,10 @@ hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89',  # WinXP ntdll.dll
                   r'0da85218e92526972a821587e6a8bf8f']  # imm32.dll
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '1.7.6'
+__VERSION__ = '1.8.0'
 path_general_list = []
-virustotal_upload = True if virustotal_api_key else False  # TODO
-use_virustotal = True if virustotal_api_key and has_internet else False
+virustotal_upload = True if config['virustotal_api_key'] else False  # TODO
+use_virustotal = True if config['virustotal_api_key'] and has_internet else False
 use_pmc = False
 vt_results = {}
 vt_dump = list()
@@ -371,8 +386,56 @@ time_exec = 0
 time_process = 0
 script_cwd = ''
 debug_file = ''
-headless = False
 ##########################################################################
+
+
+noriben_errors = {0: 'Normal exit',
+                  1: 'PML file was not found',
+                  2: 'Unable to find procmon.exe',
+                  3: 'Unable to create output directory',
+                  4: 'Windows is refusing execution based upon permissions',
+                  5: 'Could not create CSV',
+                  6: 'Could not find malware file',
+                  7: 'Error creatign CSV',
+                  8: 'Error creating PML',
+                  9: 'Unknown error',
+                  10: 'Invalid arguments given'}
+
+
+def get_error(code):
+    if code in noriben_errors:
+        return noriben_errors[code]
+    return 'Unexpected Error'
+
+
+def read_config(config_filename):
+    """
+    Parse an external configuration file.
+    Eventually, this needs to be rewritten completely, and have all config
+    values in a global dictionary. For now, it's an ugly check per value.
+
+    Arguments:
+        config_filename: String of filename, predetermined if exists
+    Result:
+        none
+    """
+    global config
+    global use_virustotal
+
+    file_config = configparser.ConfigParser()
+    with codecs.open(config_filename, 'r', encoding='utf-8') as f:
+        file_config.read_file(f)
+
+    new_config = {}
+    for key, value in file_config.items('Noriben'):
+        try:
+            new_config[key] = ast.literal_eval(value)
+        except ValueError and SyntaxError:
+            new_config[key] = value
+
+    config.update(new_config)
+    if config['virustotal_api_key'] and has_internet:
+        use_virustotal = True
 
 
 def terminate_self(error):
@@ -384,13 +447,10 @@ def terminate_self(error):
     Result:
         none
     """
-    print('[*] Exiting with error code: {}'.format(error))
-    if troubleshoot:
+    print('[*] Exiting with error code: {}: {}'.format(error, get_error(error)))
+    if config['troubleshoot']:
         errormsg = '[*] Paused for troubleshooting. Press enter to close Noriben.'
-        if sys.version_info > (3, 0):
-            input(errormsg)
-        else:
-            raw_input(errormsg)
+        input(errormsg)
     sys.exit(error)
 
 
@@ -405,7 +465,7 @@ def log_debug(msg):
         none
     """
     global debug_messages
-    if msg and debug:
+    if msg and config['debug']:
         print(msg)
 
         if debug_file:  # File already set, check for message buffer
@@ -440,15 +500,18 @@ def generalize_vars_init():
 
     global path_general_list
     log_debug('[*] Enabling Windows string generalization.')
+
     for env in envvar_list:
         try:
-            resolved = os.path.expandvars(env).encode('unicode_escape')
-            resolved = resolved.replace(b'(', b'\\(').replace(b')', b'\\)')
-            if not resolved == env and not resolved == env.replace(b'(', b'\\(').replace(b')', b'\\)'):
-                path_general_list.append([env, resolved])
+            resolved = os.path.expandvars(env).replace("\\", "\\\\")
+
+            # TODO: Resolve this issue with Py3 for x86 folder.
+            # resolved = resolved.replace(b'(', b'\\(').replace(b')', b'\\)')
+            # if not resolved == env and not resolved == env.replace(b'(', b'\\(').replace(b')', b'\\)'):
+            path_general_list.append([env, resolved])
         except TypeError:
             if resolved in locals():
-                log_debug('[!] generalize_vars_init(): Unable to parse var: %s' % resolved)
+                log_debug('[!] generalize_vars_init(): Unable to parse var: {}'.format(resolved))
             continue
 
 
@@ -463,8 +526,10 @@ def generalize_var(path_string):
     """
     if not len(path_general_list):
         generalize_vars_init()  # For edge cases when this isn't previously called.
+
     for item in path_general_list:
         path_string = re.sub(item[1], item[0], path_string)
+
     return path_string
 
 
@@ -476,7 +541,9 @@ def read_hash_file(hash_filename):
         hash_filename: path to a text file containing hashes (either flat or sha256deep)
     """
     global hash_whitelist
-    for line_num, hash_line in enumerate(io.open(hash_filename, encoding='utf-8')):
+    hash_file_handle = open(hash_filename, newline='', encoding='utf-8')
+    reader = csv.reader(hash_file_handle)
+    for hash_line in reader:
         hashval = hash_line.split()[0]
         try:
             if int(hashval, 16) and (len(hashval) == 32 or len(hashval) == 40 or len(hashval) == 64):
@@ -503,15 +570,15 @@ def virustotal_query_hash(hashval):
 
     try:
         previous_result = vt_results[hashval]
-        log_debug('[*] VT scan already performed for %s. Returning previous: %s' % (hashval, previous_result))
+        log_debug('[*] VT scan already performed for {}. Returning previous: {}'.format(hashval, previous_result))
         return previous_result
     except KeyError:
         pass
 
     vt_query_url = 'https://www.virustotal.com/vtapi/v2/file/report'
-    post_params = {'apikey': virustotal_api_key,
+    post_params = {'apikey': config['virustotal_api_key'],
                    'resource': hashval}
-    log_debug('[*] Querying VirusTotal for hash: %s' % hashval)
+    log_debug('[*] Querying VirusTotal for hash: {}'.format(hashval))
     data = ''
     try:
         http_response = requests.post(vt_query_url, post_params)
@@ -520,7 +587,7 @@ def virustotal_query_hash(hashval):
 
     if http_response.status_code == 204:
         print('[!] VirusTotal Rate Limit Exceeded. Sleeping for 60 seconds.')
-        time.sleep(60)
+        time.time.sleep(60)
         return virustotal_query_hash(hashval)
     else:
         try:
@@ -538,13 +605,13 @@ def virustotal_query_hash(hashval):
             elif data['response_code'] == 1:
                 if data['total']:
                     vt_dump.append(data)
-                    result = ' [VT: %s/%s]' % (data['positives'], data['total'])
+                    result = ' [VT: {}/{}]'.format(data['positives'], data['total'])
                 else:
                     result = ' [VT: Error 002]'
         except TypeError:
             result = ' [VT: Error 003]'
     vt_results[hashval] = result
-    log_debug('[*] VirusTotal result for hash %s: %s' % (hashval, result))
+    log_debug('[*] VirusTotal result for hash {}: {}'.format(hashval, result))
     return result
 
 
@@ -563,8 +630,8 @@ def yara_rule_check(yara_files):
             yara.compile(filepath=fname)
             result[yara_id] = fname
         except yara.SyntaxError:
-            log_debug('[!] Syntax Error found in YARA file: %s' % fname)
-            log_debug(format_exc())
+            log_debug('[!] Syntax Error found in YARA file: {}'.format(fname))
+            log_debug(traceback.format_exc())
     return result
 
 
@@ -585,15 +652,16 @@ def yara_import_rules(yara_path):
     files = os.listdir(yara_path)
 
     for file_name in files:
-        if '.yara' in file_name:
-            yara_files[file_name.split('.yara')[0]] = yara_path + file_name
+        file_extension = os.path.splitext(file_name)[1]
+        if '.yar' in file_extension:
+            yara_files[file_name.split(os.sep)[-1]] = os.path.join(yara_path, file_name)
 
     yara_files = yara_rule_check(yara_files)
     rules = ''
     if yara_files:
         try:
             rules = yara.compile(filepaths=yara_files)
-            print('[*] YARA rules loaded. Total files imported: %d' % len(yara_files))
+            print('[*] YARA rules loaded. Total files imported: %d' % (len(yara_files)))
         except yara.SyntaxError:
             print('[!] YARA: Unknown Syntax Errors found.')
             print('[!] YARA rules disabled until all Syntax Errors are fixed.')
@@ -615,14 +683,16 @@ def yara_filescan(file_path, rules):
     """
     if not rules:
         return ''
+    if os.path.isdir(file_path):
+        return ''
+    
     try:
         matches = rules.match(file_path)
     except yara.Error:  # If can't open file
         log_debug('[!] YARA can\'t open file: {}'.format(file_path))
         return ''
     if matches:
-        results = '\t[YARA: %s]' % \
-                  reduce(lambda x, y: str(x) + ', ' + str(y), matches)
+        results = '\t[YARA: {}]'.format(', '.join(str(x) for x in matches))
     else:
         results = ''
     return results
@@ -637,7 +707,7 @@ def open_file_with_assoc(fname):
     Results:
         None
     """
-    if headless:
+    if config['headless']:
         # Headless is for automated runs, don't open results on VM
         return
 
@@ -658,7 +728,7 @@ def file_exists(fname):
     Results:
         boolean value if file exists
     """
-    return os.path.exists(fname) and os.access(fname, os.F_OK)
+    return os.path.exists(fname) and os.access(fname, os.F_OK) and not os.path.isdir(fname)
 
 
 def check_procmon():
@@ -668,16 +738,15 @@ def check_procmon():
     Results:
         folder path to procmon executable
     """
-    global procmon
-
-    if file_exists(procmon):
-        return procmon
+    procmon_exe = config['procmon']
+    if file_exists(procmon_exe):
+        return procmon_exe
     else:
         for path in os.environ['PATH'].split(os.pathsep):
-            if file_exists(os.path.join(path.strip('"'), procmon)):
-                return os.path.join(path, procmon)
-        if file_exists(os.path.join(script_cwd, procmon)):
-            return os.path.join(script_cwd, procmon)
+            if file_exists(os.path.join(path.strip('"'), procmon_exe)):
+                return os.path.join(path, procmon_exe)
+        if file_exists(os.path.join(script_cwd, procmon_exe)):
+            return os.path.join(script_cwd, procmon_exe)
 
 
 def hash_file(fname):
@@ -689,11 +758,11 @@ def hash_file(fname):
     Results:
         hex hash value of file's contents as a string
     """
-    if hash_type == 'MD5':
+    if config['hash_type'] == 'MD5':
         return hashlib.md5(codecs.open(fname, 'rb').read()).hexdigest()
-    elif hash_type == 'SHA1':
+    elif config['hash_type'] == 'SHA1':
         return hashlib.sha1(codecs.open(fname, 'rb').read()).hexdigest()
-    elif hash_type == 'SHA256':
+    elif config['hash_type'] == 'SHA256':
         return hashlib.sha256(codecs.open(fname, 'rb').read()).hexdigest()
 
 
@@ -704,7 +773,7 @@ def get_session_name():
     Results:
         string value of a current timestamp to apply to log file names
     """
-    return datetime.now().strftime('%d_%b_%y__%H_%M_%S_%f')
+    return datetime.datetime.now().strftime('%d_%b_%y__%H_%M_%f')
 
 
 def protocol_replace(text):
@@ -741,8 +810,8 @@ def whitelist_scan(whitelist, data):
                 if re.search(bad, event, flags=re.IGNORECASE):
                     return True
             except re.error:
-                log_debug('[!] Error found while processing filters.\r\nFilter:\t%s\r\nEvent:\t%s' % (bad, event))
-                log_debug(format_exc())
+                log_debug('[!] Error found while processing filters.\r\nFilter:\t{}\r\nEvent:\t{}'.format(bad, event))
+                log_debug(traceback.format_exc())
                 return False
     return False
 
@@ -762,14 +831,14 @@ def process_pml_to_csv(procmonexe, pml_file, pmc_file, csv_file):
     global time_process
     time_convert_start = time.time()
 
-    log_debug('[*] Converting session to CSV: %s' % csv_file)
+    log_debug('[*] Converting session to CSV: {}'.format(csv_file))
     if not file_exists(pml_file):
-        print('[!] Error detected. PML file was not found: %s' % pml_file)
+        print('[!] Error detected. PML file was not found: {}'.format(pml_file))
         terminate_self(1)
-    cmdline = '"%s" /OpenLog "%s" /SaveApplyFilter /saveas "%s"' % (procmonexe, pml_file, csv_file)
+    cmdline = '"{}" /OpenLog "{}" /SaveApplyFilter /saveas "{}"'.format(procmonexe, pml_file, csv_file)
     if use_pmc and file_exists(pmc_file):
-        cmdline += ' /LoadConfig "%s"' % pmc_file
-    log_debug('[*] Running cmdline: %s' % cmdline)
+        cmdline += ' /LoadConfig "{}"'.format(pmc_file)
+    log_debug('[*] Running cmdline: {}'.format(cmdline))
     stdnull = subprocess.Popen(cmdline)
     stdnull.wait()
 
@@ -791,12 +860,12 @@ def launch_procmon_capture(procmonexe, pml_file, pmc_file):
     global time_exec
     time_exec = time.time()
 
-    cmdline = '"%s" /BackingFile "%s" /Quiet /Minimized' % (procmonexe, pml_file)
+    cmdline = '"{}" /BackingFile "{}" /Quiet /Minimized'.format(procmonexe, pml_file)
     if use_pmc and file_exists(pmc_file):
-        cmdline += ' /LoadConfig "%s"' % pmc_file
-    log_debug('[*] Running cmdline: %s' % cmdline)
+        cmdline += ' /LoadConfig "{}"'.format(pmc_file)
+    log_debug('[*] Running cmdline: {}'.format(cmdline))
     subprocess.Popen(cmdline)
-    sleep(3)
+    time.sleep(3)
 
 
 def terminate_procmon(procmonexe):
@@ -811,8 +880,8 @@ def terminate_procmon(procmonexe):
     global time_exec
     time_exec = time.time() - time_exec
 
-    cmdline = '"%s" /Terminate' % procmonexe
-    log_debug('[*] Running cmdline: %s' % cmdline)
+    cmdline = '"{}" /Terminate'.format(procmonexe)
+    log_debug('[*] Running cmdline: {}'.format(cmdline))
     stdnull = subprocess.Popen(cmdline)
     stdnull.wait()
 
@@ -832,35 +901,36 @@ def parse_csv(csv_file, report, timeline):
     net_output = list()
     error_output = list()
     remote_servers = list()
-    if yara_folder and has_yara:
-        yara_rules = yara_import_rules(yara_folder)
+    if config['yara_folder'] and has_yara:
+        yara_rules = yara_import_rules(config['yara_folder'])
     else:
         yara_rules = ''
 
-    log_debug('[*] Processing CSV: %s' % csv_file)
+    log_debug('[*] Processing CSV: {}'.format(csv_file))
 
     time_parse_csv_start = time.time()
 
-    # Use fileinput.input() now to read data line-by-line
-    # for original_line in fileinput.input(csv_file, openhook=fileinput.hook_encoded('iso-8859-1')):
-    for line_num, original_line in enumerate(io.open(csv_file, encoding='utf-8')):
+    csv_file_handle = open(csv_file, newline='', encoding='utf-8')
+    reader = csv.reader(csv_file_handle)
+    for original_line in reader:
         server = ''
-        if original_line[0] != '"':  # Ignore lines that begin with Tab.
+        field = original_line
+        # log_debug('[*] Parse line. Event: {}'.format(field[3])
+        # Standard Procmon CSV should be 9 distinct fields
+        if len(field) != 9:
             continue
-        line = original_line.strip(whitespace + '"')
-        field = line.strip().split('","')
-        # log_debug('[*] Parse line. Event: %s' % field[3])
+        date_stamp = field[0].split()[0].split('.')[0]
         try:
             if field[3] in ['Process Create'] and field[5] == 'SUCCESS':
                 cmdline = field[6].split('Command line: ')[1]
                 if not whitelist_scan(cmd_whitelist, field):
-                    if generalize_paths:
+                    if config['generalize_paths']:
                         cmdline = generalize_var(cmdline)
                     child_pid = field[6].split('PID: ')[1].split(',')[0]
-                    outputtext = '[CreateProcess] %s:%s > "%s"\t[Child PID: %s]' % (
+                    outputtext = '[CreateProcess] {}:{} > "{}"\t[Child PID: {}]'.format(
                         field[1], field[2], cmdline.replace('"', ''), child_pid)
-                    tl_text = '%s,Process,CreateProcess,%s,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
-                                                                        field[2], cmdline.replace('"', ''), child_pid)
+                    tl_text = '{},Process,CreateProcess,{},{},{},{}'.format(date_stamp, field[1], field[2],
+                                                                            cmdline.replace('"', ''), child_pid)
                     process_output.append(outputtext)
                     timeline.append(tl_text)
 
@@ -868,54 +938,56 @@ def parse_csv(csv_file, report, timeline):
                 if not whitelist_scan(file_whitelist, field):
                     path = field[4]
                     yara_hits = ''
-                    if yara_folder and yara_rules:
+                    if config['yara_folder'] and yara_rules:
                         yara_hits = yara_filescan(path, yara_rules)
                     if os.path.isdir(path):
-                        if generalize_paths:
+                        if config['generalize_paths']:
                             path = generalize_var(path)
-                        outputtext = '[CreateFolder] %s:%s > %s' % (field[1], field[2], path)
-                        tl_text = '%s,File,CreateFolder,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
-                                                                     field[2], path)
+                        outputtext = '[CreateFolder] {}:{} > {}'.format(field[1], field[2], path)
+                        tl_text = '{},File,CreateFolder,{},{},{}'.format(date_stamp, field[1],
+                                                                         field[2], path)
                         file_output.append(outputtext)
                         timeline.append(tl_text)
                     else:
                         try:
                             hashval = hash_file(path)
                             if hashval in hash_whitelist:
-                                log_debug('[_] Skipping hash: %s' % hashval)
+                                log_debug('[_] Skipping hash: {}'.format(hashval))
                                 continue
 
                             av_hits = ''
                             if use_virustotal and has_internet:
                                 av_hits = virustotal_query_hash(hashval)
 
-                            if generalize_paths:
+                            if config['generalize_paths']:
                                 path = generalize_var(path)
-                            outputtext = '[CreateFile] %s:%s > %s\t[%s: %s]%s%s' % (field[1], field[2], path, hash_type,
-                                                                                    hashval, yara_hits, av_hits)
-                            tl_text = '%s,File,CreateFile,%s,%s,%s,%s,%s,%s,%s' % (field[0].split()[0].split('.')[0],
-                                                                                   field[1], field[2], path,
-                                                                                   hash_type, hashval, yara_hits,
-                                                                                   av_hits)
+                            outputtext = '[CreateFile] {}:{} > {}\t[{}: {}]{}{}'.format(field[1], field[2], path,
+                                                                                        config['hash_type'], hashval,
+                                                                                        yara_hits, av_hits)
+                            tl_text = '{},File,CreateFile,{},{},{},{},{},{},{}'.format(date_stamp,
+                                                                                       field[1], field[2], path,
+                                                                                       config['hash_type'], hashval,
+                                                                                       yara_hits, av_hits)
                             file_output.append(outputtext)
                             timeline.append(tl_text)
                         except (IndexError, IOError):
-                            if generalize_paths:
+                            if config['generalize_paths']:
                                 path = generalize_var(path)
-                            outputtext = '[CreateFile] %s:%s > %s\t[File no longer exists]' % (field[1], field[2], path)
-                            tl_text = '%s,File,CreateFile,%s,%s,%s,N/A' % (field[0].split()[0].split('.')[0],
-                                                                           field[1], field[2], path)
+                            outputtext = '[CreateFile] {}:{} > {}\t[File no longer exists]'.format(field[1], field[2],
+                                                                                                   path)
+                            tl_text = '{},File,CreateFile,{},{},{},N/A'.format(date_stamp,
+                                                                               field[1], field[2], path)
                             file_output.append(outputtext)
                             timeline.append(tl_text)
 
             elif field[3] == 'SetDispositionInformationFile' and field[5] == 'SUCCESS':
                 if not whitelist_scan(file_whitelist, field):
                     path = field[4]
-                    if generalize_paths:
+                    if config['generalize_paths']:
                         path = generalize_var(path)
-                    outputtext = '[DeleteFile] %s:%s > %s' % (field[1], field[2], path)
-                    tl_text = '%s,File,DeleteFile,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
-                                                               field[2], path)
+                    outputtext = '[DeleteFile] {}:{} > {}'.format(field[1], field[2], path)
+                    tl_text = '{},File,DeleteFile,{},{},{}'.format(date_stamp, field[1],
+                                                                   field[2], path)
                     file_output.append(outputtext)
                     timeline.append(tl_text)
 
@@ -923,40 +995,41 @@ def parse_csv(csv_file, report, timeline):
                 if not whitelist_scan(file_whitelist, field):
                     from_file = field[4]
                     to_file = field[6].split('FileName: ')[1].strip('"')
-                    if generalize_paths:
+                    if config['generalize_paths']:
                         from_file = generalize_var(from_file)
                         to_file = generalize_var(to_file)
-                    outputtext = '[RenameFile] %s:%s > %s => %s' % (field[1], field[2], from_file, to_file)
-                    tl_text = '%s,File,RenameFile,%s,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
-                                                                  field[2], from_file, to_file)
+                    outputtext = '[RenameFile] {}:{} > {} => {}'.format(field[1], field[2], from_file, to_file)
+                    tl_text = '{},File,RenameFile,{},{},{},{}'.format(date_stamp, field[1],
+                                                                      field[2], from_file, to_file)
                     file_output.append(outputtext)
                     timeline.append(tl_text)
 
             elif field[3] == 'RegCreateKey' and field[5] == 'SUCCESS':
                 if not whitelist_scan(reg_whitelist, field):
-                    outputtext = '[RegCreateKey] %s:%s > %s' % (field[1], field[2], field[4])
+                    outputtext = '[RegCreateKey] {}:{} > {}'.format(field[1], field[2], field[4])
                     if outputtext not in reg_output:  # Ignore multiple CreateKeys. Only log the first.
-                        tl_text = '%s,Registry,RegCreateKey,%s,%s,%s' % (field[0].split()[0].split('.')[0],
-                                                                         field[1], field[2], field[4])
+                        tl_text = '{},Registry,RegCreateKey,{},{},{}'.format(date_stamp,
+                                                                             field[1], field[2], field[4])
                         reg_output.append(outputtext)
                         timeline.append(tl_text)
 
             elif field[3] == 'RegSetValue' and field[5] == 'SUCCESS':
                 if not whitelist_scan(reg_whitelist, field):
-                    reg_length = field[6].split('Length:')[1].split(',')[0].strip(whitespace + '"')
+                    reg_length = field[6].split('Length:')[1].split(',')[0].strip(string.whitespace + '"')
                     try:
                         if int(reg_length):
                             if 'Data:' in field[6]:
-                                data_field = '  =  %s' % field[6].split('Data:')[1].strip(whitespace + '"')
+                                data_field = '  =  {}'.format(field[6].split('Data:')[1].strip(string.whitespace + '"'))
                                 if len(data_field.split(' ')) == 16:
                                     data_field += ' ...'
                             elif 'Length:' in field[6]:
                                 data_field = ''
                             else:
                                 continue
-                            outputtext = '[RegSetValue] %s:%s > %s%s' % (field[1], field[2], field[4], data_field)
-                            tl_text = '%s,Registry,RegSetValue,%s,%s,%s,%s' % (field[0].split()[0].split('.')[0],
-                                                                               field[1], field[2], field[4], data_field)
+                            outputtext = '[RegSetValue] {}:{} > {}{}'.format(field[1], field[2], field[4], data_field)
+                            tl_text = '{},Registry,RegSetValue,{},{},{},{}'.format(date_stamp,
+                                                                                   field[1], field[2], field[4],
+                                                                                   data_field)
                             reg_output.append(outputtext)
                             timeline.append(tl_text)
 
@@ -966,18 +1039,18 @@ def parse_csv(csv_file, report, timeline):
             elif field[3] == 'RegDeleteValue':  # and field[5] == 'SUCCESS':
                 # SUCCESS is commented out to allows all attempted deletions, whether or not the value exists
                 if not whitelist_scan(reg_whitelist, field):
-                    outputtext = '[RegDeleteValue] %s:%s > %s' % (field[1], field[2], field[4])
-                    tl_text = '%s,Registry,RegDeleteValue,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
-                                                                       field[2], field[4])
+                    outputtext = '[RegDeleteValue] {}:{} > {}'.format(field[1], field[2], field[4])
+                    tl_text = '{},Registry,RegDeleteVal ue,{},{},{}'.format(date_stamp, field[1],
+                                                                            field[2], field[4])
                     reg_output.append(outputtext)
                     timeline.append(tl_text)
 
             elif field[3] == 'RegDeleteKey':  # and field[5] == 'SUCCESS':
                 # SUCCESS is commented out to allows all attempted deletions, whether or not the value exists
                 if not whitelist_scan(reg_whitelist, field):
-                    outputtext = '[RegDeleteKey] %s:%s > %s' % (field[1], field[2], field[4])
-                    tl_text = '%s,Registry,RegDeleteKey,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
-                                                                     field[2], field[4])
+                    outputtext = '[RegDeleteKey] {}:{} > {}'.format(field[1], field[2], field[4])
+                    tl_text = '{},Registry,RegDeleteKey,{},{},{}'.format(date_stamp, field[1],
+                                                                         field[2], field[4])
                     reg_output.append(outputtext)
                     timeline.append(tl_text)
 
@@ -986,49 +1059,49 @@ def parse_csv(csv_file, report, timeline):
                     server = field[4].split('-> ')[1]
                     # TODO: work on this later, once I can verify it better.
                     # if field[6] == 'Length: 20':
-                    #    output_line = '[DNS Query] %s:%s > %s' % (field[1], field[2], protocol_replace(server))
+                    #    output_line = '[DNS Query] {}:{} > {}'.format(field[1], field[2], protocol_replace(server))
                     # else:
-                    outputtext = '[UDP] %s:%s > %s' % (field[1], field[2], protocol_replace(server))
+                    outputtext = '[UDP] {}:{} > {}'.format(field[1], field[2], protocol_replace(server))
                     if outputtext not in net_output:
-                        tl_text = '%s,Network,UDP Send,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
-                                                                    field[2], protocol_replace(server))
+                        tl_text = '{},Network,UDP Send,{},{},{}'.format(date_stamp, field[1],
+                                                                        field[2], protocol_replace(server))
                         net_output.append(outputtext)
                         timeline.append(tl_text)
 
             elif field[3] == 'UDP Receive' and field[5] == 'SUCCESS':
                 if not whitelist_scan(net_whitelist, field):
                     server = field[4].split('-> ')[1]
-                    outputtext = '[UDP] %s > %s:%s' % (protocol_replace(server), field[1], field[2])
+                    outputtext = '[UDP] {} > {}:{}'.format(protocol_replace(server), field[1], field[2])
                     if outputtext not in net_output:
-                        tl_text = '%s,Network,UDP Receive,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
-                                                                    field[2])
+                        tl_text = '{},Network,UDP Receive,{},{}'.format(date_stamp, field[1],
+                                                                        field[2])
                         net_output.append(outputtext)
                         timeline.append(tl_text)
 
             elif field[3] == 'TCP Send' and field[5] == 'SUCCESS':
                 if not whitelist_scan(net_whitelist, field):
                     server = field[4].split('-> ')[1]
-                    outputtext = '[TCP] %s:%s > %s' % (field[1], field[2], protocol_replace(server))
+                    outputtext = '[TCP] {}:{} > {}'.format(field[1], field[2], protocol_replace(server))
                     if outputtext not in net_output:
-                        tl_text = '%s,Network,TCP Send,%s,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
-                                                                    field[2], protocol_replace(server))
+                        tl_text = '{},Network,TCP Send,{},{},{}'.format(date_stamp, field[1],
+                                                                        field[2], protocol_replace(server))
                         net_output.append(outputtext)
                         timeline.append(tl_text)
 
             elif field[3] == 'TCP Receive' and field[5] == 'SUCCESS':
                 if not whitelist_scan(net_whitelist, field):
                     server = field[4].split('-> ')[1]
-                    outputtext = '[TCP] %s > %s:%s' % (protocol_replace(server), field[1], field[2])
+                    outputtext = '[TCP] {} > {}:{}'.format(protocol_replace(server), field[1], field[2])
                     if outputtext not in net_output:
-                        tl_text = '%s,Network,TCP Receive,%s,%s' % (field[0].split()[0].split('.')[0], field[1],
-                                                                    field[2])
+                        tl_text = '{},Network,TCP Receive,{},{}'.format(date_stamp, field[1],
+                                                                        field[2])
                         net_output.append(outputtext)
                         timeline.append(tl_text)
 
         except IndexError:
-            log_debug(line)
-            log_debug(format_exc())
-            error_output.append(original_line.strip())
+            log_debug(original_line)
+            log_debug(traceback.format_exc())
+            error_output.append(original_line)
 
         # Enumerate unique remote hosts into their own section
         if server:
@@ -1039,12 +1112,12 @@ def parse_csv(csv_file, report, timeline):
 
     time_parse_csv_end = time.time()
 
-    report.append('-=] Sandbox Analysis Report generated by Noriben v%s' % __VERSION__)
+    report.append('-=] Sandbox Analysis Report generated by Noriben v{}'.format(__VERSION__))
     report.append('-=] Developed by Brian Baskin: brian @@ thebaskins.com  @bbaskin')
     report.append('-=] The latest release can be found at https://github.com/Rurik/Noriben')
     report.append('')
     if exe_cmdline:
-        report.append('-=] Analysis of command line: %s' % exe_cmdline)
+        report.append('-=] Analysis of command line: {}'.format(exe_cmdline))
 
     if time_exec:
         report.append('-=] Execution time: %0.2f seconds' % time_exec)
@@ -1057,53 +1130,53 @@ def parse_csv(csv_file, report, timeline):
 
     report.append('Processes Created:')
     report.append('==================')
-    log_debug('[*] Writing %d Process Events results to report' % len(process_output))
+    log_debug('[*] Writing %d Process Events results to report' % (len(process_output)))
     for event in process_output:
         report.append(event)
 
     report.append('')
     report.append('File Activity:')
     report.append('==================')
-    log_debug('[*] Writing %d Filesystem Events results to report' % len(file_output))
+    log_debug('[*] Writing %d Filesystem Events results to report' % (len(file_output)))
     for event in file_output:
         report.append(event)
 
     report.append('')
     report.append('Registry Activity:')
     report.append('==================')
-    log_debug('[*] Writing %d Registry Events results to report' % len(reg_output))
+    log_debug('[*] Writing %d Registry Events results to report' % (len(reg_output)))
     for event in reg_output:
         report.append(event)
 
     report.append('')
     report.append('Network Traffic:')
     report.append('==================')
-    log_debug('[*] Writing %d Network Events results to report' % len(net_output))
+    log_debug('[*] Writing %d Network Events results to report' % (len(net_output)))
     for event in net_output:
         report.append(event)
 
     report.append('')
     report.append('Unique Hosts:')
     report.append('==================')
-    log_debug('[*] Writing %d Remote Servers results to report' % len(remote_servers))
+    log_debug('[*] Writing %d Remote Servers results to report' % (len(remote_servers)))
     for server in sorted(remote_servers):
         report.append(protocol_replace(server).strip())
 
     if error_output:
         report.append('\r\n\r\n\r\n\r\n\r\n\r\nERRORS DETECTED')
         report.append('The following items could not be parsed correctly:')
-        log_debug('[*] Writing %d Output Errors results to report' % len(error_output))
+        log_debug('[*] Writing %d Output Errors results to report' % (len(error_output)))
         for error in error_output:
             report.append(error)
 
-    if debug and vt_dump:
+    if config['debug'] and vt_dump:
         vt_file = os.path.join(output_dir, os.path.splitext(csv_file)[0] + '.vt.json')
         log_debug('[*] Writing %d VirusTotal results to %s' % (len(vt_dump), vt_file))
         vt_out = open(vt_file, 'w')
         json.dump(vt_dump, vt_out)
         vt_out.close()
 
-    if debug and debug_messages:
+    if config['debug'] and debug_messages:
         debug_out = open(debug_file, 'a')
         for message in debug_messages:
             debug_out.write(message)
@@ -1117,26 +1190,24 @@ def main():
     """
     Main routine, parses arguments and calls other routines
     """
-    global generalize_paths
-    global timeout_seconds
-    global yara_folder
     global use_pmc
-    global debug
     global exe_cmdline
     global output_dir
     global script_cwd
-    global hash_type
     global debug_file
-    global headless
-    global troubleshoot
 
-    print('--===[ Noriben v%s' % __VERSION__)
-    print('--===[ @bbaskin')
+    print('\n--===[ Noriben v{}'.format(__VERSION__))
+    print('--===[ Brian Baskin [brian@thebaskins.com / @bbaskin]')
 
-    parser = ArgumentParser()
+    if sys.version_info < (3, 0):
+        print('[*] Support for Python 2 is no longer available. Please use Python 3.')
+        terminate_self(10)
+
+    parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--csv', help='Re-analyze an existing Noriben CSV file', required=False)
     parser.add_argument('-p', '--pml', help='Re-analyze an existing Noriben PML file', required=False)
     parser.add_argument('-f', '--filter', help='Specify alternate Procmon Filter PMC', required=False)
+    parser.add_argument('--config', help='Specify configuration file', required=False)
     parser.add_argument('--hash', help='Specify hash whitelist file', required=False)
     parser.add_argument('--hashtype', help='Specify hash type', required=False, choices=valid_hash_types)
     parser.add_argument('--headless', action='store_true', help='Do not open results on VM after processing',
@@ -1145,8 +1216,8 @@ def main():
     parser.add_argument('--output', help='Folder to store output files', required=False)
     parser.add_argument('--yara', help='Folder containing YARA rules', required=False)
     parser.add_argument('--generalize', dest='generalize_paths', default=False, action='store_true',
-                        help='Generalize file paths to their environment variables. Default: %s' % generalize_paths,
-                        required=False)
+                        help='Generalize file paths to environment variables.\n' +
+                             'Default: {}'.format(config['generalize_paths']), required=False)
     parser.add_argument('--cmd', help='Command line to execute (in quotes)', required=False)
     parser.add_argument('-d', '--debug', action='store_true', help='Enable debugging', required=False)
     parser.add_argument('--troubleshoot', action='store_true', help='Pause before exiting for troubleshooting',
@@ -1156,22 +1227,29 @@ def main():
     timeline = list()
     script_cwd = os.path.dirname(os.path.abspath(__file__))
 
+    # Load config file first, then use additional args to override those values if necessary
+    if args.config:
+        if file_exists(args.config):
+            read_config(args.config)
+        else:
+            print('[!] Config file {} not found. Continuing with default values.'.format(args.config))
+
     if args.debug:
-        debug = True
+        config['debug'] = True
 
     if args.troubleshoot:
-        troubleshoot = True
+        config['troubleshoot'] = True
 
     # Check to see if string generalization is wanted
     if args.generalize_paths:
-        generalize_paths = True
+        config['generalize_paths'] = True
         generalize_vars_init()
 
     if args.headless:
-        headless = True
+        config['headless'] = True
 
     if args.hashtype:
-        hash_type = args.hashtype
+        config['hash_type'] = args.hashtype
 
     # Load hash whitelist and append to global white list
     if args.hash:
@@ -1192,22 +1270,22 @@ def main():
         if not file_exists(pmc_file):
             if not file_exists(pmc_file_cwd):
                 use_pmc = False
-                print('[!] Filter file %s not found. Continuing without filters.' % pmc_file)
+                print('[!] Filter file {} not found. Continuing without filters.'.format(pmc_file))
             else:
                 use_pmc = True
                 pmc_file = pmc_file_cwd
-                print('[*] Using filter file: %s' % pmc_file)
+                print('[*] Using filter file: {}'.format(pmc_file))
         else:
             use_pmc = True
-            print('[*] Using filter file: %s' % pmc_file)
-            log_debug('[*] Using filter file: %s' % pmc_file)
+            print('[*] Using filter file: {}'.format(pmc_file))
+            log_debug('[*] Using filter file: {}'.format(pmc_file))
     else:
         use_pmc = False
 
     # Find a valid procmon executable.
     procmonexe = check_procmon()
     if not procmonexe:
-        print('[!] Unable to find Procmon (%s) in path.' % procmon)
+        print('[!] Unable to find Procmon ({}) in path.'.format(config['procmon']))
         terminate_self(2)
 
     # Check to see if specified output folder exists. If not, make it.
@@ -1218,30 +1296,26 @@ def main():
             try:
                 os.mkdir(output_dir)
             except WindowsError:
-                print('[!] Fatal: Unable to create output directory: %s' % output_dir)
+                print('[!] Fatal: Unable to create output directory: {}'.format(output_dir))
                 terminate_self(3)
     else:
         output_dir = ''
-    log_debug('[*] Log output directory: %s' % output_dir)
+    log_debug('[*] Log output directory: {}'.format(output_dir))
 
     # Check to see if specified YARA folder exists
-    use_yara = False
-    if args.yara or yara_folder:
-        if not yara_folder:
-            yara_folder = args.yara
-        if not yara_folder[-1] == '\\':
-            yara_folder += '\\'
-        if not os.path.exists(yara_folder):
-            print('[!] YARA rule path not found: %s' % yara_folder)
-            yara_folder = ''
-            use_yara = False
-        else:
-            use_yara = True
-    log_debug('[*] YARA directory: %s' % yara_folder)
+    if args.yara or config['yara_folder']:
+        if not config['yara_folder']:
+            config['yara_folder'] = args.yara
+        if not config['yara_folder'][-1] == '\\':
+            config['yara_folder'] += '\\'
+        if not os.path.exists(config['yara_folder']):
+            print('[!] YARA rule path not found: {}'.format(config['yara_folder']))
+            config['yara_folder'] = ''
+    log_debug('[*] YARA directory: {}'.format(config['yara_folder']))
 
     # Print feature list
-    print('[+] Features: (Debug: %s\tYARA: %s\tVirusTotal: %s)' % (debug, use_yara, use_virustotal))
-    log_debug('[+] Features: (Debug: %s\tYARA: %s\tVirusTotal: %s)' % (debug, use_yara, use_virustotal))
+    log_debug(
+        '[+] Features: (Debug: {}\tInternet: {}\tVirusTotal: {})'.format(config['debug'], has_internet, use_virustotal))
 
     # Check if user-specified to rescan a PML
     if args.pml:
@@ -1251,27 +1325,30 @@ def main():
                 output_dir = os.path.dirname(args.pml)
             pml_basename = os.path.splitext(os.path.basename(args.pml))[0]
             csv_file = os.path.join(output_dir, pml_basename + '.csv')
-            txt_file = os.path.join(output_dir, pml_basename + '.' + txt_extension)
+            txt_file = os.path.join(output_dir, pml_basename + '.' + config['txt_extension'])
             debug_file = os.path.join(output_dir, pml_basename + '.log')
             timeline_file = os.path.join(output_dir, pml_basename + '_timeline.csv')
 
             process_pml_to_csv(procmonexe, args.pml, pmc_file, csv_file)
             if not file_exists(csv_file):
-                print('[!] Error detected. Could not create CSV file: %s' % csv_file)
+                print('[!] Error detected. Could not create CSV file: {}'.format(csv_file))
                 terminate_self(5)
 
             parse_csv(csv_file, report, timeline)
 
-            print('[*] Saving report to: %s' % txt_file)
+            print('[*] Saving report to: {}'.format(txt_file))
             codecs.open(txt_file, 'w', 'utf-8').write('\r\n'.join(report))
 
-            print('[*] Saving timeline to: %s' % timeline_file)
-            codecs.open(timeline_file, 'w', 'utf-8').write('\r\n'.join(timeline))
+            print('[*] Saving timeline to: {}'.format(timeline_file))
+            # codecs.open(timeline_file, 'w', 'utf-8').write('\r\n'.join(timeline))
+            with open(timeline_file, newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerows(timeline)
 
             open_file_with_assoc(txt_file)
             terminate_self(0)
         else:
-            print('[!] PML file does not exist: %s\n' % args.pml)
+            print('[!] PML file does not exist: {}\n'.format(args.pml))
             parser.print_usage()
             terminate_self(1)
 
@@ -1282,16 +1359,16 @@ def main():
             if not args.output:
                 output_dir = os.path.dirname(args.csv)
             csv_basename = os.path.splitext(os.path.basename(args.csv))[0]
-            txt_file = os.path.join(output_dir, csv_basename + '.' + txt_extension)
+            txt_file = os.path.join(output_dir, csv_basename + '.' + config['txt_extension'])
             debug_file = os.path.join(output_dir, csv_basename + '.log')
             timeline_file = os.path.join(output_dir, csv_basename + '_timeline.csv')
 
             parse_csv(args.csv, report, timeline)
 
-            print('[*] Saving report to: %s' % txt_file)
+            print('[*] Saving report to: {}'.format(txt_file))
             codecs.open(txt_file, 'w', 'utf-8').write('\r\n'.join(report))
 
-            print('[*] Saving timeline to: %s' % timeline_file)
+            print('[*] Saving timeline to: {}'.format(timeline_file))
             codecs.open(timeline_file, 'w', 'utf-8').write('\r\n'.join(timeline))
 
             open_file_with_assoc(txt_file)
@@ -1301,7 +1378,7 @@ def main():
             terminate_self(10)
 
     if args.timeout:
-        timeout_seconds = args.timeout
+        config['timeout_seconds'] = args.timeout
 
     if args.cmd:
         exe_cmdline = args.cmd
@@ -1309,25 +1386,25 @@ def main():
         exe_cmdline = ''
 
     # Start main data collection and processing
-    print('[*] Using procmon EXE: %s' % procmonexe)
+    print('[*] Using procmon EXE: {}'.format(procmonexe))
     session_id = get_session_name()
-    pml_file = os.path.join(output_dir, 'Noriben_%s.pml' % session_id)
-    csv_file = os.path.join(output_dir, 'Noriben_%s.csv' % session_id)
-    txt_file = os.path.join(output_dir, 'Noriben_%s.%s' % (session_id, txt_extension))
-    debug_file = os.path.join(output_dir, 'Noriben_%s.log' % session_id)
+    pml_file = os.path.join(output_dir, 'Noriben_{}.pml'.format(session_id))
+    csv_file = os.path.join(output_dir, 'Noriben_{}.csv'.format(session_id))
+    txt_file = os.path.join(output_dir, 'Noriben_{}.{}'.format(session_id, config['txt_extension']))
+    debug_file = os.path.join(output_dir, 'Noriben_{}.log'.format(session_id))
 
-    timeline_file = os.path.join(output_dir, 'Noriben_%s_timeline.csv' % session_id)
-    print('[*] Procmon session saved to: %s' % pml_file)
+    timeline_file = os.path.join(output_dir, 'Noriben_{}_timeline.csv'.format(session_id))
+    print('[*] Procmon session saved to: {}'.format(pml_file))
 
     if exe_cmdline and not file_exists(exe_cmdline):
-        print('[!] Error: Specified malware executable does not exist: %s' % exe_cmdline)
+        print('[!] Error: Specified malware executable does not exist: {}'.format(exe_cmdline))
         terminate_self(6)
 
     print('[*] Launching Procmon ...')
     launch_procmon_capture(procmonexe, pml_file, pmc_file)
 
     if exe_cmdline:
-        print('[*] Launching command line: %s' % exe_cmdline)
+        print('[*] Launching command line: {}'.format(exe_cmdline))
         try:
             subprocess.Popen(exe_cmdline)
         except WindowsError:  # Occurs if VMWare bug removes Owner from file
@@ -1339,15 +1416,15 @@ def main():
     else:
         print('[*] Procmon is running. Run your executable now.')
 
-    if timeout_seconds:
-        print('[*] Running for %d seconds. Press Ctrl-C to stop logging early.' % timeout_seconds)
-        # Print a small progress indicator, for those REALLY long sleeps.
+    if config['timeout_seconds']:
+        print('[*] Running for %d seconds. Press Ctrl-C to stop logging early.' % (config['timeout_seconds']))
+        # Print a small progress indicator, for those REALLY long time.sleeps.
         try:
-            for i in range(timeout_seconds):
-                progress = (100 / timeout_seconds) * i
+            for i in range(config['timeout_seconds']):
+                progress = (100 / config['timeout_seconds']) * i
                 sys.stdout.write('\r%d%% complete' % progress)
                 sys.stdout.flush()
-                sleep(1)
+                time.sleep(1)
         except KeyboardInterrupt:
             pass
 
@@ -1355,7 +1432,7 @@ def main():
         print('[*] When runtime is complete, press CTRL+C to stop logging.')
         try:
             while True:
-                sleep(100)
+                time.sleep(100)
         except KeyboardInterrupt:
             pass
 
@@ -1370,15 +1447,15 @@ def main():
     # PML created, now convert it to a CSV for parsing
     process_pml_to_csv(procmonexe, pml_file, pmc_file, csv_file)
     if not file_exists(csv_file):
-        print('[!] Error detected. Could not create CSV file: %s' % csv_file)
+        print('[!] Error detected. Could not create CSV file: {}'.format(csv_file))
         terminate_self(7)
 
     # Process CSV file, results in 'report' and 'timeline' output lists
     parse_csv(csv_file, report, timeline)
-    print('[*] Saving report to: %s' % txt_file)
+    print('[*] Saving report to: {}'.format(txt_file))
     codecs.open(txt_file, 'w', 'utf-8').write('\r\n'.join(report))
 
-    print('[*] Saving timeline to: %s' % timeline_file)
+    print('[*] Saving timeline to: {}'.format(timeline_file))
     codecs.open(timeline_file, 'w', 'utf-8').write('\r\n'.join(timeline))
 
     open_file_with_assoc(txt_file)
