@@ -79,14 +79,16 @@
 # Version 1.7.5 - 10 Mar 18 -
 #       Another bug fix related to global use of renamed procmon binary. Edge case fix
 # Version 1.7.6 - 12 Apr 18 -
-#       Some auto PEP-8 formatting. Fixed bug where specific output_dir wouldn't add
+#       Some auto PEP-8 formatting. Fixed bug where specific output dir wouldn't add
 #       to files when specifying a PML or CSV file. Added configuration of new txt
 #       extension in cases where ransomware was encrypting files. CSV, however, cannot
 #       be changed due to limitations in ProcMon
 # Version 1.8.0 - 9 Jun 18
 #       Really, truly, dropping Python 2 support now. Added --config file option to load
 #       global variables from external files. Now uses CSV library. Code cleanup.
-
+# Version 1.8.1 - 14 Jun 18
+#       Added additional config options, such as output_folder. Added global_whitelist_append
+#       to allow additional filters
 #
 # TODO:
 # * Upload files directly to VirusTotal (2.X feature?)
@@ -99,8 +101,8 @@ import ast
 import codecs
 import csv
 import datetime
+import glob
 import hashlib
-# import io
 import os
 import re
 import subprocess
@@ -146,8 +148,11 @@ config = {
     'virustotal_api_key': '',  # Set API here
     'yara_folder': '',
     'hash_type': 'SHA256',
-    'txt_extension': 'txt'
+    'txt_extension': 'txt',
+    'output_folder': '',
+    'global_whitelist_append': ''
 }
+
 
 if os.path.exists('virustotal.api'):  # Or put it in here
     config['virustotal_api_key'] = open('virustotal.api', 'r').readline().strip()
@@ -191,7 +196,7 @@ cmd_whitelist = [r'%SystemRoot%\system32\wbem\wmiprvse.exe',
                  r'/Processid:{AB8902B4-09CA-4BB6-B78D-A8F59079A8D5}',  # Thumbnail server
                  r'/Processid:{F9717507-6651-4EDB-BFF7-AE615179BCCF}',  # DCOM error
                  r'\??\%WinDir%\system32\conhost.exe .*-.*-.*-.*'  # Experimental
-                 ] + global_whitelist
+                 ]
 
 file_whitelist = [r'Desired Access: Execute/Traverse',
                   r'Desired Access: Synchronize',
@@ -238,7 +243,7 @@ file_whitelist = [r'Desired Access: Execute/Traverse',
                   r'MAILSLOT\NET\NETLOGON',
                   r'Windows\Temporary Internet Files\counters.dat',
                   r'Program Files.*\confer\*'
-                  ] + global_whitelist
+                  ]
 
 reg_whitelist = [r'CaptureProcessMonitor',
                  r'consent.exe',
@@ -352,13 +357,13 @@ reg_whitelist = [r'CaptureProcessMonitor',
                  r'UserAssist\{5E6AB780-7743-11CF-A12B-00AA004AE837}',
                  r'UserAssist\{75048700-EF1F-11D0-9888-006097DEACF9}',
                  r'UserAssist\{CEBFF5CD-ACE2-4F4F-9178-9926F41749EA}'
-                 ] + global_whitelist
+                 ]
 
 net_whitelist = [r'hasplms.exe'  # Hasp dongle beacons
                  # r'192.168.2.',                     # Example for blocking net ranges
                  # r'Verizon_router.home']            # Example for blocking local domains
                  # r' -> .*\..*\..*\..*:1900
-                 ] + global_whitelist
+                 ]
 
 hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89',  # WinXP ntdll.dll
                   r'b60dddd2d63ce41cb8c487fcfbb6419e',  # iexplore.exe 8.0
@@ -372,7 +377,7 @@ hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89',  # WinXP ntdll.dll
                   r'0da85218e92526972a821587e6a8bf8f']  # imm32.dll
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '1.8.0'
+__VERSION__ = '1.8.1'
 path_general_list = []
 virustotal_upload = True if config['virustotal_api_key'] else False  # TODO
 use_virustotal = True if config['virustotal_api_key'] and has_internet else False
@@ -381,7 +386,6 @@ vt_results = {}
 vt_dump = list()
 debug_messages = list()
 exe_cmdline = ''
-output_dir = ''
 time_exec = 0
 time_process = 0
 script_cwd = ''
@@ -408,11 +412,27 @@ def get_error(code):
     return 'Unexpected Error'
 
 
+def read_global_append(append_filename):
+    """
+    Read additional global values from a specific set of filenames.
+
+    Arguments:
+        append_filename: Wildcard-supported file(s) from which to read filters
+    Result:
+        none
+    """
+    global global_whitelist
+
+    for filename in glob.iglob(append_filename, recursive=True):
+        with codecs.open(filename, 'r', encoding='utf-8') as f:
+            for line in f:
+                if not line[0] == '#':
+                    global_whitelist.append(line.strip())
+
+
 def read_config(config_filename):
     """
     Parse an external configuration file.
-    Eventually, this needs to be rewritten completely, and have all config
-    values in a global dictionary. For now, it's an ugly check per value.
 
     Arguments:
         config_filename: String of filename, predetermined if exists
@@ -685,7 +705,7 @@ def yara_filescan(file_path, rules):
         return ''
     if os.path.isdir(file_path):
         return ''
-    
+
     try:
         matches = rules.match(file_path)
     except yara.Error:  # If can't open file
@@ -804,7 +824,7 @@ def whitelist_scan(whitelist, data):
         boolean value of if item exists in whitelist
     """
     for event in data:
-        for bad in whitelist:
+        for bad in whitelist + global_whitelist:
             bad = os.path.expandvars(bad).replace('\\', '\\\\')
             try:
                 if re.search(bad, event, flags=re.IGNORECASE):
@@ -1170,7 +1190,7 @@ def parse_csv(csv_file, report, timeline):
             report.append(error)
 
     if config['debug'] and vt_dump:
-        vt_file = os.path.join(output_dir, os.path.splitext(csv_file)[0] + '.vt.json')
+        vt_file = os.path.join(config['output_folder'], os.path.splitext(csv_file)[0] + '.vt.json')
         log_debug('[*] Writing %d VirusTotal results to %s' % (len(vt_dump), vt_file))
         vt_out = open(vt_file, 'w')
         json.dump(vt_dump, vt_out)
@@ -1192,7 +1212,6 @@ def main():
     """
     global use_pmc
     global exe_cmdline
-    global output_dir
     global script_cwd
     global debug_file
 
@@ -1222,6 +1241,7 @@ def main():
     parser.add_argument('-d', '--debug', action='store_true', help='Enable debugging', required=False)
     parser.add_argument('--troubleshoot', action='store_true', help='Pause before exiting for troubleshooting',
                         required=False)
+    parser.add_argument('--append', help='Specify external filter files (Wildcard supported)', required=False)
     args = parser.parse_args()
     report = list()
     timeline = list()
@@ -1291,16 +1311,14 @@ def main():
     # Check to see if specified output folder exists. If not, make it.
     # This only works one path deep. In future, may make it recursive.
     if args.output:
-        output_dir = args.output
-        if not os.path.exists(output_dir):
+        config['output_folder'] = args.output
+        if not os.path.exists(config['output_folder']):
             try:
-                os.mkdir(output_dir)
+                os.mkdir(config['output_folder'])
             except WindowsError:
-                print('[!] Fatal: Unable to create output directory: {}'.format(output_dir))
+                print('[!] Fatal: Unable to create output directory: {}'.format(config['output_folder']))
                 terminate_self(3)
-    else:
-        output_dir = ''
-    log_debug('[*] Log output directory: {}'.format(output_dir))
+    log_debug('[*] Log output directory: {}'.format(config['output_folder']))
 
     # Check to see if specified YARA folder exists
     if args.yara or config['yara_folder']:
@@ -1313,6 +1331,9 @@ def main():
             config['yara_folder'] = ''
     log_debug('[*] YARA directory: {}'.format(config['yara_folder']))
 
+    if args.append:
+        read_global_append(args.append)
+
     # Print feature list
     log_debug(
         '[+] Features: (Debug: {}\tInternet: {}\tVirusTotal: {})'.format(config['debug'], has_internet, use_virustotal))
@@ -1322,12 +1343,12 @@ def main():
         if file_exists(args.pml):
             # Reparse an existing PML
             if not args.output:
-                output_dir = os.path.dirname(args.pml)
+                config['output_folder'] = os.path.dirname(args.pml)
             pml_basename = os.path.splitext(os.path.basename(args.pml))[0]
-            csv_file = os.path.join(output_dir, pml_basename + '.csv')
-            txt_file = os.path.join(output_dir, pml_basename + '.' + config['txt_extension'])
-            debug_file = os.path.join(output_dir, pml_basename + '.log')
-            timeline_file = os.path.join(output_dir, pml_basename + '_timeline.csv')
+            csv_file = os.path.join(config['output_folder'], pml_basename + '.csv')
+            txt_file = os.path.join(config['output_folder'], pml_basename + '.' + config['txt_extension'])
+            debug_file = os.path.join(config['output_folder'], pml_basename + '.log')
+            timeline_file = os.path.join(config['output_folder'], pml_basename + '_timeline.csv')
 
             process_pml_to_csv(procmonexe, args.pml, pmc_file, csv_file)
             if not file_exists(csv_file):
@@ -1357,11 +1378,11 @@ def main():
         if file_exists(args.csv):
             # Reparse an existing CSV
             if not args.output:
-                output_dir = os.path.dirname(args.csv)
+                config['output_folder'] = os.path.dirname(args.csv)
             csv_basename = os.path.splitext(os.path.basename(args.csv))[0]
-            txt_file = os.path.join(output_dir, csv_basename + '.' + config['txt_extension'])
-            debug_file = os.path.join(output_dir, csv_basename + '.log')
-            timeline_file = os.path.join(output_dir, csv_basename + '_timeline.csv')
+            txt_file = os.path.join(config['output_folder'], csv_basename + '.' + config['txt_extension'])
+            debug_file = os.path.join(config['output_folder'], csv_basename + '.log')
+            timeline_file = os.path.join(config['output_folder'], csv_basename + '_timeline.csv')
 
             parse_csv(args.csv, report, timeline)
 
@@ -1388,12 +1409,12 @@ def main():
     # Start main data collection and processing
     print('[*] Using procmon EXE: {}'.format(procmonexe))
     session_id = get_session_name()
-    pml_file = os.path.join(output_dir, 'Noriben_{}.pml'.format(session_id))
-    csv_file = os.path.join(output_dir, 'Noriben_{}.csv'.format(session_id))
-    txt_file = os.path.join(output_dir, 'Noriben_{}.{}'.format(session_id, config['txt_extension']))
-    debug_file = os.path.join(output_dir, 'Noriben_{}.log'.format(session_id))
+    pml_file = os.path.join(config['output_folder'], 'Noriben_{}.pml'.format(session_id))
+    csv_file = os.path.join(config['output_folder'], 'Noriben_{}.csv'.format(session_id))
+    txt_file = os.path.join(config['output_folder'], 'Noriben_{}.{}'.format(session_id, config['txt_extension']))
+    debug_file = os.path.join(config['output_folder'], 'Noriben_{}.log'.format(session_id))
 
-    timeline_file = os.path.join(output_dir, 'Noriben_{}_timeline.csv'.format(session_id))
+    timeline_file = os.path.join(config['output_folder'], 'Noriben_{}_timeline.csv'.format(session_id))
     print('[*] Procmon session saved to: {}'.format(pml_file))
 
     if exe_cmdline and not file_exists(exe_cmdline):
