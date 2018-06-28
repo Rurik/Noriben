@@ -89,6 +89,9 @@
 # Version 1.8.1 - 14 Jun 18
 #       Added additional config options, such as output_folder. Added global_whitelist_append
 #       to allow additional filters
+# Version 1.8.2 - 28 Jun 18
+#       Fixed minor bug that would crash upon writing out CSV.
+
 #
 # TODO:
 # * Upload files directly to VirusTotal (2.X feature?)
@@ -377,7 +380,7 @@ hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89',  # WinXP ntdll.dll
                   r'0da85218e92526972a821587e6a8bf8f']  # imm32.dll
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '1.8.1'
+__VERSION__ = '1.8.2'
 path_general_list = []
 virustotal_upload = True if config['virustotal_api_key'] else False  # TODO
 use_virustotal = True if config['virustotal_api_key'] and has_internet else False
@@ -1362,7 +1365,7 @@ def main():
 
             print('[*] Saving timeline to: {}'.format(timeline_file))
             # codecs.open(timeline_file, 'w', 'utf-8').write('\r\n'.join(timeline))
-            with open(timeline_file, newline='', encoding='utf-8') as f:
+            with open(timeline_file, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerows(timeline)
 
