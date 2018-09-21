@@ -2,6 +2,8 @@
 # V 1.0 - 3 Apr 17
 # V 1.1 - 5 Jun 17
 # V 1.1.1 - 8 Jan 18
+# V 1.2 - 14 Jun 18
+# V 1.2.1 - 12 Sep 18 - Bug fix to allow for snapshots with spaces in them.
 #
 # Responsible for:
 # * Copying malware into a known VM
@@ -101,7 +103,7 @@ def run_file(args, magic_result, malware_file):
     cmd_base = '"{}" -T ws -gu {} -gp {} runProgramInGuest "{}" {} -interactive'.format(VMRUN, VM_USER, VM_PASS, VMX,
                                                                                         active)
     if not args.norevert:
-        cmd = '"{}" -T ws revertToSnapshot "{}" {}'.format(VMRUN, VMX, VM_SNAPSHOT)
+        cmd = '"{}" -T ws revertToSnapshot "{}" "{}"'.format(VMRUN, VMX, VM_SNAPSHOT)
         return_code = execute(cmd)
         if return_code:
             print('[!] Error: Possible unknown snapshot: {}'.format(VM_SNAPSHOT))
@@ -309,6 +311,8 @@ def main():
     parser.add_argument('--nonoriben', action='store_true', help='Do not run Noriben in guest, just malware',
                         required=False)  # Do not run Noriben script
     parser.add_argument('--os', help='Specify Windows or Mac for that specific vmrun path', required=False)
+    parser.add_argument('--config', help='Optional runtime configuration file', required=False)
+
     parser.add_argument('--defense', action='store_true', help='Extract Carbon Black Defense log to host',
                         required=False)  # Particular to Carbon Black Defense. Use as example of adding your own files
 

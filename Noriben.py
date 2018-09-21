@@ -403,7 +403,7 @@ noriben_errors = {0: 'Normal exit',
                   4: 'Windows is refusing execution based upon permissions',
                   5: 'Could not create CSV',
                   6: 'Could not find malware file',
-                  7: 'Error creatign CSV',
+                  7: 'Error creating CSV',
                   8: 'Error creating PML',
                   9: 'Unknown error',
                   10: 'Invalid arguments given'}
