@@ -87,10 +87,13 @@
 #       Really, truly, dropping Python 2 support now. Added --config file option to load
 #       global variables from external files. Now uses CSV library. Code cleanup.
 # Version 1.8.1 - 14 Jun 18
-#       Added additional config options, such as output_folder. Added global_whitelist_append
-#       to allow additional filters
+#       Added additional config options, such as output_folder. Added value
+#       global_whitelist_append to allow additional filters
 # Version 1.8.2 - 28 Jun 18
 #       Fixed minor bug that would crash upon writing out CSV.
+# Version 1.8.3 - 26 Nov 18
+#       Fixed minor bugs in reading hash files and in sleeping between VirusTotal queries
+
 
 #
 # TODO:
@@ -380,7 +383,7 @@ hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89',  # WinXP ntdll.dll
                   r'0da85218e92526972a821587e6a8bf8f']  # imm32.dll
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '1.8.2'
+__VERSION__ = '1.8.3'
 path_general_list = []
 virustotal_upload = True if config['virustotal_api_key'] else False  # TODO
 use_virustotal = True if config['virustotal_api_key'] and has_internet else False
@@ -567,7 +570,7 @@ def read_hash_file(hash_filename):
     hash_file_handle = open(hash_filename, newline='', encoding='utf-8')
     reader = csv.reader(hash_file_handle)
     for hash_line in reader:
-        hashval = hash_line.split()[0]
+        hashval = hash_line[0]
         try:
             if int(hashval, 16) and (len(hashval) == 32 or len(hashval) == 40 or len(hashval) == 64):
                 hash_whitelist.append(hashval)
@@ -610,7 +613,7 @@ def virustotal_query_hash(hashval):
 
     if http_response.status_code == 204:
         print('[!] VirusTotal Rate Limit Exceeded. Sleeping for 60 seconds.')
-        time.time.sleep(60)
+        time.sleep(60)
         return virustotal_query_hash(hashval)
     else:
         try:
