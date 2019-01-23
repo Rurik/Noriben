@@ -1,6 +1,10 @@
 ## Noriben Malware Analysis Sandbox
 [![Black Hat Arsenal](https://www.toolswatch.org/badges/arsenal/2015.svg)](http://www.toolswatch.org/2015/06/black-hat-arsenal-usa-2015-speakers-lineup/)
 
+
+>Have a question or problem please [open an issue](https://github.com/Rurik/Noriben/issues).
+
+
 <pre>
 Contact Information:
 @bbaskin on Twitter

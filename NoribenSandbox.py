@@ -12,6 +12,8 @@
 #
 # Ensure you set the environment variables below to match your system. I've left defaults to help.
 # This is definitely a work in progress. However, efforts made to make it clear per PyCharm code inspection.
+#
+# @todo add config settings to NoribenSandboxConfig
 
 import argparse
 import io
@@ -32,17 +34,17 @@ VMRUN = vmrun_os['windows']
 VM_SNAPSHOT = 'YourVMSnapshotNameHere'
 VM_USER = 'Admin'
 VM_PASS = 'password'
-noriben_path = 'C:\\\\Users\\\\{}\\\\Desktop'.format(VM_USER)
-guest_noriben_path = '{}\\\\Noriben.py'.format(noriben_path)
-procmon_config_path = '{}\\\\ProcmonConfiguration.pmc'.format(noriben_path)
+noriben_path = 'C:\\Users\\{}\\Desktop'.format(VM_USER)
+guest_noriben_path = '{}\\Noriben.py'.format(noriben_path)
+procmon_config_path = '{}\\ProcmonConfiguration.pmc'.format(noriben_path)
 report_path_structure = '{}/{}_NoribenReport.zip'  # (host_malware_path, host_malware_name_base)
 host_screenshot_path_structure = '{}/{}.png'  # (host_malware_path, host_malware_name_base)
-guest_log_path = 'C:\\\\Noriben_Logs'
-guest_zip_path = 'C:\\\\Program Files\\\\VMware\\\\VMware Tools\\\\zip.exe'
-guest_temp_zip = 'C:\\\\NoribenReports.zip'
-guest_python_path = 'C:\\\\Python27\\\\python.exe'
+guest_log_path = 'C:\\Noriben_Logs'
+guest_zip_path = 'C:\\Program Files\\VMware\\VMware Tools\\zip.exe'
+guest_temp_zip = 'C:\\NoribenReports.zip'
+guest_python_path = 'C:\\Python27\\python.exe'
 host_noriben_path = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), 'Noriben.py')
-guest_malware_path = 'C:\\\\Malware\\\\malware_'
+guest_malware_path = 'C:\\Malware\\malware_'
 error_tolerance = 5
 dontrun = False
 
@@ -145,7 +147,7 @@ def run_file(args, magic_result, malware_file):
     time.sleep(5)
 
     if args.raw:
-        cmd = '{} C:\\\\windows\\\\system32\\\\cmd.exe "/c del {}"'.format(cmd_base, procmon_config_path)
+        cmd = '{} C:\\windows\\system32\\cmd.exe "/c del {}"'.format(cmd_base, procmon_config_path)
         return_code = execute(cmd)
         if return_code:
             print('[!] Error trying to execute command in guest. Error {}: {}'.format(hex(return_code),
@@ -174,7 +176,7 @@ def run_file(args, magic_result, malware_file):
             run_script(args, cmd_base)
 
         zip_failed = False
-        cmd = '{} "{}" -j {} "{}\\\\*.*"'.format(cmd_base, guest_zip_path, guest_temp_zip, guest_log_path)
+        cmd = '{} "{}" -j {} "{}\\*.*"'.format(cmd_base, guest_zip_path, guest_temp_zip, guest_log_path)
         return_code = execute(cmd)
         if return_code:
             print('[!] Error trying to zip report archive. Error {}: {}'.format(hex(return_code),
@@ -182,7 +184,7 @@ def run_file(args, magic_result, malware_file):
             zip_failed = True
 
         if args.defense and not zip_failed:
-            cb_defense_file = "C:\\\\Program Files\\\\Confer\\\\confer.log"
+            cb_defense_file = "C:\\Program Files\\Confer\\confer.log"
             # Get Carbon Black Defense log. This is an example if you want to include additional files.
             cmd = '{} "{}" -j {} "{}"'.format(cmd_base, guest_zip_path, guest_temp_zip, cb_defense_file)
             return_code = execute(cmd)
@@ -258,7 +260,7 @@ def copy_file_to_zip(cmd_base, filename):
         error_count += 1
         return return_code
 
-    cmd = '{} C:\\\\windows\\\\system32\\\\xcopy.exe {} {}'.format(cmd_base, filename, guest_log_path)
+    cmd = '{} C:\\windows\\system32\\xcopy.exe {} {}'.format(cmd_base, filename, guest_log_path)
     return_code = execute(cmd)
     if return_code:
         print(('[!] Error trying to copy file to log folder. Continuing. '
