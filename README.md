@@ -8,12 +8,14 @@ brian _at_ thebaskins _dot_ com
 </pre>
 
 
-Noriben is a Python-based script that works in conjunction with Sysinternals Procmon to automatically collect, analyze, and report on runtime indicators of malware. In a nutshell, it allows you to run your malware, hit a keypress, and get a simple text report of the sample's activities.
+Noriben is a Python-based script that works in conjunction with Sysinternals Procmon to automatically collect, analyze, and report on runtime indicators of malware. In a nutshell, it allows you to run an applications, hit a keypress, and get a simple text report of the sample's activities.
 
 
-Noriben allows you to not only run malware similar to a sandbox, but to also log system-wide events while you manually run malware in ways particular to making it run. For example, it can listen as you run malware that requires varying command line options, or user interaction. Or, to watch the system as you step through malware in a debugger.
+Noriben allows you to not only run malware similar to a sandbox, but to also log system-wide events while you manually run malware in ways particular to making it run. For example, it can listen as you run an application that requires varying command line options, or user interaction. Or, to watch the system as you step through the application in a debugger.
 
-Video of debugging a VM-checking malware and still get sandbox results (mis-clicks due to a mouse pointer that was 5 pixels off :))
+While Noriben was designed for analysis of malware, it has also been widely used to audit normal software applications. In 2013 it was used by the Tor Project to provide a [public audit](https://research.torproject.org/techreports/tbb-forensic-analysis-2013-06-28.pdf) of the Tor Browser Bundle
+
+Below is a video of debugging a VM-checking malware in a way to still get sandbox results (mis-clicks due to a mouse pointer that was 5 pixels off :))
 
 [![Noriben running against malware checking for VM ](https://img.youtube.com/vi/kmCzAmqMeTY/0.jpg)](https://www.youtube.com/watch?v=kmCzAmqMeTY)
 
