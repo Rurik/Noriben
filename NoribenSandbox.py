@@ -209,7 +209,7 @@ def run_file(args, magic_result, malware_file):
                 print('[!] Error trying to create screenshot. Error {}: {}'.format(hex(return_code),
                                                                                    get_error(return_code)))
 
-        if args.stop:
+        if args.shutdown:
             cmd = '"{}" -T ws stop "{}"'.format(VMRUN, VMX)
             return_code = execute(cmd)
             if return_code:
@@ -329,7 +329,7 @@ def main():
                         required=False)  # Do not run Noriben script
     parser.add_argument('--os', help='Specify Windows or Mac for that specific vmrun path', required=False)
     parser.add_argument('--config', help='Optional runtime configuration file', required=False)
-    parser.add_argument('--stop', action='store_true', help='Powers down the guest VM after execution', required=False)
+    parser.add_argument('--shutdown', action='store_true', help='Powers down the guest VM after execution', required=False)
     parser.add_argument('--suspend', action='store_true', help='Sleeps the guest VM after execution', required=False)
 
     parser.add_argument('--defense', action='store_true', help='Extract Carbon Black Defense log to host',
