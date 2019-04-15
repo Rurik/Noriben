@@ -4,6 +4,7 @@
 # V 1.1.1 - 8 Jan 18
 # V 1.2 - 14 Jun 18
 # V 1.2.1 - 12 Sep 18 - Bug fix to allow for snapshots with spaces in them.
+# V 1.3 - 15 Apr 19 - Added ability to suspend or shutdown guest afterward. Minor bug fixes.
 #
 # Responsible for:
 # * Copying malware into a known VM
@@ -40,7 +41,7 @@ host_screenshot_path_structure = '{}/{}.png'  # (host_malware_path, host_malware
 guest_log_path = 'C:\\\\Noriben_Logs'
 guest_zip_path = 'C:\\\\Program Files\\\\VMware\\\\VMware Tools\\\\zip.exe'
 guest_temp_zip = 'C:\\\\Noriben_Logs\\\\NoribenReports.zip'
-guest_python_path = 'C:\\\\Python27\\\\python.exe'
+guest_python_path = 'C:\\Program Files (x86)\\Python36-32\\\\python.exe'
 host_noriben_path = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), 'Noriben.py')
 guest_malware_path = 'C:\\\\Malware\\\\malware_'
 error_tolerance = 5
@@ -154,11 +155,11 @@ def run_file(args, magic_result, malware_file):
             return return_code
 
     # Run Noriben
-    cmd = '{} {} "{}" -t {} --headless --output "{}" '.format(cmd_base, guest_python_path, guest_noriben_path,
+    cmd = '{} "{}" "{}" -t {} --headless --output "{}" '.format(cmd_base, guest_python_path, guest_noriben_path,
                                                               timeout_seconds, guest_log_path)
 
     if not dontrun:
-        cmd = '{} --cmd {} '.format(cmd, filename)
+        cmd = '{} --cmd "{}" '.format(cmd, filename)
 
     if debug:
         cmd = '{} -d'.format(cmd)
@@ -174,7 +175,7 @@ def run_file(args, magic_result, malware_file):
             run_script(args, cmd_base)
 
         zip_failed = False
-        cmd = '{} "{}" -j {} "{}\\\\*.*"'.format(cmd_base, guest_zip_path, guest_temp_zip, guest_log_path)
+        cmd = '{} "{}" -j "{}" "{}\\\\*.*"'.format(cmd_base, guest_zip_path, guest_temp_zip, guest_log_path)
         return_code = execute(cmd)
         if return_code:
             print('[!] Error trying to zip report archive. Error {}: {}'.format(hex(return_code),
@@ -184,7 +185,7 @@ def run_file(args, magic_result, malware_file):
         if args.defense and not zip_failed:
             cb_defense_file = "C:\\\\Program Files\\\\Confer\\\\confer.log"
             # Get Carbon Black Defense log. This is an example if you want to include additional files.
-            cmd = '{} "{}" -j {} "{}"'.format(cmd_base, guest_zip_path, guest_temp_zip, cb_defense_file)
+            cmd = '{} "{}" -j "{}" "{}"'.format(cmd_base, guest_zip_path, guest_temp_zip, cb_defense_file)
             return_code = execute(cmd)
             if return_code:
                 print(('[!] Error trying to add additional file to archive. Continuing. '
@@ -192,7 +193,7 @@ def run_file(args, magic_result, malware_file):
 
         if not args.nolog and not zip_failed:
             host_report_path = report_path_structure.format(host_malware_path, host_malware_name_base)
-            cmd = '"{}" -gu {} -gp {} copyFileFromGuestToHost "{}" {} "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX,
+            cmd = '"{}" -gu {} -gp {} copyFileFromGuestToHost "{}" "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX,
                                                                                    guest_temp_zip, host_report_path)
             return_code = execute(cmd)
             if return_code:
@@ -207,6 +208,22 @@ def run_file(args, magic_result, malware_file):
             if return_code:
                 print('[!] Error trying to create screenshot. Error {}: {}'.format(hex(return_code),
                                                                                    get_error(return_code)))
+
+        if args.stop:
+            cmd = '"{}" -T ws stop "{}"'.format(VMRUN, VMX)
+            return_code = execute(cmd)
+            if return_code:
+                print('[!] Error trying to start VM. Error {}: {}'.format(hex(return_code), get_error(return_code)))
+                error_count += 1
+                return return_code
+
+        if args.suspend:
+            cmd = '"{}" -T ws suspend "{}"'.format(VMRUN, VMX)
+            return_code = execute(cmd)
+            if return_code:
+                print('[!] Error trying to start VM. Error {}: {}'.format(hex(return_code), get_error(return_code)))
+                error_count += 1
+                return return_code
 
 
 def get_magic(magic_handle, filename):
@@ -251,14 +268,14 @@ def copy_file_to_zip(cmd_base, filename):
     # Therefore, first copy file to log folder and then add to the zip.
     global error_count
 
-    cmd = '"{}" -gu {} -gp {} fileExistsInGuest "{}" {}'.format(VMRUN, VM_USER, VM_PASS, VMX, filename)
+    cmd = '"{}" -gu {} -gp {} fileExistsInGuest "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX, filename)
     return_code = execute(cmd)
     if return_code:
         print('[!] File does not exist in guest. Continuing. File: {}'.format(filename))
         error_count += 1
         return return_code
 
-    cmd = '{} C:\\\\windows\\\\system32\\\\xcopy.exe {} {}'.format(cmd_base, filename, guest_log_path)
+    cmd = '{} C:\\\\windows\\\\system32\\\\xcopy.exe "{}" "{}"'.format(cmd_base, filename, guest_log_path)
     return_code = execute(cmd)
     if return_code:
         print(('[!] Error trying to copy file to log folder. Continuing. '
@@ -266,7 +283,7 @@ def copy_file_to_zip(cmd_base, filename):
         error_count += 1
         return return_code
 
-    cmd = '{} "{}" -j {} {}'.format(cmd_base, guest_zip_path, guest_temp_zip, filename)
+    cmd = '{} "{}" -j "{}" "{}"'.format(cmd_base, guest_zip_path, guest_temp_zip, filename)
     return_code = execute(cmd)
     if return_code:
         print(('[!] Error trying to add additional file to archive. Continuing. '
@@ -312,6 +329,8 @@ def main():
                         required=False)  # Do not run Noriben script
     parser.add_argument('--os', help='Specify Windows or Mac for that specific vmrun path', required=False)
     parser.add_argument('--config', help='Optional runtime configuration file', required=False)
+    parser.add_argument('--stop', action='store_true', help='Powers down the guest VM after execution', required=False)
+    parser.add_argument('--suspend', action='store_true', help='Sleeps the guest VM after execution', required=False)
 
     parser.add_argument('--defense', action='store_true', help='Extract Carbon Black Defense log to host',
                         required=False)  # Particular to Carbon Black Defense. Use as example of adding your own files
