@@ -7,8 +7,8 @@
 # V 1.3 - 15 Apr 19 - Added ability to suspend or shutdown guest afterward. Minor bug fixes.
 #
 # Responsible for:
-# * Copying malware into a known VM
-# * Running malware sample
+# * Copying sample into a known VM
+# * Running sample
 # * Copying off results
 #
 # Ensure you set the environment variables below to match your system. I've left defaults to help.
@@ -316,7 +316,7 @@ def main():
     parser.add_argument('--magic', help='Specify file magic database (may be necessary for Windows)', required=False)
     parser.add_argument('--nolog', action='store_true', help='Do not extract logs back', required=False)
     parser.add_argument('--norevert', action='store_true', help='Do not revert to snapshot', required=False)
-    parser.add_argument('--post', help='post-execution script', required=False)
+    parser.add_argument('--post', help='Post-execution script', required=False)
     parser.add_argument('--raw', action='store_true', help='Remove ProcMon filters', required=False)
     parser.add_argument('--update', action='store_true', help='Update Noriben.py in guest', required=False)
     parser.add_argument('--screenshot', action='store_true', help='Take screenshot after execution (PNG)',
@@ -325,12 +325,13 @@ def main():
     parser.add_argument('-s', '--snapshot', help='Specify VM Snapshot to revert to', required=False)
     parser.add_argument('--vmx', help='Specify VM VMX', required=False)
     parser.add_argument('--ignore', help='Ignore files or folders that contain this term', required=False)
-    parser.add_argument('--nonoriben', action='store_true', help='Do not run Noriben in guest, just malware',
+    parser.add_argument('--nonoriben', action='store_true', help='Do not run Noriben in guest, just sample',
                         required=False)  # Do not run Noriben script
     parser.add_argument('--os', help='Specify Windows or Mac for that specific vmrun path', required=False)
     parser.add_argument('--config', help='Optional runtime configuration file', required=False)
-    parser.add_argument('--shutdown', action='store_true', help='Powers down the guest VM after execution', required=False)
-    parser.add_argument('--suspend', action='store_true', help='Sleeps the guest VM after execution', required=False)
+    parser.add_argument('--guestconfig', help='Optional guest Noriben runtime configuration file', required=False)
+    parser.add_argument('--shutdown', action='store_true', help='Powers down guest VM after execution', required=False)
+    parser.add_argument('--suspend', action='store_true', help='Sleeps guest VM after execution', required=False)
 
     parser.add_argument('--defense', action='store_true', help='Extract Carbon Black Defense log to host',
                         required=False)  # Particular to Carbon Black Defense. Use as example of adding your own files

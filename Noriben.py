@@ -93,8 +93,8 @@
 #       Fixed minor bug that would crash upon writing out CSV.
 # Version 1.8.3 - 26 Nov 18
 #       Fixed minor bugs in reading hash files and in sleeping between VirusTotal queries
-
-
+# Version 1.8.4 - 22 Nov 19
+#       Minor updates. Added ability to run a non-executable, such as a Word document
 #
 # TODO:
 # * Upload files directly to VirusTotal (2.X feature?)
@@ -738,11 +738,14 @@ def open_file_with_assoc(fname):
         return
 
     if os.name == 'mac':
-        subprocess.call(('open', fname))
+        ret = subprocess.call(('open', fname))
     elif os.name == 'nt':
-        os.startfile(fname)
+        #os.startfile(fname)
+        ret = subprocess.call(('start', fname), shell=True)
     elif os.name == 'posix':
-        subprocess.call(('open', fname))
+        ret = subprocess.call(('open', fname))
+     
+    return ret
 
 
 def file_exists(fname):
@@ -1372,7 +1375,7 @@ def main():
                 writer = csv.writer(f)
                 writer.writerows(timeline)
 
-            open_file_with_assoc(txt_file)
+            ret = open_file_with_assoc(txt_file)
             terminate_self(0)
         else:
             print('[!] PML file does not exist: {}\n'.format(args.pml))
@@ -1398,7 +1401,7 @@ def main():
             print('[*] Saving timeline to: {}'.format(timeline_file))
             codecs.open(timeline_file, 'w', 'utf-8').write('\r\n'.join(timeline))
 
-            open_file_with_assoc(txt_file)
+            ret = open_file_with_assoc(txt_file)
             terminate_self(0)
         else:
             parser.print_usage()
@@ -1435,10 +1438,14 @@ def main():
         try:
             subprocess.Popen(exe_cmdline)
         except WindowsError:  # Occurs if VMWare bug removes Owner from file
-            print('\n[*] Termination of Procmon commencing... please wait')
-            print('[!] Error executing file. Windows is refusing execution based upon permissions.')
-            terminate_procmon(procmonexe)
-            terminate_self(4)
+            print('[*] Execution failed. File is potentially not an executable. Trying to open with associated application.')
+            try:
+                ret = open_file_with_assoc(exe_cmdline)
+            except WindowsError:
+                print('\n[*] Unexpected termination of Procmon commencing... please wait')
+                print('[!] Error executing file. Windows is refusing execution based upon permissions.')
+                terminate_procmon(procmonexe)
+                terminate_self(4)
 
     else:
         print('[*] Procmon is running. Run your executable now.')
