@@ -1046,7 +1046,7 @@ def parse_csv(csv_file, report, timeline):
                 if not whitelist_scan(reg_whitelist, field):
                     reg_length = field[6].split('Length:')[1].split(',')[0].strip(string.whitespace + '"')
                     try:
-                        if int(reg_length):
+                        if int(float(reg_length)):
                             if 'Data:' in field[6]:
                                 data_field = '  =  {}'.format(field[6].split('Data:')[1].strip(string.whitespace + '"'))
                                 if len(data_field.split(' ')) == 16:
