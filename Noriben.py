@@ -383,7 +383,7 @@ hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89',  # WinXP ntdll.dll
                   r'0da85218e92526972a821587e6a8bf8f']  # imm32.dll
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '1.8.3'
+__VERSION__ = '1.8.4'
 path_general_list = []
 virustotal_upload = True if config['virustotal_api_key'] else False  # TODO
 use_virustotal = True if config['virustotal_api_key'] and has_internet else False
@@ -491,6 +491,7 @@ def log_debug(msg):
         none
     """
     global debug_messages
+    
     if msg and config['debug']:
         print(msg)
 
@@ -757,6 +758,7 @@ def file_exists(fname):
     Results:
         boolean value if file exists
     """
+    log_debug('[*] Checking for existence of file: {}'.format(fname))
     return os.path.exists(fname) and os.access(fname, os.F_OK) and not os.path.isdir(fname)
 
 
@@ -767,6 +769,7 @@ def check_procmon():
     Results:
         folder path to procmon executable
     """
+    log_debug('[*] Checking for procmon in the following location: {}'.format(config['procmon']))
     procmon_exe = config['procmon']
     if file_exists(procmon_exe):
         return procmon_exe
@@ -787,6 +790,7 @@ def hash_file(fname):
     Results:
         hex hash value of file's contents as a string
     """
+    log_debug('[*] Performing {} hash on file: {}'.format(config['hash_type'], fname))
     if config['hash_type'] == 'MD5':
         return hashlib.md5(codecs.open(fname, 'rb').read()).hexdigest()
     elif config['hash_type'] == 'SHA1':
@@ -924,6 +928,8 @@ def parse_csv(csv_file, report, timeline):
         report: OUT string text containing the entirety of the text report
         timeline: OUT string text containing the entirety of the CSV report
     """
+    log_debug('[*] Processing CSV: {}'.format(csv_file))
+    
     process_output = list()
     file_output = list()
     reg_output = list()
@@ -935,12 +941,11 @@ def parse_csv(csv_file, report, timeline):
     else:
         yara_rules = ''
 
-    log_debug('[*] Processing CSV: {}'.format(csv_file))
-
     time_parse_csv_start = time.time()
 
     csv_file_handle = open(csv_file, newline='', encoding='utf-8')
     reader = csv.reader(csv_file_handle)
+
     for original_line in reader:
         server = ''
         field = original_line
@@ -953,6 +958,8 @@ def parse_csv(csv_file, report, timeline):
             if field[3] in ['Process Create'] and field[5] == 'SUCCESS':
                 cmdline = field[6].split('Command line: ')[1]
                 if not whitelist_scan(cmd_whitelist, field):
+                    log_debug('[*] CreateProcess: {}'.format(cmdline))
+
                     if config['generalize_paths']:
                         cmdline = generalize_var(cmdline)
                     child_pid = field[6].split('PID: ')[1].split(',')[0]
@@ -966,6 +973,7 @@ def parse_csv(csv_file, report, timeline):
             elif field[3] == 'CreateFile' and field[5] == 'SUCCESS':
                 if not whitelist_scan(file_whitelist, field):
                     path = field[4]
+                    log_debug('[*] CreateFile: {}'.format(path))
                     yara_hits = ''
                     if config['yara_folder'] and yara_rules:
                         yara_hits = yara_filescan(path, yara_rules)
@@ -1012,6 +1020,7 @@ def parse_csv(csv_file, report, timeline):
             elif field[3] == 'SetDispositionInformationFile' and field[5] == 'SUCCESS':
                 if not whitelist_scan(file_whitelist, field):
                     path = field[4]
+                    log_debug('[*] DeleteFile: {}'.format(path))
                     if config['generalize_paths']:
                         path = generalize_var(path)
                     outputtext = '[DeleteFile] {}:{} > {}'.format(field[1], field[2], path)
@@ -1035,6 +1044,8 @@ def parse_csv(csv_file, report, timeline):
 
             elif field[3] == 'RegCreateKey' and field[5] == 'SUCCESS':
                 if not whitelist_scan(reg_whitelist, field):
+                    log_debug('[*] RegCreateKey: {}'.format(path))
+
                     outputtext = '[RegCreateKey] {}:{} > {}'.format(field[1], field[2], field[4])
                     if outputtext not in reg_output:  # Ignore multiple CreateKeys. Only log the first.
                         tl_text = '{},Registry,RegCreateKey,{},{},{}'.format(date_stamp,
