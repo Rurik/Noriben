@@ -34,9 +34,6 @@ Want to see that in action?
 [![Noriben Automation Script in Action](https://img.youtube.com/vi/GSSCM0kUqo8/0.jpg)](https://www.youtube.com/watch?v=GSSCM0kUqo8)
 
 
-Like it? Buy me a beer! :)
-<a href='https://pledgie.com/campaigns/22876'><img alt='Click here to lend your support to: Open Source Software and make a donation at pledgie.com !' src='https://pledgie.com/campaigns/22876.png?skin_name=chrome' border='0' ></a>
-
 
 # Cool Features
 
