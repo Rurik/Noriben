@@ -78,7 +78,7 @@ optional arguments:
 </pre>
 
 ## Errors?
-One common error that appears is due to how Python 2.7 handles Ctrl-C calls during a sleep. This is seen in operation as soon as Ctrl-C is pressed with the following errors:
+One common error that appears is due to how Python 2.7 handles Ctrl-C calls during a sleep. This is seen in operation as soon as Ctrl-C is pressed with the following errors, shown below. Note that this only applies to Python 2 users with older code. Now that the code requires Python 3, this is less of an issue.
 
 <pre>
 [*] Launching Procmon ...
