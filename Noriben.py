@@ -1,12 +1,13 @@
 # Noriben Malware Analysis Sandbox
 #
 # Directions:
-# Just copy Noriben.py to a Windows-based VM alongside the Sysinternals Procmon.exe
+# Just copy Noriben.py to a Windows-based VM alongside the SysInternals Procmon.exe
 #
 # Run Noriben.py, then run your executable.
-# When the executable has completed its processing, stop Noriben and you'll have a clean text report and timeline
+# When the executable has completed its processing, stop Noriben and view a
+# clean text report and timeline
 #
-# Version 1.0 - 10 Apr 13 - @bbaskin - brian@thebaskins.com
+# Version 1.0 - 10 Apr 13 - @bbaskin - brian [@] thebaskins.com
 #       Gracious edits, revisions, and corrections by Daniel Raygoza
 # Version 1.1 - 21 Apr 13 -
 #       Much improved filters and filter parsing
@@ -17,7 +18,7 @@
 #       Now reads CSV files line-by-line to handle large files, keep
 #       unsuccessful registry deletes, compartmentalize sections, creates CSV
 #       timeline, can reparse PMLs, can specify alternative PMC filters,
-#       changed command line arguments, added global whitelist
+#       changed command line arguments, added global approvelist
 # Version 1.3 - 13 Sep 13 -
 #       Option to generalize file paths in output, option to use a timeout
 #       instead of Ctrl-C to end monitoring, only writes RegSetValue entries
@@ -95,12 +96,16 @@
 #       Fixed minor bugs in reading hash files and in sleeping between VirusTotal queries
 # Version 1.8.4 - 22 Nov 19
 #       Minor updates. Added ability to run a non-executable, such as a Word document
+# Version 1.8.5 - 2 May 21
+#       Changed terminology from whitelist to approvelist. Updated filters. Added quick
+#       fix related to issue #29/#44 for errant ticks in data
 #
 # TODO:
 # * Upload files directly to VirusTotal (2.X feature?)
-# * extract data directly from registry? (may require python-registry - http://www.williballenthin.com/registry/)
+# * extract data directly from registry? (may require python-registry)
 # * scan for mutexes, preferably in a way that doesn't require wmi/pywin32
 # * Fix CSV issues (see GitHub issue)
+# * Place filters into external file so that core script does not need change to update
 
 import argparse
 import ast
@@ -140,7 +145,7 @@ except ImportError:
 try:
     import configparser
 except ImportError:
-    print('[!] Python module "configparser" not found. This is likely due to not running with Python 3.')
+    print('[!] Python module "configparser" not found. Python 3 required.')
     configparser = None
 
 # The below are customizable variables. Change these as you see fit.
@@ -156,7 +161,7 @@ config = {
     'hash_type': 'SHA256',
     'txt_extension': 'txt',
     'output_folder': '',
-    'global_whitelist_append': ''
+    'global_approvelist_append': ''
 }
 
 
@@ -172,218 +177,261 @@ valid_hash_types = ['MD5', 'SHA1', 'SHA256']
 # 2.b. use '\*' to signify 'zero or more slashes'.
 # 3. To find a list of available '%%' variables, type `set` from a command prompt
 
-# These entries are applied to all whitelists
-global_whitelist = [r'VMwareUser.exe',  # VMware User Tools
-                    r'CaptureBAT.exe',  # CaptureBAT Malware Tool
-                    r'SearchIndexer.exe',  # Windows Search Indexer
-                    r'Fakenet.exe',  # Practical Malware Analysis FakeNET
-                    r'idaq.exe',  # IDA Pro
-                    r'ngen.exe',  # Windows Native Image Generator
-                    r'ngentask.exe',  # Windows Native Image Generator
-                    r'consent.exe',  # Windows UAC prompt
-                    r'taskhost.exe',
-                    r'SearchIndexer.exe',
-                    r'RepUx.exe',
-                    r'RepMgr64.exe',
-                    r'EcatService.exe',
-                    config['procmon'],
-                    config['procmon'].split('.')[0] + '64.exe'  # Procmon drops embed as <name>+64
-                    ]
+# These entries are applied to all approvelists
+global_approvelist = [
+        r'VMwareUser.exe',  # VMware User Tools
+        r'CaptureBAT.exe',  # CaptureBAT Malware Tool
+        r'SearchIndexer.exe',  # Windows Search Indexer
+        r'Fakenet.exe',  # Practical Malware Analysis FakeNET
+        r'idaq.exe',  # IDA Pro
+        r'ngen.exe',  # Windows Native Image Generator
+        r'ngentask.exe',  # Windows Native Image Generator
+        r'consent.exe',  # Windows UAC prompt
+        r'taskhost.exe',
+        r'SearchIndexer.exe',
+        r'RepUx.exe',
+        r'RepMgr64.exe',
+        r'Ecat.exe',
+        r'WindowsApps\Microsoft.Windows.Photos.*\Microsoft.Photos.exe',
+        r'Microsoft Visual Studio\Installer\resources\app\ServiceHub\Services\Microsoft.VisualStudio.Setup.Service\BackgroundDownload.exe',
+        config['procmon'],
+        config['procmon'].split('.')[0] + '64.exe'  # Procmon drops embed as <name>+64
+        ]
 
-cmd_whitelist = [r'%SystemRoot%\system32\wbem\wmiprvse.exe',
-                 r'%SystemRoot%\system32\wscntfy.exe',
-                 r'wuauclt.exe',
-                 r'jqs.exe',
-                 r'avgrsa.exe',  # AVG AntiVirus
-                 r'avgcsrva.exe',  # AVG AntiVirus
-                 r'avgidsagenta.exe',  # AVG AntiVirus
-                 r'TCPView.exe',
-                 r'%WinDir%\System32\mobsync.exe',
-                 r'/Processid:{AB8902B4-09CA-4BB6-B78D-A8F59079A8D5}',  # Thumbnail server
-                 r'/Processid:{F9717507-6651-4EDB-BFF7-AE615179BCCF}',  # DCOM error
-                 r'\??\%WinDir%\system32\conhost.exe .*-.*-.*-.*'  # Experimental
-                 ]
+cmd_approvelist = [
+        r'AppData\Local\Microsoft\OneDrive\StandaloneUpdater\OneDriveSetup.exe', # MS is so noisy
+        r'%SystemRoot%\system32\wbem\wmiprvse.exe',
+        r'%SystemRoot%\system32\wscntfy.exe',
+        r'wuauclt.exe',
+        r'jqs.exe',
+        r'avgrsa.exe',  # AVG AntiVirus
+        r'avgcsrva.exe',  # AVG AntiVirus
+        r'avgidsagenta.exe',  # AVG AntiVirus
+        r'Program File.*\Microsoft\EdgeUpdate\MicrosoftEdgeUpdate.exe',
+        r'TCPView.exe',
+        r'%WinDir%\System32\mobsync.exe',
+        r'XblGameSaveTask.exe',
+        r'/Processid:{AB8902B4-09CA-4BB6-B78D-A8F59079A8D5}',  # Thumbnail server
+        r'/Processid:{F9717507-6651-4EDB-BFF7-AE615179BCCF}',  # DCOM error
+        r'\??\%WinDir%\system32\conhost.exe .*-.*-.*-.*'  # Experimental
+        ]
 
-file_whitelist = [r'Desired Access: Execute/Traverse',
-                  r'Desired Access: Synchronize',
-                  r'Desired Access: Generic Read/Execute',
-                  r'Desired Access: Read EA',
-                  r'Desired Access: Read Data/List',
-                  r'Desired Access: Generic Read, ',
-                  r'Desired Access: Read Attributes',
-                  r'Google\Chrome\User Data\.*.tmp',
-                  r'wuauclt.exe',
-                  r'wmiprvse.exe',
-                  r'Microsoft\Windows\Explorer\iconcache_*',
-                  r'Microsoft\Windows\Explorer\thumbcache_.*.db',
-                  r'Thumbs.db$',
+file_approvelist = [
+        r'Desired Access: Execute/Traverse',
+        r'Desired Access: Synchronize',
+        r'Desired Access: Generic Read/Execute',
+        r'Desired Access: Read EA',
+        r'Desired Access: Read Data/List',
+        r'Desired Access: Generic Read, ',
+        r'Desired Access: Read Attributes',
 
-                  r'%AllUsersProfile%\Application Data\Microsoft\OFFICE\DATA',
-                  r'%AllUsersProfile%\Microsoft\RAC',
-                  r'%AppData%\Microsoft\Proof\*',
-                  r'%AppData%\Microsoft\Templates\*',
-                  r'%AppData%\Microsoft\Windows\Recent\AutomaticDestinations\1b4dd67f29cb1962.automaticDestinations-ms',
-                  r'%LocalAppData%\Google\Drive\sync_config.db*',
-                  r'%LocalAppData%\GDIPFONTCACHEV1.DAT',
-                  r'%ProgramFiles%\Capture\*',
-                  r'%SystemDrive%\Python',
-                  r'%SystemRoot%\assembly',
-                  r'%SystemRoot%\Microsoft.NET\Framework64',
-                  r'%SystemRoot%\Prefetch\*',
-                  r'%SystemRoot%\system32\wbem\Logs\*',
-                  r'%SystemRoot%\System32\LogFiles\Scm',
-                  r'%SystemRoot%\System32\Tasks\Microsoft\Windows',  # Some may want to remove this
-                  r'%UserProfile%$',
-                  r'%UserProfile%\Desktop$',
-                  r'%UserProfile%\AppData\LocalLow$',
-                  r'%UserProfile%\Recent\*',
-                  r'%UserProfile%\Local Settings\History\History.IE5\*',
-                  r'%WinDir%\AppCompat\Programs\RecentFileCache.bcf',
-                  r'%WinDir%\SoftwareDistribution\DataStore\DataStore.edb',
-                  r'%WinDir%\SoftwareDistribution\DataStore\Logs\edb....',
-                  r'%WinDir%\SoftwareDistribution\ReportingEvents.log',
-                  r'%WinDir%\System32\catroot2\edb....',
-                  r'%WinDir%\System32\config\systemprofile\AppData\LocalLow\Microsoft\CryptnetUrlCache\MetaData\*',
-                  r'%WinDir%\System32\spool\drivers\*',
-                  r'%WinDir%\Temp\fwtsqmfile00.sqm',  # Software Quality Metrics (SQM) from iphlpsvc
-                  r'MAILSLOT\NET\NETLOGON',
-                  r'Windows\Temporary Internet Files\counters.dat',
-                  r'Program Files.*\confer\*'
-                  ]
+        r'desktop.ini$',
+        r'Google\Chrome\User Data\.*.tmp',
+        r'Microsoft\Windows\Explorer\iconcache_*',
+        r'Microsoft\Windows\Explorer\thumbcache_.*.db',
+        r'Thumbs.db$',
+        r'wuauclt.exe',
+        r'wmiprvse.exe',
 
-reg_whitelist = [r'CaptureProcessMonitor',
-                 r'consent.exe',
-                 r'verclsid.exe',
-                 r'wmiprvse.exe',
-                 r'wscntfy.exe',
-                 r'wuauclt.exe',
-                 r'PROCMON',
-                 r'}\DefaultObjectStore\*',
+        r'%AllUsersProfile%\Application Data\Microsoft\OFFICE\DATA',
+        r'%AllUsersProfile%\Microsoft\MapData\*',
+        r'%AllUsersProfile%\Microsoft\RAC',
+        r'%AllUsersProfile%\Microsoft\Windows\AppRepository\StateRepository',
+        r'%AppData%\Microsoft\Proof\*',
+        r'%AppData%\Microsoft\Templates\*',
+        r'%AppData%\Microsoft\Windows\Recent\AutomaticDestinations\1b4dd67f29cb1962.automaticDestinations-ms',
+        r'%LocalAppData%\Google\Drive\sync_config.db*',
+        r'%LocalAppData%\GDIPFONTCACHEV1.DAT',
+        r'%LocalAppData%\Microsoft\OneDrive\StandaloneUpdater\*',
+        r'%LocalAppData%\Microsoft\VSApplicationInsights\vstelAIF',
+        r'%LocalAppData%\Packages\Microsoft.Windows.Photos_',
+        r'%ProgramFiles%\Capture\*',
+        r'%SystemDrive%\Python',
+        r'%SystemRoot%\assembly',
+        r'%SystemRoot%\Microsoft.NET\Framework64',
+        r'%SystemRoot%\Prefetch\*',
+        r'%SystemRoot%\system32\wbem\Logs\*',
+        r'%SystemRoot%\System32\LogFiles\Scm',
+        r'%SystemRoot%\System32\Tasks\Microsoft\Windows',  # Some may want to remove this
+        r'%UserProfile%$',
+        r'%UserProfile%\Desktop$',
+        r'%UserProfile%\AppData\LocalLow$',
+        r'%UserProfile%\Recent\*',
+        r'%UserProfile%\Local Settings\History\History.IE5\*',
+        r'%WinDir%\AppCompat\Programs\RecentFileCache.bcf',
+        r'%WinDir%\ServiceProfiles\LocalService\AppData\Local\FontCache\Fonts\*',
+        r'%WinDir%\ServiceProfiles\LocalService\AppData\Local\Microsoft\Dlna\*',
+        r'%WinDir%\SoftwareDistribution\DataStore\DataStore.edb',
+        r'%WinDir%\SoftwareDistribution\DataStore\Logs\edb....',
+        r'%WinDir%\SoftwareDistribution\ReportingEvents.log',
+        r'%WinDir%\System32\catroot2\edb....',
+        r'%WinDir%\System32\config\systemprofile\AppData\LocalLow\Microsoft\CryptnetUrlCache\MetaData\*',
+        r'%WinDir%\System32\spool\drivers\*',
+        r'%WinDir%\Temp\fwtsqmfile00.sqm',  # Software Quality Metrics (SQM) from iphlpsvc
+        r'MAILSLOT\NET\NETLOGON',
+        r'Windows\Temporary Internet Files\counters.dat',
+        r'Program Files.*\confer\*'
+        ]
 
-                 r'HKCR$',
-                 r'HKCR\AllFilesystemObjects\shell',
+reg_approvelist = [
+        r'CaptureProcessMonitor',
+        r'consent.exe',
+        r'verclsid.exe',
+        r'wmiprvse.exe',
+        r'wscntfy.exe',
+        r'wuauclt.exe',
+        r'PROCMON',
+        r'}\DefaultObjectStore\*',
+        r'}\LocalState\SessionSummaryData\.*\*',
 
-                 r'HKCU$',
-                 r'HKCU\Printers\DevModePerUser',
-                 r'HKCU\SessionInformation\ProgramCount',
-                 r'HKCU\Software$',
-                 r'HKCU\Software\Classes\Software\Microsoft\Windows\CurrentVersion\Deployment\SideBySide',
-                 r'HKCU\Software\Classes\Local Settings\MuiCache\*',
-                 r'HKCU\Software\Classes\Local Settings\MrtCache\*',
-                 r'HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\SyncMgr\*',
-                 r'HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\*',
-                 r'HKCU\Software\Microsoft\Calc$',
-                 r'HKCU\Software\Microsoft\.*\Window_Placement',
-                 r'HKCU\Software\Microsoft\Internet Explorer\TypedURLs',
-                 r'HKCU\Software\Microsoft\Notepad',
-                 r'HKCU\Software\Microsoft\Office',
-                 r'HKCU\Software\Microsoft\Shared Tools',
-                 r'HKCU\Software\Microsoft\SystemCertificates\Root$',
-                 r'HKCU\Software\Microsoft\Windows\CurrentVersion\Applets',
-                 r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\CIDOpen',
-                 r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\CIDSave\Modules\GlobalSettings',
-                 r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\ComDlg32\.*MRU.*',
-                 r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Modules',
-                 r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2',
-                 r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU',
-                 r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo',
-                 r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartPage',
-                 r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartPage2',
-                 r'HKCU\Software\Microsoft\Windows\Currentversion\Explorer\StreamMRU',
-                 r'HKCU\Software\Microsoft\Windows\Currentversion\Explorer\Streams',
-                 r'HKCU\Software\Microsoft\Windows\CurrentVersion\Group Policy',
-                 r'HKCU\Software\Microsoft\Windows\CurrentVersion\HomeGroup',
-                 r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings\Wpad\*',
-                 r'HKCU\Software\Microsoft\Windows\Shell',
-                 r'HKCU\Software\Microsoft\Windows\Shell\BagMRU',
-                 r'HKCU\Software\Microsoft\Windows\Shell\Bags',
-                 r'HKCU\Software\Microsoft\Windows\ShellNoRoam\MUICache',
-                 r'HKCU\Software\Microsoft\Windows\ShellNoRoam\BagMRU',
-                 r'HKCU\Software\Microsoft\Windows\ShellNoRoam\Bags',
-                 r'HKCU\Software\Microsoft\Windows NT\CurrentVersion\Devices',
-                 r'HKCU\Software\Microsoft\Windows NT\CurrentVersion\PrinterPorts\*',
-                 r'HKCU\Software\Microsoft\Windows NT\CurrentVersion\Windows\UserSelectedDefault',
-                 r'HKCU\Software\Policies$',
-                 r'HKCU\Software\Policies\Microsoft$',
+        r'HKCR$',
+        r'HKCR\AllFilesystemObjects\shell',
 
-                 r'HKLM$',
-                 r'HKLM\.*\Enum$',
-                 r'HKLM\SOFTWARE$',
-                 r'HKLM\SOFTWARE\Microsoft\Cryptography\RNG\Seed',  # Some people prefer to leave this in.
-                 r'HKLM\SOFTWARE\Microsoft$',
-                 r'HKLM\SOFTWARE\MICROSOFT\Dfrg\Statistics',
-                 r'HKLM\SOFTWARE\Microsoft\Reliability Analysis\RAC',
-                 r'HKLM\SOFTWARE\MICROSOFT\SystemCertificates$',
-                 r'HKLM\Software\Microsoft\WBEM',
-                 r'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Group Policy\History\PolicyOverdue',
-                 r'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Group Policy\State\Machine\Extension-List',
-                 r'HKLM\Software\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products',
-                 r'HKLM\Software\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\*',
-                 r'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render',
-                 r'HKLM\Software\Microsoft\Windows\CurrentVersion\Shell Extensions',
-                 r'HKLM\SOFTWARE\Microsoft\Windows Media Player NSS\*',
-                 r'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Print\Printers\*',
-                 r'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\NetworkList\Nla\Cache\*',
-                 r'HKLM\Software\Microsoft\Windows NT\CurrentVersion\Prefetcher\*',
-                 r'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Print\*',
-                 r'HKLM\Software\Microsoft\Windows NT\CurrentVersion\Tracing\*',
-                 r'HKLM\SOFTWARE\Policies$',
-                 r'HKLM\SOFTWARE\Policies\Microsoft$',
-                 r'HKLM\SOFTWARE\Wow6432Node\Google\Update\ClientState\{',
-                 r'HKLM\SOFTWARE\Wow6432Node\Google\Update\old-uid',
-                 r'HKLM\SOFTWARE\Wow6432Node\Google\Update\uid',
+        r'HKCU$',
+        r'HKCU\Printers\DevModePerUser',
+        r'HKCU\SessionInformation\ProgramCount',
+        r'HKCU\Software$',
+        r'HKCU\Software\Classes\Software\Microsoft\Windows\CurrentVersion\Deployment\SideBySide',
+        r'HKCU\Software\Classes\Local Settings\MuiCache\*',
+        r'HKCU\Software\Classes\Local Settings\MrtCache\*',
+        r'HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\SyncMgr\*',
+        r'HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\*',
+        r'HKCU\Software\Microsoft\Calc$',
+        r'HKCU\Software\Microsoft\.*\Window_Placement',
+        r'HKCU\Software\Microsoft\Internet Explorer\TypedURLs',
+        r'HKCU\Software\Microsoft\Notepad',
+        r'HKCU\Software\Microsoft\Office',
+        r'HKCU\Software\Microsoft\Shared Tools',
+        r'HKCU\Software\Microsoft\SystemCertificates\Root$',
+        r'HKCU\Software\Microsoft\VisualStudio\*',
+        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Applets',
+        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\CIDOpen',
+        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\CIDSave\Modules\GlobalSettings',
+        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\ComDlg32\.*MRU.*',
+        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Modules',
+        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2',
+        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU',
+        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo',
+        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartPage',
+        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartPage2',
+        r'HKCU\Software\Microsoft\Windows\Currentversion\Explorer\StreamMRU',
+        r'HKCU\Software\Microsoft\Windows\Currentversion\Explorer\Streams',
+        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Group Policy',
+        r'HKCU\Software\Microsoft\Windows\CurrentVersion\HomeGroup',
+        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings\Wpad\*',
+        r'HKCU\Software\Microsoft\Windows\Shell',
+        r'HKCU\Software\Microsoft\Windows\Shell\BagMRU',
+        r'HKCU\Software\Microsoft\Windows\Shell\Bags',
+        r'HKCU\Software\Microsoft\Windows\ShellNoRoam\MUICache',
+        r'HKCU\Software\Microsoft\Windows\ShellNoRoam\BagMRU',
+        r'HKCU\Software\Microsoft\Windows\ShellNoRoam\Bags',
+        r'HKCU\Software\Microsoft\Windows NT\CurrentVersion\Devices',
+        r'HKCU\Software\Microsoft\Windows NT\CurrentVersion\PrinterPorts\*',
+        r'HKCU\Software\Microsoft\Windows NT\CurrentVersion\Windows\UserSelectedDefault',
+        r'HKCU\Software\Policies$',
+        r'HKCU\Software\Policies\Microsoft$',
 
-                 r'HKLM\System\CurrentControlSet\Control\CLASS\{.*-E325-11CE-BFC1-08002BE10318}',
-                 r'HKLM\System\CurrentControlSet\Control\DeviceClasses',
-                 r'HKLM\System\CurrentControlSet\Control\MediaProperties',
-                 r'HKLM\System\CurrentControlSet\Control\Network\{.*-e325-11ce-bfc1-08002be10318}',
-                 r'HKLM\System\CurrentControlSet\Control\Network\NetCfgLockHolder',
-                 r'HKLM\System\CurrentControlSet\Control\Nsi\{eb004a03-9b1a-11d4-9123-0050047759bc}',
-                 r'HKLM\System\CurrentControlSet\Control\Print\Environments\*',
-                 r'HKLM\System\CurrentControlSet\Enum\*',
-                 r'HKLM\System\CurrentControlSet\Services\CaptureRegistryMonitor',
-                 r'HKLM\System\CurrentControlSet\Services\Eventlog\*',
-                 r'HKLM\System\CurrentControlSet\Services\Tcpip\Parameters',
-                 r'HKLM\System\CurrentControlSet\Services\WinSock2\Parameters',
-                 r'HKLM\System\CurrentControlSet\Services\VSS\Diag',
+        r'HKLM$',
+        r'HKLM\.*\Enum$',
+        r'HKLM\Software$',
+        r'HKLM\Software\Microsoft\Cryptography\RNG\Seed',  # Some people prefer to leave this in.
+        r'HKLM\Software\Microsoft$',
+        r'HKLM\SOFTWARE\Microsoft\Device Association Framework\Store\*',
+        r'HKLM\Software\MICROSOFT\Dfrg\Statistics',
+        r'HKLM\Software\Microsoft\Reliability Analysis\RAC',
+        r'HKLM\Software\MICROSOFT\SystemCertificates$',
+        r'HKLM\Software\Microsoft\WBEM',
+        r'HKLM\Software\Microsoft\Windows\CurrentVersion\Group Policy\History\PolicyOverdue',
+        r'HKLM\Software\Microsoft\Windows\CurrentVersion\Group Policy\State\Machine\Extension-List',
+        r'HKLM\Software\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products',
+        r'HKLM\Software\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\*',
+        r'HKLM\Software\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render',
+        r'HKLM\Software\Microsoft\Windows\CurrentVersion\Shell Extensions',
+        r'HKLM\Software\Microsoft\Windows Media Player NSS\*',
+        r'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Appraiser\*',
+        r'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Inventory',
+        r'HKLM\Software\Microsoft\Windows NT\CurrentVersion\NetworkList\Nla\Cache\*',
+        r'HKLM\Software\Microsoft\Windows NT\CurrentVersion\Prefetcher\*',
+        r'HKLM\Software\Microsoft\Windows NT\CurrentVersion\Print\*',
+        r'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\.*\RefCount$',
+        r'HKLM\Software\Microsoft\Windows NT\CurrentVersion\Tracing\*',
 
-                 r'HKU\.DEFAULT\Printers\*',
-                 r'HKU\.DEFAULT\SOFTWARE\Classes\Local Settings\MuiCache',
+        r'HKLM\Software\Policies$',
+        r'HKLM\Software\Policies\Microsoft$',
+        r'HKLM\Software\Wow6432Node\Google\Update\ClientState\{',
+        r'HKLM\Software\Wow6432Node\Google\Update\old-uid',
+        r'HKLM\Software\Wow6432Node\Google\Update\uid',
 
-                 r'LEGACY_CAPTUREREGISTRYMONITOR',
-                 r'Software\Microsoft\Multimedia\Audio$',
-                 r'Software\Microsoft\Multimedia\Audio Compression Manager',
-                 r'Software\Microsoft\Windows\CurrentVersion\Explorer\MenuOrder',
-                 r'Software\Microsoft\Windows\ShellNoRoam\Bags',
-                 r'Software\Microsoft\Windows\ShellNoRoam\BagMRU',
-                 r'Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.doc',
-                 r'Software\Microsoft\Windows\CurrentVersion\Explorer\RecentDocs',
-                 r'Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders',
-                 r'Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders',
-                 r'UserAssist\{5E6AB780-7743-11CF-A12B-00AA004AE837}',
-                 r'UserAssist\{75048700-EF1F-11D0-9888-006097DEACF9}',
-                 r'UserAssist\{CEBFF5CD-ACE2-4F4F-9178-9926F41749EA}'
-                 ]
+        r'HKLM\System\CurrentControlSet\Control\Class\{.*-E325-11CE-BFC1-08002BE10318}',
+        r'HKLM\System\CurrentControlSet\Control\Class\{6bdd1fc6-810f-11d0-bec7-08002be2092f}',
+        r'HKLM\System\CurrentControlSet\Control\DeviceClasses',
+        r'HKLM\System\CurrentControlSet\Control\DeviceContainers\{.*}\Properties\{.*}\*',
+        r'HKLM\System\CurrentControlSet\Control\MediaProperties',
+        r'HKLM\System\CurrentControlSet\Control\Network\{.*-e325-11ce-bfc1-08002be10318}',
+        r'HKLM\System\CurrentControlSet\Control\Network\NetCfgLockHolder',
+        r'HKLM\System\CurrentControlSet\Control\NetworkSetup2\Interfaces\{.*}\*',
+        r'HKLM\System\CurrentControlSet\Control\Nsi\{eb004a03-9b1a-11d4-9123-0050047759bc}',
+        r'HKLM\System\CurrentControlSet\Control\Print\Environments\*',
+        r'HKLM\System\CurrentControlSet\Enum\*',
+        r'HKLM\System\CurrentControlSet\Services\CaptureRegistryMonitor',
+        r'HKLM\System\CurrentControlSet\Services\Eventlog\*',
+        r'HKLM\System\CurrentControlSet\Services\iphlpsvc\*',
+        r'HKLM\System\CurrentControlSet\Services\ksthunk\*',
+        r'HKLM\System\CurrentControlSet\Services\NetBT\*',
+        r'HKLM\System\CurrentControlSet\Services\SharedAccess\Epoch2',
+        r'HKLM\System\CurrentControlSet\Services\Tcpip\Parameters',
+        r'HKLM\System\CurrentControlSet\Services\Tcpip6\Parameters',
+        r'HKLM\System\CurrentControlSet\Services\tunnel\*',
+        r'HKLM\System\CurrentControlSet\Services\W32Time\*',
+        r'HKLM\System\CurrentControlSet\Services\WinSock2\Parameters',
+        r'HKLM\System\CurrentControlSet\Services\WSD',
+        r'HKLM\System\CurrentControlSet\Services\VSS\Diag',
+        r'HKLM\SYSTEM\Maps\*',
 
-net_whitelist = [r'hasplms.exe'  # Hasp dongle beacons
-                 # r'192.168.2.',                     # Example for blocking net ranges
-                 # r'Verizon_router.home']            # Example for blocking local domains
-                 # r' -> .*\..*\..*\..*:1900
-                 ]
+        r'HKU\.DEFAULT\Printers\*',
+        r'HKU\.DEFAULT\SOFTWARE\Classes\Local Settings\MuiCache',
 
-hash_whitelist = [r'f8f0d25ca553e39dde485d8fc7fcce89',  # WinXP ntdll.dll
-                  r'b60dddd2d63ce41cb8c487fcfbb6419e',  # iexplore.exe 8.0
-                  r'6fe42512ab1b89f32a7407f261b1d2d0',  # kernel32.dll
-                  r'8b1f3320aebb536e021a5014409862de',  # gdi32.dll
-                  r'b26b135ff1b9f60c9388b4a7d16f600b',  # user32.dll
-                  r'355edbb4d412b01f1740c17e3f50fa00',  # msvcrt.dll
-                  r'd4502f124289a31976130cccb014c9aa',  # rpcrt4.dll
-                  r'81faefc42d0b236c62c3401558867faa',  # iertutil.dll
-                  r'e40fcf943127ddc8fd60554b722d762b',  # msctf.dll
-                  r'0da85218e92526972a821587e6a8bf8f']  # imm32.dll
+        r'LEGACY_CAPTUREREGISTRYMONITOR',
+        r'Microsoft\Device Association Framework\Store\DAFUPnPProvider',
+        r'Microsoft\EdgeUpdate\ClientState\{.*}\CurrentState\*',
+        r'Microsoft\Windows\CurrentVersion\Internet Settings\Wpad\*',
+        r'Root\InventoryD.*\*',
+        r'Software\Microsoft\Multimedia\Audio$',
+        r'Software\Microsoft\Multimedia\Audio Compression Manager',
+        r'Software\Microsoft\Windows\CurrentVersion\Explorer\MenuOrder',
+        r'Software\Microsoft\Windows\ShellNoRoam\Bags',
+        r'Software\Microsoft\Windows\ShellNoRoam\BagMRU',
+        r'Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.doc',
+        r'Software\Microsoft\Windows\CurrentVersion\Explorer\RecentDocs',
+        r'Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders',
+        r'Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders',
+        r'UserAssist\{5E6AB780-7743-11CF-A12B-00AA004AE837}',
+        r'UserAssist\{75048700-EF1F-11D0-9888-006097DEACF9}',
+        r'UserAssist\{CEBFF5CD-ACE2-4F4F-9178-9926F41749EA}'
+        ]
+
+net_approvelist = [
+        r'hasplms.exe'  # Hasp dongle beacons
+        # r'192.168.2.',                     # Example for blocking net ranges
+        # r'Verizon_router.home']            # Example for blocking local domains
+        # r' -> .*\..*\..*\..*:1900
+        ]
+
+hash_approvelist = [
+        r'f8f0d25ca553e39dde485d8fc7fcce89',  # WinXP ntdll.dll
+        r'b60dddd2d63ce41cb8c487fcfbb6419e',  # iexplore.exe 8.0
+        r'6fe42512ab1b89f32a7407f261b1d2d0',  # kernel32.dll
+        r'8b1f3320aebb536e021a5014409862de',  # gdi32.dll
+        r'b26b135ff1b9f60c9388b4a7d16f600b',  # user32.dll
+        r'355edbb4d412b01f1740c17e3f50fa00',  # msvcrt.dll
+        r'd4502f124289a31976130cccb014c9aa',  # rpcrt4.dll
+        r'81faefc42d0b236c62c3401558867faa',  # iertutil.dll
+        r'e40fcf943127ddc8fd60554b722d762b',  # msctf.dll
+        r'0da85218e92526972a821587e6a8bf8f'   # imm32.dll
+        ]
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '1.8.4'
+__VERSION__ = '1.8.5'
 path_general_list = []
 virustotal_upload = True if config['virustotal_api_key'] else False  # TODO
 use_virustotal = True if config['virustotal_api_key'] and has_internet else False
@@ -413,6 +461,14 @@ noriben_errors = {0: 'Normal exit',
 
 
 def get_error(code):
+    """
+    Looks up a given code in dictionary set of errors of noriben_errors.
+
+    Arguments:
+        code: Integer that corresponds to a pre-set entry
+    Results:
+         string value of a error code
+    """
     if code in noriben_errors:
         return noriben_errors[code]
     return 'Unexpected Error'
@@ -427,13 +483,13 @@ def read_global_append(append_filename):
     Result:
         none
     """
-    global global_whitelist
+    global global_approvelist
 
     for filename in glob.iglob(append_filename, recursive=True):
         with codecs.open(filename, 'r', encoding='utf-8') as f:
             for line in f:
                 if not line[0] == '#':
-                    global_whitelist.append(line.strip())
+                    global_approvelist.append(line.strip())
 
 
 def read_config(config_filename):
@@ -456,7 +512,7 @@ def read_config(config_filename):
     for key, value in file_config.items('Noriben'):
         try:
             new_config[key] = ast.literal_eval(value)
-        except ValueError and SyntaxError:
+        except(ValueError, SyntaxError):
             new_config[key] = value
 
     config.update(new_config)
@@ -491,7 +547,7 @@ def log_debug(msg):
         none
     """
     global debug_messages
-    
+
     if msg and config['debug']:
         print(msg)
 
@@ -562,19 +618,19 @@ def generalize_var(path_string):
 
 def read_hash_file(hash_filename):
     """
-    Read a given file of SHA256 hashes and add them to the hash whitelist.
+    Read a given file of SHA256 hashes and add them to the hash approvelist.
 
     Arguments:
         hash_filename: path to a text file containing hashes (either flat or sha256deep)
     """
-    global hash_whitelist
+    global hash_approvelist
     hash_file_handle = open(hash_filename, newline='', encoding='utf-8')
     reader = csv.reader(hash_file_handle)
     for hash_line in reader:
         hashval = hash_line[0]
         try:
             if int(hashval, 16) and (len(hashval) == 32 or len(hashval) == 40 or len(hashval) == 64):
-                hash_whitelist.append(hashval)
+                hash_approvelist.append(hashval)
         except (TypeError, ValueError):
             pass
 
@@ -745,7 +801,7 @@ def open_file_with_assoc(fname):
         ret = subprocess.call(('start', fname), shell=True)
     elif os.name == 'posix':
         ret = subprocess.call(('open', fname))
-     
+
     return ret
 
 
@@ -773,12 +829,13 @@ def check_procmon():
     procmon_exe = config['procmon']
     if file_exists(procmon_exe):
         return procmon_exe
-    else:
-        for path in os.environ['PATH'].split(os.pathsep):
-            if file_exists(os.path.join(path.strip('"'), procmon_exe)):
-                return os.path.join(path, procmon_exe)
-        if file_exists(os.path.join(script_cwd, procmon_exe)):
-            return os.path.join(script_cwd, procmon_exe)
+
+    for path in os.environ['PATH'].split(os.pathsep):
+        if file_exists(os.path.join(path.strip('"'), procmon_exe)):
+            return os.path.join(path, procmon_exe)
+    
+    if file_exists(os.path.join(script_cwd, procmon_exe)):
+        return os.path.join(script_cwd, procmon_exe)
 
 
 def hash_file(fname):
@@ -826,18 +883,18 @@ def protocol_replace(text):
     return text
 
 
-def whitelist_scan(whitelist, data):
+def approvelist_scan(approvelist, data):
     """
-    Given a whitelist and data string, see if data is in whitelist
+    Given a approvelist and data string, see if data is in approvelist
 
     Arguments:
-        whitelist: list of black-listed items
-        data: string value to compare against whitelist
+        approvelist: list of items to ignore
+        data: string value to compare against approvelist
     Results:
-        boolean value of if item exists in whitelist
+        boolean value of if item exists in approvelist
     """
     for event in data:
-        for bad in whitelist + global_whitelist:
+        for bad in approvelist + global_approvelist:
             bad = os.path.expandvars(bad).replace('\\', '\\\\')
             try:
                 if re.search(bad, event, flags=re.IGNORECASE):
@@ -929,7 +986,7 @@ def parse_csv(csv_file, report, timeline):
         timeline: OUT string text containing the entirety of the CSV report
     """
     log_debug('[*] Processing CSV: {}'.format(csv_file))
-    
+
     process_output = list()
     file_output = list()
     reg_output = list()
@@ -957,7 +1014,7 @@ def parse_csv(csv_file, report, timeline):
         try:
             if field[3] in ['Process Create'] and field[5] == 'SUCCESS':
                 cmdline = field[6].split('Command line: ')[1]
-                if not whitelist_scan(cmd_whitelist, field):
+                if not approvelist_scan(cmd_approvelist, field):
                     log_debug('[*] CreateProcess: {}'.format(cmdline))
 
                     if config['generalize_paths']:
@@ -971,7 +1028,7 @@ def parse_csv(csv_file, report, timeline):
                     timeline.append(tl_text)
 
             elif field[3] == 'CreateFile' and field[5] == 'SUCCESS':
-                if not whitelist_scan(file_whitelist, field):
+                if not approvelist_scan(file_approvelist, field):
                     path = field[4]
                     log_debug('[*] CreateFile: {}'.format(path))
                     yara_hits = ''
@@ -988,7 +1045,7 @@ def parse_csv(csv_file, report, timeline):
                     else:
                         try:
                             hashval = hash_file(path)
-                            if hashval in hash_whitelist:
+                            if hashval in hash_approvelist:
                                 log_debug('[_] Skipping hash: {}'.format(hashval))
                                 continue
 
@@ -1018,7 +1075,7 @@ def parse_csv(csv_file, report, timeline):
                             timeline.append(tl_text)
 
             elif field[3] == 'SetDispositionInformationFile' and field[5] == 'SUCCESS':
-                if not whitelist_scan(file_whitelist, field):
+                if not approvelist_scan(file_approvelist, field):
                     path = field[4]
                     log_debug('[*] DeleteFile: {}'.format(path))
                     if config['generalize_paths']:
@@ -1030,7 +1087,7 @@ def parse_csv(csv_file, report, timeline):
                     timeline.append(tl_text)
 
             elif field[3] == 'SetRenameInformationFile':
-                if not whitelist_scan(file_whitelist, field):
+                if not approvelist_scan(file_approvelist, field):
                     from_file = field[4]
                     to_file = field[6].split('FileName: ')[1].strip('"')
                     if config['generalize_paths']:
@@ -1043,7 +1100,7 @@ def parse_csv(csv_file, report, timeline):
                     timeline.append(tl_text)
 
             elif field[3] == 'RegCreateKey' and field[5] == 'SUCCESS':
-                if not whitelist_scan(reg_whitelist, field):
+                if not approvelist_scan(reg_approvelist, field):
                     log_debug('[*] RegCreateKey: {}'.format(path))
 
                     outputtext = '[RegCreateKey] {}:{} > {}'.format(field[1], field[2], field[4])
@@ -1054,8 +1111,9 @@ def parse_csv(csv_file, report, timeline):
                         timeline.append(tl_text)
 
             elif field[3] == 'RegSetValue' and field[5] == 'SUCCESS':
-                if not whitelist_scan(reg_whitelist, field):
+                if not approvelist_scan(reg_approvelist, field):
                     reg_length = field[6].split('Length:')[1].split(',')[0].strip(string.whitespace + '"')
+                    reg_length = reg_length.replace('’', '')  # Addresses errant ticks found in some data samples
                     try:
                         if int(float(reg_length)):
                             if 'Data:' in field[6]:
@@ -1078,7 +1136,7 @@ def parse_csv(csv_file, report, timeline):
 
             elif field[3] == 'RegDeleteValue':  # and field[5] == 'SUCCESS':
                 # SUCCESS is commented out to allows all attempted deletions, whether or not the value exists
-                if not whitelist_scan(reg_whitelist, field):
+                if not approvelist_scan(reg_approvelist, field):
                     outputtext = '[RegDeleteValue] {}:{} > {}'.format(field[1], field[2], field[4])
                     tl_text = '{},Registry,RegDeleteVal ue,{},{},{}'.format(date_stamp, field[1],
                                                                             field[2], field[4])
@@ -1087,7 +1145,7 @@ def parse_csv(csv_file, report, timeline):
 
             elif field[3] == 'RegDeleteKey':  # and field[5] == 'SUCCESS':
                 # SUCCESS is commented out to allows all attempted deletions, whether or not the value exists
-                if not whitelist_scan(reg_whitelist, field):
+                if not approvelist_scan(reg_approvelist, field):
                     outputtext = '[RegDeleteKey] {}:{} > {}'.format(field[1], field[2], field[4])
                     tl_text = '{},Registry,RegDeleteKey,{},{},{}'.format(date_stamp, field[1],
                                                                          field[2], field[4])
@@ -1095,7 +1153,7 @@ def parse_csv(csv_file, report, timeline):
                     timeline.append(tl_text)
 
             elif field[3] == 'UDP Send' and field[5] == 'SUCCESS':
-                if not whitelist_scan(net_whitelist, field):
+                if not approvelist_scan(net_approvelist, field):
                     server = field[4].split('-> ')[1]
                     # TODO: work on this later, once I can verify it better.
                     # if field[6] == 'Length: 20':
@@ -1109,7 +1167,7 @@ def parse_csv(csv_file, report, timeline):
                         timeline.append(tl_text)
 
             elif field[3] == 'UDP Receive' and field[5] == 'SUCCESS':
-                if not whitelist_scan(net_whitelist, field):
+                if not approvelist_scan(net_approvelist, field):
                     server = field[4].split('-> ')[1]
                     outputtext = '[UDP] {} > {}:{}'.format(protocol_replace(server), field[1], field[2])
                     if outputtext not in net_output:
@@ -1119,7 +1177,7 @@ def parse_csv(csv_file, report, timeline):
                         timeline.append(tl_text)
 
             elif field[3] == 'TCP Send' and field[5] == 'SUCCESS':
-                if not whitelist_scan(net_whitelist, field):
+                if not approvelist_scan(net_approvelist, field):
                     server = field[4].split('-> ')[1]
                     outputtext = '[TCP] {}:{} > {}'.format(field[1], field[2], protocol_replace(server))
                     if outputtext not in net_output:
@@ -1129,7 +1187,7 @@ def parse_csv(csv_file, report, timeline):
                         timeline.append(tl_text)
 
             elif field[3] == 'TCP Receive' and field[5] == 'SUCCESS':
-                if not whitelist_scan(net_whitelist, field):
+                if not approvelist_scan(net_approvelist, field):
                     server = field[4].split('-> ')[1]
                     outputtext = '[TCP] {} > {}:{}'.format(protocol_replace(server), field[1], field[2])
                     if outputtext not in net_output:
@@ -1247,7 +1305,7 @@ def main():
     parser.add_argument('-p', '--pml', help='Re-analyze an existing Noriben PML file', required=False)
     parser.add_argument('-f', '--filter', help='Specify alternate Procmon Filter PMC', required=False)
     parser.add_argument('--config', help='Specify configuration file', required=False)
-    parser.add_argument('--hash', help='Specify hash whitelist file', required=False)
+    parser.add_argument('--hash', help='Specify hash approvelist file', required=False)
     parser.add_argument('--hashtype', help='Specify hash type', required=False, choices=valid_hash_types)
     parser.add_argument('--headless', action='store_true', help='Do not open results on VM after processing',
                         required=False)
@@ -1256,7 +1314,7 @@ def main():
     parser.add_argument('--yara', help='Folder containing YARA rules', required=False)
     parser.add_argument('--generalize', dest='generalize_paths', default=False, action='store_true',
                         help='Generalize file paths to environment variables.\n' +
-                             'Default: {}'.format(config['generalize_paths']), required=False)
+                        'Default: {}'.format(config['generalize_paths']), required=False)
     parser.add_argument('--cmd', help='Command line to execute (in quotes)', required=False)
     parser.add_argument('-d', '--debug', action='store_true', help='Enable debugging', required=False)
     parser.add_argument('--troubleshoot', action='store_true', help='Pause before exiting for troubleshooting',
@@ -1291,7 +1349,7 @@ def main():
     if args.hashtype:
         config['hash_type'] = args.hashtype
 
-    # Load hash whitelist and append to global white list
+    # Load hash approvelist and append to global approve list
     if args.hash:
         if file_exists(args.hash):
             read_hash_file(args.hash)
