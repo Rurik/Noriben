@@ -61,17 +61,17 @@
 # Version 1.7.0 - 4 Feb 17 -
 #       Default hash method is now SHA256. An argument and global var allow to
 #       override hash. Numerous filters added. PEP8 cleanup, multiple small fixes to
-#       code and implementation styles.
+#       code and implementation styles
 # Version 1.7.1 - 3 Apr 17 -
-#       Small updates. Change --filter to not find default if a bad one is specified.
+#       Small updates. Change --filter to not find default if a bad one is specified
 # Version 1.7.2 - 21 Apr 17 -
 #       Fixed Debug output to go to a log file continually, so output is stored if
 #       unexpected exit. Check for PML and Config file between executions to account
 #       for destructive malware that erases during runtime. Added headless option for
-#       automated runs, so that screenshot can be grabbed w/o output on screen.
+#       automated runs, so that screenshot can be grabbed w/o output on screen
 # Version 1.7.3 - 26 Dec 17 -
 #       Fixed bug where a changed procmon binary was not added to the whitelist, and
-#       would therefore be included in the output.
+#       would therefore be included in the output
 # Version 1.7.3b - 7 Jan 18 -
 #       Implemented --troubleshoot option to pause the program upon exit so that the
 #       error messages can be seen manually
@@ -86,19 +86,22 @@
 #       be changed due to limitations in ProcMon
 # Version 1.8.0 - 9 Jun 18
 #       Really, truly, dropping Python 2 support now. Added --config file option to load
-#       global variables from external files. Now uses CSV library. Code cleanup.
+#       global variables from external files. Now uses CSV library. Code cleanup
 # Version 1.8.1 - 14 Jun 18
 #       Added additional config options, such as output_folder. Added value
 #       global_whitelist_append to allow additional filters
 # Version 1.8.2 - 28 Jun 18
-#       Fixed minor bug that would crash upon writing out CSV.
+#       Fixed minor bug that would crash upon writing out CSV
 # Version 1.8.3 - 26 Nov 18
 #       Fixed minor bugs in reading hash files and in sleeping between VirusTotal queries
 # Version 1.8.4 - 22 Nov 19
 #       Minor updates. Added ability to run a non-executable, such as a Word document
-# Version 1.8.5 - 2 May 21
+# Version 1.8.5 - 02 May 21
 #       Changed terminology from whitelist to approvelist. Updated filters. Added quick
 #       fix related to issue #29/#44 for errant ticks in data
+# Version 1.8.6 - 26 May 21
+#       Fixed a long-standing bug that crashed the script when encountering certain
+#       binary data in a registry key
 #
 # TODO:
 # * Upload files directly to VirusTotal (2.X feature?)
@@ -431,7 +434,7 @@ hash_approvelist = [
         ]
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '1.8.5'
+__VERSION__ = '1.8.6'
 path_general_list = []
 virustotal_upload = True if config['virustotal_api_key'] else False  # TODO
 use_virustotal = True if config['virustotal_api_key'] and has_internet else False
@@ -1132,7 +1135,7 @@ def parse_csv(csv_file, report, timeline):
                             timeline.append(tl_text)
 
                     except (IndexError, ValueError):
-                        error_output.append(original_line.strip())
+                        error_output.append(''.join(original_line))
 
             elif field[3] == 'RegDeleteValue':  # and field[5] == 'SUCCESS':
                 # SUCCESS is commented out to allows all attempted deletions, whether or not the value exists
