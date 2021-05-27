@@ -1,5 +1,5 @@
-## [![Noriben Logo](https://github.com/Rurik/Noriben/images/noriben_logo.svg)] Noriben Malware Analysis Sandbox
-[![Black Hat Arsenal](https://github.com/Rurik/Noriben/images/BlackHat_Arsenal_2015.svg)](http://www.toolswatch.org/2015/06/black-hat-arsenal-usa-2015-speakers-lineup/)
+## [![Noriben Logo](https://raw.github.com/Rurik/Noriben/images/noriben_logo.svg)] Noriben Malware Analysis Sandbox
+[![Black Hat Arsenal](https://raw.github.com/Rurik/Noriben/images/BlackHat_Arsenal_2015.svg)](http://www.toolswatch.org/2015/06/black-hat-arsenal-usa-2015-speakers-lineup/)
 
 <pre>
 Contact Information:
