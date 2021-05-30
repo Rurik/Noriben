@@ -1,5 +1,5 @@
-## Noriben Malware Analysis Sandbox
-[![Black Hat Arsenal](https://www.toolswatch.org/badges/arsenal/2015.svg)](http://www.toolswatch.org/2015/06/black-hat-arsenal-usa-2015-speakers-lineup/)
+## [![Noriben Logo](https://github.com/Rurik/Noriben/images/noriben_logo.png)] Noriben Malware Analysis Sandbox
+[![Black Hat Arsenal](https://github.com/Rurik/Noriben/images/BlackHat_Arsenal_2015.svg)](http://www.toolswatch.org/2015/06/black-hat-arsenal-usa-2015-speakers-lineup/)
 
 <pre>
 Contact Information:
@@ -77,35 +77,13 @@ optional arguments:
   -d, --debug           Enable debugging
 </pre>
 
-## Errors?
-One common error that appears is due to how Python 2.7 handles Ctrl-C calls during a sleep. This is seen in operation as soon as Ctrl-C is pressed with the following errors, shown below. Note that this only applies to Python 2 users with older code. Now that the code requires Python 3, this is less of an issue.
+## Notable contributors
 
-<pre>
-[*] Launching Procmon ...
-Traceback (most recent call last):
-  File "Noriben.py", line 1063, in <module>
-    main()
-  File "Noriben.py", line 1043, in main
-    live_capture()
-  File "Noriben.py", line 858, in live_capture
-    launch_procmon_capture()
-  File "Noriben.py", line 564, in launch_procmon_capture
-    sleep(3)
-KeyboardInterrupt
-</pre>
+Brian Baskin
+<Your name here>
+<Documentation writers welcome!>
 
-This is an odd error that occurs seemingly randomly, and in ways that cannot be managed.
-Resolving this can be done multiple ways. Once this error occurs, you can terminate Procmon manually with 'procmon.exe /Terminate'. From this point, your Noriben*.PML file still exists and the operation can be resumed with: 'Noriben.py -p <filename>.PML'. 
-
-
-Resolutions:
-<pre>
-1. Use Python 3.X instead of 2.X.
-2. Specify a timeout period instead of using Ctrl-C.
-</pre>
-
-
-
+<a href="https://twitter.com/noticemecowpie">Cowpy for the logo design</a>
 
 ## Copyright and license
 
