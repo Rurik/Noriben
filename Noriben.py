@@ -1104,6 +1104,7 @@ def parse_csv(csv_file, report, timeline):
 
             elif field[3] == 'RegCreateKey' and field[5] == 'SUCCESS':
                 if not approvelist_scan(reg_approvelist, field):
+                    path = field[4]
                     log_debug('[*] RegCreateKey: {}'.format(path))
 
                     outputtext = '[RegCreateKey] {}:{} > {}'.format(field[1], field[2], field[4])
