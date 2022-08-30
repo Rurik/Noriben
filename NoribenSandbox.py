@@ -128,8 +128,7 @@ def run_file(args, magic_result, malware_file):
     if args.update:
         if file_exists(host_noriben_path):
             cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest "{}" "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX,
-                                                                                     host_noriben_path,
-                                                                                     guest_noriben_path)
+                                                                                     host_noriben_path, guest_noriben_path)
             return_code = execute(cmd)
             if return_code:
                 print('[!] Error trying to copy updated Noriben to guest. Continuing. Error {}: {}'.format(
