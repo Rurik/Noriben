@@ -15,6 +15,9 @@
 # This is definitely a work in progress. However, efforts made to make it clear per PyCharm code inspection.
 
 import argparse
+import ast
+import codecs
+import configparser
 import io
 import glob
 import magic  # pip python-magic and libmagic
@@ -23,29 +26,7 @@ import subprocess
 import sys
 import time
 
-vmrun_os = {'windows': os.path.expanduser(r'C:\Program Files (x86)\VMware\VMware Workstation\vmrun.exe'),
-            'mac': os.path.expanduser(r'/Applications/VMware Fusion.app/Contents/Library/vmrun')}
-debug = False
-timeout_seconds = 300
-VMX = r'E:\VMs\Windows.vmwarevm\Windows.vmx'
-# VMX = os.path.expanduser(r'~/VMs/Windows.vmwarevm/Windows.vmx')
-VMRUN = vmrun_os['windows']
-VM_SNAPSHOT = 'YourVMSnapshotNameHere'
-VM_USER = 'Admin'
-VM_PASS = 'password'
-noriben_path = 'C:\\\\Users\\\\{}\\\\Desktop'.format(VM_USER)
-guest_noriben_path = '{}\\\\Noriben.py'.format(noriben_path)
-procmon_config_path = '{}\\\\ProcmonConfiguration.pmc'.format(noriben_path)
-report_path_structure = '{}/{}_NoribenReport.zip'  # (host_malware_path, host_malware_name_base)
-host_screenshot_path_structure = '{}/{}.png'  # (host_malware_path, host_malware_name_base)
-guest_log_path = 'C:\\\\Noriben_Logs'
-guest_zip_path = 'C:\\\\Program Files\\\\VMware\\\\VMware Tools\\\\zip.exe'
-guest_temp_zip = 'C:\\\\Noriben_Logs\\\\NoribenReports.zip'
-guest_python_path = 'C:\\Program Files (x86)\\Python36-32\\\\python.exe'
-host_noriben_path = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), 'Noriben.py')
-guest_malware_path = 'C:\\\\Malware\\\\malware_'
-error_tolerance = 5
-dontrun = False
+
 
 noriben_errors = {1: 'PML file was not found',
                  2: 'Unable to find procmon.exe',
@@ -56,7 +37,8 @@ noriben_errors = {1: 'PML file was not found',
                  7: 'Error creatign CSV',
                  8: 'Error creating PML',
                  9: 'Unknown error',
-                 10: 'Invalid arguments given'}
+                 10: 'Invalid arguments given',
+                 11: 'Missing Python module'}
 
 error_count = 0
 
@@ -74,23 +56,58 @@ def file_exists(fname):
 def execute(cmd):
     if debug:
         print(cmd)
-    time.sleep(2)  # Extra sleep buffer as vmrun sometimes tripped over itself
+    time.sleep(2)  # Extra sleep buffer as vmrun sometimes trips over itself
     stdout = subprocess.Popen(cmd, shell=True)
     stdout.wait()
     return stdout.returncode
+
+
+def read_config(config_filename):
+    """
+    Parse an external configuration file.
+
+    Arguments:
+        config_filename: String of filename, predetermined if exists
+    Result:
+        none
+    """
+    global config
+    global use_virustotal
+
+    file_config = configparser.ConfigParser(inline_comment_prefixes = ('#',';'))
+    with codecs.open(config_filename, 'r', encoding='utf-8') as f:
+        file_config.read_file(f)
+
+    config = {}
+    options = file_config.options('Noriben_host')
+    for option in options:
+        try:
+            config[option] = file_config.get('Noriben_host', option)
+            if config[option] == -1:
+                DebugPrint("skip: %s" % option)
+        except:
+            print("exception on %s!" % option)
+            config[option] = None
+
+
+
 
 
 def run_file(args, magic_result, malware_file):
     global dontrun
     global error_count
 
+    # First, normalize the configuration paths:
+    guest_noriben_path = os.path.expanduser(config['guest_noriben_path'].format(config['vm_user']))
+
+
     host_malware_name_base = os.path.split(malware_file)[-1].split('.')[0]
     if dontrun:
-        filename = '{}{}'.format(guest_malware_path, host_malware_name_base)
+        filename = '{}{}'.format(config['guest_malware_path'], host_malware_name_base)
     elif 'DOS batch' in magic_result:
-        filename = '{}{}.bat'.format(guest_malware_path, host_malware_name_base)
+        filename = '{}{}.bat'.format(config['guest_malware_path'], host_malware_name_base)
     else:
-        filename = '{}{}.exe'.format(guest_malware_path, host_malware_name_base)
+        filename = '{}{}.exe'.format(config['guest_malware_path'], host_malware_name_base)
     host_malware_path = os.path.dirname(malware_file)
     if host_malware_path == '':
         host_malware_path = '.'
@@ -101,43 +118,80 @@ def run_file(args, magic_result, malware_file):
         active = '-activeWindow'
     else:
         active = ''
-    cmd_base = '"{}" -T ws -gu {} -gp {} runProgramInGuest "{}" {} -interactive'.format(VMRUN, VM_USER, VM_PASS, VMX,
+    cmd_base = '"{}" -T ws -gu {} -gp {} runProgramInGuest {} {} -interactive'.format(config['vmrun'], config['vm_user'], config['vm_pass'], os.path.expanduser(config['vmx']),
                                                                                         active)
     if not args.norevert:
-        cmd = '"{}" -T ws revertToSnapshot "{}" "{}"'.format(VMRUN, VMX, VM_SNAPSHOT)
+        cmd = '"{}" -T ws revertToSnapshot {} "{}"'.format(config['vmrun'], os.path.expanduser(config['vmx']), os.path.expanduser(config['vm_snapshot']))
         return_code = execute(cmd)
         if return_code:
-            print('[!] Error: Possible unknown snapshot: {}'.format(VM_SNAPSHOT))
+            print('[!] Error: Possible unknown snapshot: {}'.format(os.path.expanduser(config['vm_snapshot'])))
             sys.exit(return_code)
 
-    cmd = '"{}" -T ws start "{}"'.format(VMRUN, VMX)
+    cmd = '"{}" -T ws start {}'.format(config['vmrun'], os.path.expanduser(config['vmx']))
     return_code = execute(cmd)
     if return_code:
         print('[!] Error trying to start VM. Error {}: {}'.format(hex(return_code), get_error(return_code)))
         error_count += 1
         return return_code
 
-    cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest "{}" "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX, malware_file,
-                                                                             filename)
+    cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest {} "{}" "{}"'.format(config['vmrun'], config['vm_user'], 
+                                                                             config['vm_pass'], os.path.expanduser(config['vmx']), 
+                                                                             malware_file, filename)
     return_code = execute(cmd)
     if return_code:
         print('[!] Error trying to copy file to guest. Error {}: {}'.format(hex(return_code), get_error(return_code)))
         error_count += 1
         return return_code
 
+
+    # --update - Copy the newest Noriben.py from the host into the guest VM. This saves one from having to make new snapshots
+    #            just for new versions of the script. It also helps to run Noriben on VM that doesn't already have it.
     if args.update:
-        if file_exists(host_noriben_path):
-            cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest "{}" "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX,
-                                                                                     host_noriben_path, guest_noriben_path)
+        if config['host_noriben_path']:
+            host_noriben_path = config['host_noriben_path']
+        else:
+            host_noriben_path = sys.argv[0]
+        host_noriben_path = os.path.dirname(os.path.abspath(host_noriben_path))
+
+        host_noriben_path_script = os.path.join(host_noriben_path, 'Noriben.py')
+        host_noriben_path_config = os.path.join(host_noriben_path, 'Noriben.config')
+
+        # These refef to Windows-based paths. As the host OS is unknown, we'll build them manually
+        guest_noriben_path_script = '{}\\{}'.format(guest_noriben_path, 'Noriben.py')
+        guest_noriben_path_config = '{}\\{}'.format(guest_noriben_path, 'Noriben.config')
+
+
+        if file_exists(host_noriben_path_script):
+            cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest {} "{}" "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'], config['vmx'],
+                                                                                     host_noriben_path_script.format(config['vm_user']),
+                                                                                     guest_noriben_path_script)
             return_code = execute(cmd)
             if return_code:
-                print('[!] Error trying to copy updated Noriben to guest. Continuing. Error {}: {}'.format(
+                print('[!] Error trying to copy updated Noriben.py to guest. Continuing. Error {}: {}'.format(
+                    hex(return_code), get_error(return_code)))
+                quit()
+
+        else:
+            print('[!] Noriben.py on host not found: {}'.format(host_noriben_path.format(config['vm_user'])))
+            error_count += 1
+            return return_code
+
+
+        if file_exists(host_noriben_path_config):
+            cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest {} "{}" "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'], config['vmx'],
+                                                                                     host_noriben_path_config.format(config['vm_user']),
+                                                                                     guest_noriben_path_config)
+            return_code = execute(cmd)
+            if return_code:
+                print('[!] Error trying to copy updated Noriben.config to guest. Continuing. Error {}: {}'.format(
                     hex(return_code), get_error(return_code)))
 
         else:
-            print('[!] Noriben.py on host not found: {}'.format(host_noriben_path))
-            error_count += 1
-            return return_code
+            # Not having Noriben.config will not error out. This can be expected in some situations.
+            print('[!] Noriben.py on host not found: {}'.format(host_noriben_path.format(config['vm_user'])))
+
+
+
 
     if args.dontrunnothing:
         sys.exit(return_code)
@@ -154,8 +208,9 @@ def run_file(args, magic_result, malware_file):
             return return_code
 
     # Run Noriben
-    cmd = '{} "{}" "{}" -t {} --headless --output "{}" '.format(cmd_base, guest_python_path, guest_noriben_path,
-                                                              timeout_seconds, guest_log_path)
+    cmd = '{} "{}" "{}" -t {} --headless --output "{}" '.format(cmd_base, config['guest_python_path'],
+                                                                os.path.expanduser(config['guest_noriben_path'].format(config['vm_user'])),
+                                                                config['timeout_seconds'], config['guest_log_path'])
 
     if not dontrun:
         cmd = '{} --cmd "{}" '.format(cmd, filename)
@@ -192,7 +247,7 @@ def run_file(args, magic_result, malware_file):
 
         if not args.nolog and not zip_failed:
             host_report_path = report_path_structure.format(host_malware_path, host_malware_name_base)
-            cmd = '"{}" -gu {} -gp {} copyFileFromGuestToHost "{}" "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX,
+            cmd = '"{}" -gu {} -gp {} copyFileFromGuestToHost "{}" "{}" "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'], config['vmx'],
                                                                                    guest_temp_zip, host_report_path)
             return_code = execute(cmd)
             if return_code:
@@ -201,7 +256,7 @@ def run_file(args, magic_result, malware_file):
 
         if args.screenshot:
             host_screenshot_path = host_screenshot_path_structure.format(host_malware_path, host_malware_name_base)
-            cmd = '"{}" -gu {} -gp {} captureScreen "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX,
+            cmd = '"{}" -gu {} -gp {} captureScreen "{}" "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'], config['vmx'],
                                                                       host_screenshot_path)
             return_code = execute(cmd)
             if return_code:
@@ -209,7 +264,7 @@ def run_file(args, magic_result, malware_file):
                                                                                    get_error(return_code)))
 
         if args.shutdown:
-            cmd = '"{}" -T ws stop "{}"'.format(VMRUN, VMX)
+            cmd = '"{}" -T ws stop {}'.format(config['vmrun'], config['vmx'])
             return_code = execute(cmd)
             if return_code:
                 print('[!] Error trying to start VM. Error {}: {}'.format(hex(return_code), get_error(return_code)))
@@ -217,7 +272,7 @@ def run_file(args, magic_result, malware_file):
                 return return_code
 
         if args.suspend:
-            cmd = '"{}" -T ws suspend "{}"'.format(VMRUN, VMX)
+            cmd = '"{}" -T ws suspend {}'.format(config['vmrun'], config['vmx'])
             return_code = execute(cmd)
             if return_code:
                 print('[!] Error trying to start VM. Error {}: {}'.format(hex(return_code), get_error(return_code)))
@@ -267,7 +322,7 @@ def copy_file_to_zip(cmd_base, filename):
     # Therefore, first copy file to log folder and then add to the zip.
     global error_count
 
-    cmd = '"{}" -gu {} -gp {} fileExistsInGuest "{}" "{}"'.format(VMRUN, VM_USER, VM_PASS, VMX, filename)
+    cmd = '"{}" -gu {} -gp {} fileExistsInGuest "{}" "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'], config['vmx'], filename)
     return_code = execute(cmd)
     if return_code:
         print('[!] File does not exist in guest. Continuing. File: {}'.format(filename))
@@ -293,11 +348,8 @@ def copy_file_to_zip(cmd_base, filename):
 
 def main():
     global debug
-    global timeout_seconds
-    global VM_SNAPSHOT
-    global VMRUN
-    global VMX
     global dontrun
+    global config
     global error_count
 
     error_count = 0
@@ -322,20 +374,28 @@ def main():
                         required=False)
     parser.add_argument('--skip', action='store_true', help='Skip already executed files', required=False)
     parser.add_argument('-s', '--snapshot', help='Specify VM Snapshot to revert to', required=False)
-    parser.add_argument('--vmx', help='Specify VM VMX', required=False)
+    parser.add_argument('--vmx', help='Specify VM VMX file', required=False)
     parser.add_argument('--ignore', help='Ignore files or folders that contain this term', required=False)
-    parser.add_argument('--nonoriben', action='store_true', help='Do not run Noriben in guest, just sample',
+    parser.add_argument('--nonoriben', action='store_true', help='Do not run Noriben in guest, just the sample',
                         required=False)  # Do not run Noriben script
     parser.add_argument('--os', help='Specify Windows or Mac for that specific vmrun path', required=False)
-    parser.add_argument('--config', help='Optional runtime configuration file', required=False)
+    parser.add_argument('--config', help='Runtime configuration file', type=str, nargs='?', default='Noriben.config')
     parser.add_argument('--guestconfig', help='Optional guest Noriben runtime configuration file', required=False)
     parser.add_argument('--shutdown', action='store_true', help='Powers down guest VM after execution', required=False)
     parser.add_argument('--suspend', action='store_true', help='Sleeps guest VM after execution', required=False)
 
-    parser.add_argument('--defense', action='store_true', help='Extract Carbon Black Defense log to host',
-                        required=False)  # Particular to Carbon Black Defense. Use as example of adding your own files
+    parser.add_argument('--cb_defense', action='store_true', help='Extract Carbon Black Defense log to host',
+                        required=False)  # Particular to Carbon Black Defense. This is just an example of adding your own files
 
     args = parser.parse_args()
+
+    # Load config file first, then use additional args to override those values if necessary
+    if args.config:
+        if file_exists(args.config):
+            read_config(args.config)
+        else:
+            print('[!] Config file {} not found!'.format(args.config))
+
 
     if not args.file and not args.dir:
         print('[!] A filename or directory name are required. Run with --help for more options')
@@ -348,7 +408,7 @@ def main():
     if args.os:
         if args.os in vmrun_os:
             try:
-                VMRUN = vmrun_os[args.os.lower()]
+                config['vmrun'] = vmrun_os[args.os.lower()]
             except KeyError:
                 print('[!] Unable to find vmrun entry for value: {}'.format(args.os))
                 sys.exit(1)
@@ -356,15 +416,15 @@ def main():
             print('[!] Unable to find vmrun entry for value: {}'.format(args.os))
             sys.exit(1)
 
-    if not file_exists(VMRUN):
-        print('[!] Path to vmrun does not exist: {}'.format(VMRUN))
+    if not file_exists(config['vmrun']):
+        print('[!] Path to vmrun does not exist: {}'.format(config['vmrun']))
         sys.exit(1)
 
-    if args.debug:
+    if args.debug or config['debug']:
         debug = True
 
-    if not VM_PASS:
-        print('[!] VM_PASS must be set. VMware requires guest accounts to have passwords for remote access.')
+    if not config['vm_pass']:
+        print('[!] vm_pass must be set in the configuration. VMware requires guest accounts to have passwords for remote access.')
         sys.exit(1)
 
     magic_handle = None
@@ -388,11 +448,11 @@ def main():
         dontrun = True
 
     if args.snapshot:
-        VM_SNAPSHOT = args.snapshot
+        config['vm_snapshot'] = args.snapshot
 
     if args.vmx:
         if file_exists(os.path.expanduser(args.vmx)):
-            VMX = os.path.expanduser(args.vmx)
+            config['vmx'] = os.path.expanduser(args.vmx)
 
     if args.timeout:
         timeout_seconds = args.timeout
