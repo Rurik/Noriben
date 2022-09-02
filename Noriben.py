@@ -7,35 +7,68 @@
 # When the executable has completed its processing, stop Noriben and view a
 # clean text report and timeline
 #
-# Version 1.0 - 10 Apr 13 - @bbaskin - brian [@] thebaskins.com
-#       Gracious edits, revisions, and corrections by Daniel Raygoza
-# Version 1.1 - 21 Apr 13 -
-#       Much improved filters and filter parsing
-# Version 1.1a - 1 May 13 -
-#       Revamped regular expression support. Added Python 3.x forward
-#       compatibility
-# Version 1.2 - 28 May 13 -
-#       Now reads CSV files line-by-line to handle large files, keep
-#       unsuccessful registry deletes, compartmentalize sections, creates CSV
-#       timeline, can reparse PMLs, can specify alternative PMC filters,
-#       changed command line arguments, added global approvelist
-# Version 1.3 - 13 Sep 13 -
-#       Option to generalize file paths in output, option to use a timeout
-#       instead of Ctrl-C to end monitoring, only writes RegSetValue entries
-#       if Length > 0
-# Version 1.4 - 16 Sep 13 -
-#       Fixed string generalization on file rename and now supports ()'s in
-#       environment name (for 64-bit systems), added ability to Ctrl-C from
-#       a timeout, added specifying malware file from command line, added an
-#       output directory
-# Version 1.5 - 28 Sep 13 -
-#       Standardized to single quotes, added YARA scanning of resident files,
-#       reformatted function comments to match appropriate docstring format,
-#       fixed bug with generalize paths - now generalizes after getting MD5
-# Version 1.5b - 1 Oct 13 -
-#       Ninja edits to fix a few small bug fixes and change path generalization
-#       to an ordered list instead of an unordered dictionary. This lets you
-#       prioritize resolutions.
+# Changelog:
+# Version 1.8.7 - 30 Aug 22
+#       Replaced csv.reader with csv.DictReader to have better forward and backward
+#       compatibility. Small changes in style, PEP8
+# Version 1.8.6 - 26 May 21
+#       Fixed a long-standing bug that crashed the script when encountering certain
+#       binary data in a registry key
+# Version 1.8.5 - 02 May 21
+#       Changed terminology from whitelist to approvelist. Updated filters. Added quick
+#       fix related to issue #29/#44 for errant ticks in data
+# Version 1.8.4 - 22 Nov 19
+#       Minor updates. Added ability to run a non-executable, such as a Word document
+# Version 1.8.3 - 26 Nov 18
+#       Fixed minor bugs in reading hash files and in sleeping between VirusTotal queries
+# Version 1.8.2 - 28 Jun 18
+#       Fixed minor bug that would crash upon writing out CSV
+# Version 1.8.1 - 14 Jun 18
+#       Added additional config options, such as output_folder. Added value
+#       global_whitelist_append to allow additional filters
+# Version 1.8.0 - 9 Jun 18
+#       Really, truly, dropping Python 2 support now. Added --config file option to load
+#       global variables from external files. Now uses CSV library. Code cleanup
+# Version 1.7.6 - 12 Apr 18 -
+#       Some auto PEP-8 formatting. Fixed bug where specific output dir wouldn't add
+#       to files when specifying a PML or CSV file. Added configuration of new txt
+#       extension in cases where ransomware was encrypting files. CSV, however, cannot
+#       be changed due to limitations in ProcMon
+# Version 1.7.5 - 10 Mar 18 -
+#       Another bug fix related to global use of renamed procmon binary. Edge case fix
+# Version 1.7.4 - 28 Feb 18 -
+#       More bug fixes related to global use of renamed procmon binary. Added filters
+# Version 1.7.3b - 7 Jan 18 -
+#       Implemented --troubleshoot option to pause the program upon exit so that the
+#       error messages can be seen manually
+# Version 1.7.3 - 26 Dec 17 -
+#       Fixed bug where a changed procmon binary was not added to the whitelist, and
+#       would therefore be included in the output
+# Version 1.7.2 - 21 Apr 17 -
+#       Fixed Debug output to go to a log file continually, so output is stored if
+#       unexpected exit. Check for PML and Config file between executions to account
+#       for destructive malware that erases during runtime. Added headless option for
+#       automated runs, so that screenshot can be grabbed w/o output on screen
+# Version 1.7.1 - 3 Apr 17 -
+#       Small updates. Change --filter to not find default if a bad one is specified
+# Version 1.7.0 - 4 Feb 17 -
+#       Default hash method is now SHA256. An argument and global var allow to
+#       override hash. Numerous filters added. PEP8 cleanup, multiple small fixes to
+#       code and implementation styles
+# Version 1.6.4 - 7 Dec 16 -
+#       A handful of bug fixes related to bad Internet access. Small variable updates.
+# Version 1.6.3 - 13 Jan 16 -
+#       Bug fixes to handle path joining. Bug fixes for spaces in all directory
+#       names. Added support to find default PMC from script working directory.
+# Version 1.6.2 - 9 Apr 15 -
+#       Created debug output to file. This now includes full VirusTotal dumps.
+#       Currently Noriben only displays number of hits, but additional meta is now
+#       dumped for further analysis by users.
+# Version 1.6.1 - 16 Mar 15 -
+#       Soft fails on Requests import. Lack of module now just disables VirusTotal.
+#       Added better YARA handling. Instead of failing over a single error, it
+#       will skip the offending file. You can now hard-set the YARA signature
+#       folder in the script.
 # Version 1.6 - 14 Mar 15 -
 #       Long delayed and now forked release. This will be the final release for
 #       Python 2.X except for updated rules. Now requires 3rd party libraries.
@@ -44,64 +77,43 @@
 #       Added whitelist for MD5 hashes and --hash option for hash file.
 #       Renamed 'blacklist' to 'whitelist' because it's supposed to be. LOL
 #       Change file handling due to 'read entire file' bug in FileInput.
-# Version 1.6.1 - 16 Mar 15 -
-#       Soft fails on Requests import. Lack of module now just disables VirusTotal.
-#       Added better YARA handling. Instead of failing over a single error, it
-#       will skip the offending file. You can now hard-set the YARA signature
-#       folder in the script.
-# Version 1.6.2 - 9 Apr 15 -
-#       Created debug output to file. This now includes full VirusTotal dumps.
-#       Currently Noriben only displays number of hits, but additional meta is now
-#       dumped for further analysis by users.
-# Version 1.6.3 - 13 Jan 16 -
-#       Bug fixes to handle path joining. Bug fixes for spaces in all directory
-#       names. Added support to find default PMC from script working directory.
-# Version 1.6.4 - 7 Dec 16 -
-#       A handful of bug fixes related to bad Internet access. Small variable updates.
-# Version 1.7.0 - 4 Feb 17 -
-#       Default hash method is now SHA256. An argument and global var allow to
-#       override hash. Numerous filters added. PEP8 cleanup, multiple small fixes to
-#       code and implementation styles
-# Version 1.7.1 - 3 Apr 17 -
-#       Small updates. Change --filter to not find default if a bad one is specified
-# Version 1.7.2 - 21 Apr 17 -
-#       Fixed Debug output to go to a log file continually, so output is stored if
-#       unexpected exit. Check for PML and Config file between executions to account
-#       for destructive malware that erases during runtime. Added headless option for
-#       automated runs, so that screenshot can be grabbed w/o output on screen
-# Version 1.7.3 - 26 Dec 17 -
-#       Fixed bug where a changed procmon binary was not added to the whitelist, and
-#       would therefore be included in the output
-# Version 1.7.3b - 7 Jan 18 -
-#       Implemented --troubleshoot option to pause the program upon exit so that the
-#       error messages can be seen manually
-# Version 1.7.4 - 28 Feb 18 -
-#       More bug fixes related to global use of renamed procmon binary. Added filters
-# Version 1.7.5 - 10 Mar 18 -
-#       Another bug fix related to global use of renamed procmon binary. Edge case fix
-# Version 1.7.6 - 12 Apr 18 -
-#       Some auto PEP-8 formatting. Fixed bug where specific output dir wouldn't add
-#       to files when specifying a PML or CSV file. Added configuration of new txt
-#       extension in cases where ransomware was encrypting files. CSV, however, cannot
-#       be changed due to limitations in ProcMon
-# Version 1.8.0 - 9 Jun 18
-#       Really, truly, dropping Python 2 support now. Added --config file option to load
-#       global variables from external files. Now uses CSV library. Code cleanup
-# Version 1.8.1 - 14 Jun 18
-#       Added additional config options, such as output_folder. Added value
-#       global_whitelist_append to allow additional filters
-# Version 1.8.2 - 28 Jun 18
-#       Fixed minor bug that would crash upon writing out CSV
-# Version 1.8.3 - 26 Nov 18
-#       Fixed minor bugs in reading hash files and in sleeping between VirusTotal queries
-# Version 1.8.4 - 22 Nov 19
-#       Minor updates. Added ability to run a non-executable, such as a Word document
-# Version 1.8.5 - 02 May 21
-#       Changed terminology from whitelist to approvelist. Updated filters. Added quick
-#       fix related to issue #29/#44 for errant ticks in data
-# Version 1.8.6 - 26 May 21
-#       Fixed a long-standing bug that crashed the script when encountering certain
-#       binary data in a registry key
+# Version 1.5b - 1 Oct 13 -
+#       Ninja edits to fix a few small bug fixes and change path generalization
+#       to an ordered list instead of an unordered dictionary. This lets you
+#       prioritize resolutions.
+# Version 1.5 - 28 Sep 13 -
+#       Standardized to single quotes, added YARA scanning of resident files,
+#       reformatted function comments to match appropriate docstring format,
+#       fixed bug with generalize paths - now generalizes after getting MD5
+# Version 1.4 - 16 Sep 13 -
+#       Fixed string generalization on file rename and now supports ()'s in
+#       environment name (for 64-bit systems), added ability to Ctrl-C from
+#       a timeout, added specifying malware file from command line, added an
+#       output directory
+# Version 1.3 - 13 Sep 13 -
+#       Option to generalize file paths in output, option to use a timeout
+#       instead of Ctrl-C to end monitoring, only writes RegSetValue entries
+#       if Length > 0
+# Version 1.2 - 28 May 13 -
+#       Now reads CSV files line-by-line to handle large files, keep
+#       unsuccessful registry deletes, compartmentalize sections, creates CSV
+#       timeline, can reparse PMLs, can specify alternative PMC filters,
+#       changed command line arguments, added global approvelist
+# Version 1.1a - 1 May 13 -
+#       Revamped regular expression support. Added Python 3.x forward
+#       compatibility
+# Version 1.1 - 21 Apr 13 -
+#       Much improved filters and filter parsing
+# Version 1.0 - 10 Apr 13 - @bbaskin - brian [@] thebaskins.com
+#       Gracious edits, revisions, and corrections by Daniel Raygoza
+
+
+
+
+
+
+
+
 #
 # TODO:
 # * Upload files directly to VirusTotal (2.X feature?)
@@ -202,7 +214,7 @@ global_approvelist = [
         ]
 
 cmd_approvelist = [
-        r'AppData\Local\Microsoft\OneDrive\StandaloneUpdater\OneDriveSetup.exe', # MS is so noisy
+        r'AppData\Local\Microsoft\OneDrive\StandaloneUpdater\OneDriveSetup.exe',  # MS is so noisy
         r'%SystemRoot%\system32\wbem\wmiprvse.exe',
         r'%SystemRoot%\system32\wscntfy.exe',
         r'wuauclt.exe',
@@ -434,7 +446,7 @@ hash_approvelist = [
         ]
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '1.8.6'
+__VERSION__ = '1.8.7'
 path_general_list = []
 virustotal_upload = True if config['virustotal_api_key'] else False  # TODO
 use_virustotal = True if config['virustotal_api_key'] and has_internet else False
@@ -515,7 +527,7 @@ def read_config(config_filename):
     for key, value in file_config.items('Noriben'):
         try:
             new_config[key] = ast.literal_eval(value)
-        except(ValueError, SyntaxError):
+        except (ValueError, SyntaxError):
             new_config[key] = value
 
     config.update(new_config)
@@ -628,7 +640,7 @@ def read_hash_file(hash_filename):
     """
     global hash_approvelist
     hash_file_handle = open(hash_filename, newline='', encoding='utf-8')
-    reader = csv.reader(hash_file_handle)
+    reader = csv.DictReader(hash_file_handle)
     for hash_line in reader:
         hashval = hash_line[0]
         try:
@@ -800,7 +812,7 @@ def open_file_with_assoc(fname):
     if os.name == 'mac':
         ret = subprocess.call(('open', fname))
     elif os.name == 'nt':
-        #os.startfile(fname)
+        # os.startfile(fname)
         ret = subprocess.call(('start', fname), shell=True)
     elif os.name == 'posix':
         ret = subprocess.call(('open', fname))
@@ -836,7 +848,7 @@ def check_procmon():
     for path in os.environ['PATH'].split(os.pathsep):
         if file_exists(os.path.join(path.strip('"'), procmon_exe)):
             return os.path.join(path, procmon_exe)
-    
+
     if file_exists(os.path.join(script_cwd, procmon_exe)):
         return os.path.join(script_cwd, procmon_exe)
 
@@ -1003,36 +1015,34 @@ def parse_csv(csv_file, report, timeline):
 
     time_parse_csv_start = time.time()
 
-    csv_file_handle = open(csv_file, newline='', encoding='utf-8')
-    reader = csv.reader(csv_file_handle)
+    csv_file_handle = open(csv_file, newline='', encoding='utf-8-sig')
+    reader = csv.DictReader(csv_file_handle)
 
     for original_line in reader:
         server = ''
         field = original_line
-        # log_debug('[*] Parse line. Event: {}'.format(field[3])
-        # Standard Procmon CSV should be 9 distinct fields
-        if len(field) != 9:
-            continue
-        date_stamp = field[0].split()[0].split('.')[0]
+        # log_debug('[*] Parse line. Event: {}'.format(field['Operation'])
+
+        date_stamp = field['Time of Day'].split()[0].split('.')[0]
+
         try:
-            if field[3] in ['Process Create'] and field[5] == 'SUCCESS':
-                cmdline = field[6].split('Command line: ')[1]
+            if field['Operation'] == 'Process Create' and field['Result'] == 'SUCCESS':
+                cmdline = field['Detail'].split('Command line: ')[1]
                 if not approvelist_scan(cmd_approvelist, field):
                     log_debug('[*] CreateProcess: {}'.format(cmdline))
 
                     if config['generalize_paths']:
                         cmdline = generalize_var(cmdline)
-                    child_pid = field[6].split('PID: ')[1].split(',')[0]
+                    child_pid = field['Detail'].split('PID: ')[1].split(',')[0]
                     outputtext = '[CreateProcess] {}:{} > "{}"\t[Child PID: {}]'.format(
-                        field[1], field[2], cmdline.replace('"', ''), child_pid)
-                    tl_text = '{},Process,CreateProcess,{},{},{},{}'.format(date_stamp, field[1], field[2],
-                                                                            cmdline.replace('"', ''), child_pid)
+                        field['Process Name'], field['PID'], cmdline.replace('"', ''), child_pid)
+                    tl_text = '{},Process,CreateProcess,{},{},{},{}'.format(date_stamp, field['Process Name'], field['PID'], cmdline.replace('"', ''), child_pid)
                     process_output.append(outputtext)
                     timeline.append(tl_text)
 
-            elif field[3] == 'CreateFile' and field[5] == 'SUCCESS':
+            elif field['Operation'] == 'CreateFile' and field['Result'] == 'SUCCESS':
                 if not approvelist_scan(file_approvelist, field):
-                    path = field[4]
+                    path = field['Path']
                     log_debug('[*] CreateFile: {}'.format(path))
                     yara_hits = ''
                     if config['yara_folder'] and yara_rules:
@@ -1040,9 +1050,9 @@ def parse_csv(csv_file, report, timeline):
                     if os.path.isdir(path):
                         if config['generalize_paths']:
                             path = generalize_var(path)
-                        outputtext = '[CreateFolder] {}:{} > {}'.format(field[1], field[2], path)
-                        tl_text = '{},File,CreateFolder,{},{},{}'.format(date_stamp, field[1],
-                                                                         field[2], path)
+                        outputtext = '[CreateFolder] {}:{} > {}'.format(field['Process Name'], field['PID'], path)
+                        tl_text = '{},File,CreateFolder,{},{},{}'.format(date_stamp, field['Process Name'],
+                                                                         field['PID'], path)
                         file_output.append(outputtext)
                         timeline.append(tl_text)
                     else:
@@ -1058,11 +1068,11 @@ def parse_csv(csv_file, report, timeline):
 
                             if config['generalize_paths']:
                                 path = generalize_var(path)
-                            outputtext = '[CreateFile] {}:{} > {}\t[{}: {}]{}{}'.format(field[1], field[2], path,
+                            outputtext = '[CreateFile] {}:{} > {}\t[{}: {}]{}{}'.format(field['Process Name'], field['PID'], path,
                                                                                         config['hash_type'], hashval,
                                                                                         yara_hits, av_hits)
                             tl_text = '{},File,CreateFile,{},{},{},{},{},{},{}'.format(date_stamp,
-                                                                                       field[1], field[2], path,
+                                                                                       field['Process Name'], field['PID'], path,
                                                                                        config['hash_type'], hashval,
                                                                                        yara_hits, av_hits)
                             file_output.append(outputtext)
@@ -1070,67 +1080,67 @@ def parse_csv(csv_file, report, timeline):
                         except (IndexError, IOError):
                             if config['generalize_paths']:
                                 path = generalize_var(path)
-                            outputtext = '[CreateFile] {}:{} > {}\t[File no longer exists]'.format(field[1], field[2],
+                            outputtext = '[CreateFile] {}:{} > {}\t[File no longer exists]'.format(field['Process Name'], field['PID'],
                                                                                                    path)
                             tl_text = '{},File,CreateFile,{},{},{},N/A'.format(date_stamp,
-                                                                               field[1], field[2], path)
+                                                                               field['Process Name'], field['PID'], path)
                             file_output.append(outputtext)
                             timeline.append(tl_text)
 
-            elif field[3] == 'SetDispositionInformationFile' and field[5] == 'SUCCESS':
+            elif field['Operation'] == 'SetDispositionInformationFile' and field['Result'] == 'SUCCESS':
                 if not approvelist_scan(file_approvelist, field):
-                    path = field[4]
+                    path = field['Path']
                     log_debug('[*] DeleteFile: {}'.format(path))
                     if config['generalize_paths']:
                         path = generalize_var(path)
-                    outputtext = '[DeleteFile] {}:{} > {}'.format(field[1], field[2], path)
-                    tl_text = '{},File,DeleteFile,{},{},{}'.format(date_stamp, field[1],
-                                                                   field[2], path)
+                    outputtext = '[DeleteFile] {}:{} > {}'.format(field['Process Name'], field['PID'], path)
+                    tl_text = '{},File,DeleteFile,{},{},{}'.format(date_stamp, field['Process Name'],
+                                                                   field['PID'], path)
                     file_output.append(outputtext)
                     timeline.append(tl_text)
 
-            elif field[3] == 'SetRenameInformationFile':
+            elif field['Operation'] == 'SetRenameInformationFile':
                 if not approvelist_scan(file_approvelist, field):
-                    from_file = field[4]
-                    to_file = field[6].split('FileName: ')[1].strip('"')
+                    from_file = field['Path']
+                    to_file = field['Detail'].split('FileName: ')[1].strip('"')
                     if config['generalize_paths']:
                         from_file = generalize_var(from_file)
                         to_file = generalize_var(to_file)
-                    outputtext = '[RenameFile] {}:{} > {} => {}'.format(field[1], field[2], from_file, to_file)
-                    tl_text = '{},File,RenameFile,{},{},{},{}'.format(date_stamp, field[1],
-                                                                      field[2], from_file, to_file)
+                    outputtext = '[RenameFile] {}:{} > {} => {}'.format(field['Process Name'], field['PID'], from_file, to_file)
+                    tl_text = '{},File,RenameFile,{},{},{},{}'.format(date_stamp, field['Process Name'],
+                                                                      field['PID'], from_file, to_file)
                     file_output.append(outputtext)
                     timeline.append(tl_text)
 
-            elif field[3] == 'RegCreateKey' and field[5] == 'SUCCESS':
+            elif field['Operation'] == 'RegCreateKey' and field['Result'] == 'SUCCESS':
                 if not approvelist_scan(reg_approvelist, field):
-                    path = field[4]
+                    path = field['Path']
                     log_debug('[*] RegCreateKey: {}'.format(path))
 
-                    outputtext = '[RegCreateKey] {}:{} > {}'.format(field[1], field[2], field[4])
+                    outputtext = '[RegCreateKey] {}:{} > {}'.format(field['Process Name'], field['PID'], field['Path'])
                     if outputtext not in reg_output:  # Ignore multiple CreateKeys. Only log the first.
                         tl_text = '{},Registry,RegCreateKey,{},{},{}'.format(date_stamp,
-                                                                             field[1], field[2], field[4])
+                                                                             field['Process Name'], field['PID'], field['Path'])
                         reg_output.append(outputtext)
                         timeline.append(tl_text)
 
-            elif field[3] == 'RegSetValue' and field[5] == 'SUCCESS':
+            elif field['Operation'] == 'RegSetValue' and field['Result'] == 'SUCCESS':
                 if not approvelist_scan(reg_approvelist, field):
-                    reg_length = field[6].split('Length:')[1].split(',')[0].strip(string.whitespace + '"')
+                    reg_length = field['Detail'].split('Length:')[1].split(',')[0].strip(string.whitespace + '"')
                     reg_length = reg_length.replace('’', '')  # Addresses errant ticks found in some data samples
                     try:
                         if int(float(reg_length)):
-                            if 'Data:' in field[6]:
-                                data_field = '  =  {}'.format(field[6].split('Data:')[1].strip(string.whitespace + '"'))
+                            if 'Data:' in field['Detail']:
+                                data_field = '  =  {}'.format(field['Detail'].split('Data:')[1].strip(string.whitespace + '"'))
                                 if len(data_field.split(' ')) == 16:
                                     data_field += ' ...'
-                            elif 'Length:' in field[6]:
+                            elif 'Length:' in field['Detail']:
                                 data_field = ''
                             else:
                                 continue
-                            outputtext = '[RegSetValue] {}:{} > {}{}'.format(field[1], field[2], field[4], data_field)
+                            outputtext = '[RegSetValue] {}:{} > {}{}'.format(field['Process Name'], field['PID'], field['Path'], data_field)
                             tl_text = '{},Registry,RegSetValue,{},{},{},{}'.format(date_stamp,
-                                                                                   field[1], field[2], field[4],
+                                                                                   field['Process Name'], field['PID'], field['Path'],
                                                                                    data_field)
                             reg_output.append(outputtext)
                             timeline.append(tl_text)
@@ -1138,65 +1148,65 @@ def parse_csv(csv_file, report, timeline):
                     except (IndexError, ValueError):
                         error_output.append(''.join(original_line))
 
-            elif field[3] == 'RegDeleteValue':  # and field[5] == 'SUCCESS':
-                # SUCCESS is commented out to allows all attempted deletions, whether or not the value exists
+            elif field['Operation'] == 'RegDeleteValue':  # and field['Result'] == 'SUCCESS':
+                # SUCCESS is commented out to allow all attempted deletions, whether or not the value exists
                 if not approvelist_scan(reg_approvelist, field):
-                    outputtext = '[RegDeleteValue] {}:{} > {}'.format(field[1], field[2], field[4])
-                    tl_text = '{},Registry,RegDeleteVal ue,{},{},{}'.format(date_stamp, field[1],
-                                                                            field[2], field[4])
+                    outputtext = '[RegDeleteValue] {}:{} > {}'.format(field['Process Name'], field['PID'], field['Path'])
+                    tl_text = '{},Registry,RegDeleteVal ue,{},{},{}'.format(date_stamp, field['Process Name'],
+                                                                            field['PID'], field['Path'])
                     reg_output.append(outputtext)
                     timeline.append(tl_text)
 
-            elif field[3] == 'RegDeleteKey':  # and field[5] == 'SUCCESS':
-                # SUCCESS is commented out to allows all attempted deletions, whether or not the value exists
+            elif field['Operation'] == 'RegDeleteKey':  # and field['Result'] == 'SUCCESS':
+                # SUCCESS is commented out to allow all attempted deletions, whether or not the value exists
                 if not approvelist_scan(reg_approvelist, field):
-                    outputtext = '[RegDeleteKey] {}:{} > {}'.format(field[1], field[2], field[4])
-                    tl_text = '{},Registry,RegDeleteKey,{},{},{}'.format(date_stamp, field[1],
-                                                                         field[2], field[4])
+                    outputtext = '[RegDeleteKey] {}:{} > {}'.format(field['Process Name'], field['PID'], field['Path'])
+                    tl_text = '{},Registry,RegDeleteKey,{},{},{}'.format(date_stamp, field['Process Name'],
+                                                                         field['PID'], field['Path'])
                     reg_output.append(outputtext)
                     timeline.append(tl_text)
 
-            elif field[3] == 'UDP Send' and field[5] == 'SUCCESS':
+            elif field['Operation'] == 'UDP Send' and field['Result'] == 'SUCCESS':
                 if not approvelist_scan(net_approvelist, field):
-                    server = field[4].split('-> ')[1]
+                    server = field['Path'].split('-> ')[1]
                     # TODO: work on this later, once I can verify it better.
-                    # if field[6] == 'Length: 20':
-                    #    output_line = '[DNS Query] {}:{} > {}'.format(field[1], field[2], protocol_replace(server))
+                    # if field['Detail'] == 'Length: 20':
+                    #    output_line = '[DNS Query] {}:{} > {}'.format(field['Process Name'], field['PID'], protocol_replace(server))
                     # else:
-                    outputtext = '[UDP] {}:{} > {}'.format(field[1], field[2], protocol_replace(server))
+                    outputtext = '[UDP] {}:{} > {}'.format(field['Process Name'], field['PID'], protocol_replace(server))
                     if outputtext not in net_output:
-                        tl_text = '{},Network,UDP Send,{},{},{}'.format(date_stamp, field[1],
-                                                                        field[2], protocol_replace(server))
+                        tl_text = '{},Network,UDP Send,{},{},{}'.format(date_stamp, field['Process Name'],
+                                                                        field['PID'], protocol_replace(server))
                         net_output.append(outputtext)
                         timeline.append(tl_text)
 
-            elif field[3] == 'UDP Receive' and field[5] == 'SUCCESS':
+            elif field['Operation'] == 'UDP Receive' and field['Result'] == 'SUCCESS':
                 if not approvelist_scan(net_approvelist, field):
-                    server = field[4].split('-> ')[1]
-                    outputtext = '[UDP] {} > {}:{}'.format(protocol_replace(server), field[1], field[2])
+                    server = field['Path'].split('-> ')[1]
+                    outputtext = '[UDP] {} > {}:{}'.format(protocol_replace(server), field['Process Name'], field['PID'])
                     if outputtext not in net_output:
-                        tl_text = '{},Network,UDP Receive,{},{}'.format(date_stamp, field[1],
-                                                                        field[2])
+                        tl_text = '{},Network,UDP Receive,{},{}'.format(date_stamp, field['Process Name'],
+                                                                        field['PID'])
                         net_output.append(outputtext)
                         timeline.append(tl_text)
 
-            elif field[3] == 'TCP Send' and field[5] == 'SUCCESS':
+            elif field['Operation'] == 'TCP Send' and field['Result'] == 'SUCCESS':
                 if not approvelist_scan(net_approvelist, field):
-                    server = field[4].split('-> ')[1]
-                    outputtext = '[TCP] {}:{} > {}'.format(field[1], field[2], protocol_replace(server))
+                    server = field['Path'].split('-> ')[1]
+                    outputtext = '[TCP] {}:{} > {}'.format(field['Process Name'], field['PID'], protocol_replace(server))
                     if outputtext not in net_output:
-                        tl_text = '{},Network,TCP Send,{},{},{}'.format(date_stamp, field[1],
-                                                                        field[2], protocol_replace(server))
+                        tl_text = '{},Network,TCP Send,{},{},{}'.format(date_stamp, field['Process Name'],
+                                                                        field['PID'], protocol_replace(server))
                         net_output.append(outputtext)
                         timeline.append(tl_text)
 
-            elif field[3] == 'TCP Receive' and field[5] == 'SUCCESS':
+            elif field['Operation'] == 'TCP Receive' and field['Result'] == 'SUCCESS':
                 if not approvelist_scan(net_approvelist, field):
-                    server = field[4].split('-> ')[1]
-                    outputtext = '[TCP] {} > {}:{}'.format(protocol_replace(server), field[1], field[2])
+                    server = field['Path'].split('-> ')[1]
+                    outputtext = '[TCP] {} > {}:{}'.format(protocol_replace(server), field['Process Name'], field['PID'])
                     if outputtext not in net_output:
-                        tl_text = '{},Network,TCP Receive,{},{}'.format(date_stamp, field[1],
-                                                                        field[2])
+                        tl_text = '{},Network,TCP Receive,{},{}'.format(date_stamp, field['Process Name'],
+                                                                        field['PID'])
                         net_output.append(outputtext)
                         timeline.append(tl_text)
 
@@ -1215,8 +1225,7 @@ def parse_csv(csv_file, report, timeline):
     time_parse_csv_end = time.time()
 
     report.append('-=] Sandbox Analysis Report generated by Noriben v{}'.format(__VERSION__))
-    report.append('-=] Developed by Brian Baskin: brian @@ thebaskins.com  @bbaskin')
-    report.append('-=] The latest release can be found at https://github.com/Rurik/Noriben')
+    report.append('-=] https://github.com/Rurik/Noriben')
     report.append('')
     if exe_cmdline:
         report.append('-=] Analysis of command line: {}'.format(exe_cmdline))
@@ -1298,7 +1307,6 @@ def main():
     global debug_file
 
     print('\n--===[ Noriben v{}'.format(__VERSION__))
-    print('--===[ Brian Baskin [brian@thebaskins.com / @bbaskin]')
 
     if sys.version_info < (3, 0):
         print('[*] Support for Python 2 is no longer available. Please use Python 3.')
@@ -1440,11 +1448,11 @@ def main():
             parse_csv(csv_file, report, timeline)
 
             print('[*] Saving report to: {}'.format(txt_file))
-            codecs.open(txt_file, 'w', 'utf-8').write('\r\n'.join(report))
+            codecs.open(txt_file, 'w', 'utf-8-sig').write('\r\n'.join(report))
 
             print('[*] Saving timeline to: {}'.format(timeline_file))
-            # codecs.open(timeline_file, 'w', 'utf-8').write('\r\n'.join(timeline))
-            with open(timeline_file, 'w', newline='', encoding='utf-8') as f:
+            # codecs.open(timeline_file, 'w', 'utf-8-sig').write('\r\n'.join(timeline))
+            with open(timeline_file, 'w', newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
                 writer.writerows(timeline)
 
@@ -1469,10 +1477,10 @@ def main():
             parse_csv(args.csv, report, timeline)
 
             print('[*] Saving report to: {}'.format(txt_file))
-            codecs.open(txt_file, 'w', 'utf-8').write('\r\n'.join(report))
+            codecs.open(txt_file, 'w', 'utf-8-sig').write('\r\n'.join(report))
 
             print('[*] Saving timeline to: {}'.format(timeline_file))
-            codecs.open(timeline_file, 'w', 'utf-8').write('\r\n'.join(timeline))
+            codecs.open(timeline_file, 'w', 'utf-8-sig').write('\r\n'.join(timeline))
 
             ret = open_file_with_assoc(txt_file)
             terminate_self(0)

@@ -27,18 +27,21 @@ import sys
 import time
 
 
-
-noriben_errors = {1: 'PML file was not found',
-                 2: 'Unable to find procmon.exe',
-                 3: 'Unable to create output directory',
-                 4: 'Windows is refusing execution based upon permissions',
-                 5: 'Could not create CSV',
-                 6: 'Could not find malware file',
-                 7: 'Error creatign CSV',
-                 8: 'Error creating PML',
-                 9: 'Unknown error',
-                 10: 'Invalid arguments given',
-                 11: 'Missing Python module'}
+noriben_errors = {
+    1: 'PML file was not found',
+    2: 'Unable to find procmon.exe',
+    3: 'Unable to create output directory',
+    4: 'Windows is refusing execution based upon permissions',
+    5: 'Could not create CSV',
+    6: 'Could not find malware file',
+    7: 'Error creating CSV',
+    8: 'Error creating PML',
+    9: 'Unknown error',
+    10: 'Invalid arguments given',
+    11: 'Missing Python module',
+    12: 'Error in host module configuration',
+    13: 'Required file not found'
+}
 
 error_count = 0
 
@@ -55,7 +58,7 @@ def file_exists(fname):
 
 def execute(cmd):
     if debug:
-        print(cmd)
+        print('[*] Executing: {}'.format(cmd))
     time.sleep(2)  # Extra sleep buffer as vmrun sometimes trips over itself
     stdout = subprocess.Popen(cmd, shell=True)
     stdout.wait()
@@ -72,34 +75,31 @@ def read_config(config_filename):
         none
     """
     global config
-    global use_virustotal
 
-    file_config = configparser.ConfigParser(inline_comment_prefixes = ('#',';'))
-    with codecs.open(config_filename, 'r', encoding='utf-8') as f:
-        file_config.read_file(f)
+    try:
+        file_config = configparser.ConfigParser(inline_comment_prefixes=('#', ';'))
+        with codecs.open(config_filename, 'r', encoding='utf-8') as f:
+            file_config.read_file(f)
 
-    config = {}
-    options = file_config.options('Noriben_host')
-    for option in options:
-        try:
+        config = {}
+        options = file_config.options('Noriben_host')
+        for option in options:
             config[option] = file_config.get('Noriben_host', option)
             if config[option] == -1:
-                DebugPrint("skip: %s" % option)
-        except:
-            print("exception on %s!" % option)
-            config[option] = None
-
-
-
+                print('[*] Invalid configuration option detected: {}'.format(option))
+    except configparser.MissingSectionHeaderError:
+        print('[!] Error found in reading config file. Invalid section header detected.')
+        sys.exit(12)
+    except:
+        print('[!] Exception occurred while reading config file on option %s!' % option)
+        config[option] = None
 
 
 def run_file(args, magic_result, malware_file):
-    global dontrun
     global error_count
 
     # First, normalize the configuration paths:
     guest_noriben_path = os.path.expanduser(config['guest_noriben_path'].format(config['vm_user']))
-
 
     host_malware_name_base = os.path.split(malware_file)[-1].split('.')[0]
     if dontrun:
@@ -112,19 +112,19 @@ def run_file(args, magic_result, malware_file):
     if host_malware_path == '':
         host_malware_path = '.'
 
-    print('[*] Processing: {}'.format(malware_file))
+    print('[*] Processing sample: {}'.format(malware_file))
 
     if not args.screenshot:
         active = '-activeWindow'
     else:
         active = ''
     cmd_base = '"{}" -T ws -gu {} -gp {} runProgramInGuest {} {} -interactive'.format(config['vmrun'], config['vm_user'], config['vm_pass'], os.path.expanduser(config['vmx']),
-                                                                                        active)
+                                                                                      active)
     if not args.norevert:
         cmd = '"{}" -T ws revertToSnapshot {} "{}"'.format(config['vmrun'], os.path.expanduser(config['vmx']), os.path.expanduser(config['vm_snapshot']))
         return_code = execute(cmd)
         if return_code:
-            print('[!] Error: Possible unknown snapshot: {}'.format(os.path.expanduser(config['vm_snapshot'])))
+            print('[!] Error: Possible unknown snapshot or corrupt VMX: {}'.format(os.path.expanduser(config['vm_snapshot'])))
             sys.exit(return_code)
 
     cmd = '"{}" -T ws start {}'.format(config['vmrun'], os.path.expanduser(config['vmx']))
@@ -134,15 +134,14 @@ def run_file(args, magic_result, malware_file):
         error_count += 1
         return return_code
 
-    cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest {} "{}" "{}"'.format(config['vmrun'], config['vm_user'], 
-                                                                             config['vm_pass'], os.path.expanduser(config['vmx']), 
-                                                                             malware_file, filename)
+    cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest {} "{}" "{}"'.format(config['vmrun'], config['vm_user'],
+                                                                           config['vm_pass'], os.path.expanduser(config['vmx']),
+                                                                           malware_file, filename)
     return_code = execute(cmd)
     if return_code:
         print('[!] Error trying to copy file to guest. Error {}: {}'.format(hex(return_code), get_error(return_code)))
         error_count += 1
         return return_code
-
 
     # --update - Copy the newest Noriben.py from the host into the guest VM. This saves one from having to make new snapshots
     #            just for new versions of the script. It also helps to run Noriben on VM that doesn't already have it.
@@ -160,11 +159,10 @@ def run_file(args, magic_result, malware_file):
         guest_noriben_path_script = '{}\\{}'.format(guest_noriben_path, 'Noriben.py')
         guest_noriben_path_config = '{}\\{}'.format(guest_noriben_path, 'Noriben.config')
 
-
         if file_exists(host_noriben_path_script):
             cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest {} "{}" "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'], config['vmx'],
-                                                                                     host_noriben_path_script.format(config['vm_user']),
-                                                                                     guest_noriben_path_script)
+                                                                                   host_noriben_path_script.format(config['vm_user']),
+                                                                                   guest_noriben_path_script)
             return_code = execute(cmd)
             if return_code:
                 print('[!] Error trying to copy updated Noriben.py to guest. Continuing. Error {}: {}'.format(
@@ -176,11 +174,10 @@ def run_file(args, magic_result, malware_file):
             error_count += 1
             return return_code
 
-
         if file_exists(host_noriben_path_config):
             cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest {} "{}" "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'], config['vmx'],
-                                                                                     host_noriben_path_config.format(config['vm_user']),
-                                                                                     guest_noriben_path_config)
+                                                                                   host_noriben_path_config.format(config['vm_user']),
+                                                                                   guest_noriben_path_config)
             return_code = execute(cmd)
             if return_code:
                 print('[!] Error trying to copy updated Noriben.config to guest. Continuing. Error {}: {}'.format(
@@ -190,94 +187,112 @@ def run_file(args, magic_result, malware_file):
             # Not having Noriben.config will not error out. This can be expected in some situations.
             print('[!] Noriben.py on host not found: {}'.format(host_noriben_path.format(config['vm_user'])))
 
-
-
-
-    if args.dontrunnothing:
+    # --dontrunanything is for cases where the analyst would like to spin up the VM, get files in place, and then stop.
+    # They can then take control and do their own manual analysis.
+    if args.dontrunanything:
+        print('[*] --dontrunanything specified. Files have been copied successfully. Script will now terminate.')
         sys.exit(return_code)
 
     time.sleep(5)
 
+    # --raw deletes the Procmon filter file prior to execution. There are likely better ways, but this 
+    # causes ProcMon to collect with default filters.
     if args.raw:
-        cmd = '{} C:\\\\windows\\\\system32\\\\cmd.exe "/c del {}"'.format(cmd_base, procmon_config_path)
+        procmon_config_path = config['procmon_config_path'].format(config['vm_user'])
+        cmd = '{} C:\\windows\\system32\\cmd.exe "/c del {}"'.format(cmd_base, procmon_config_path)
         return_code = execute(cmd)
+
+        # This errors if the Procmon filter cannot be found. We will allow this error.
         if return_code:
-            print('[!] Error trying to execute command in guest. Error {}: {}'.format(hex(return_code),
+            print('[!] Error trying to delete Procmon filter "{}". Error {}: {}'.format(procmon_config_path,
+                                                                                      hex(return_code),
                                                                                       get_error(return_code)))
             error_count += 1
-            return return_code
+            
 
-    # Run Noriben
+    # Build the command line to run Noriben
     cmd = '{} "{}" "{}" -t {} --headless --output "{}" '.format(cmd_base, config['guest_python_path'],
-                                                                os.path.expanduser(config['guest_noriben_path'].format(config['vm_user'])),
+                                                                guest_noriben_path_script,
                                                                 config['timeout_seconds'], config['guest_log_path'])
-
     if not dontrun:
         cmd = '{} --cmd "{}" '.format(cmd, filename)
 
     if debug:
         cmd = '{} -d'.format(cmd)
 
+    # Finally, execute the command line
     return_code = execute(cmd)
+
     if return_code:
         print('[!] Error in running Noriben. Error {}: {}'.format(hex(return_code), get_error(return_code)))
         error_count += 1
         return return_code
 
-    if not dontrun:
-        if args.post and file_exists(args.post):
-            run_script(args, cmd_base)
+    if dontrun:
+        print('[*] File is now staged for analysis: {}'.format(filename))
+        return
 
-        zip_failed = False
-        cmd = '{} "{}" -j "{}" "{}\\\\*.*"'.format(cmd_base, guest_zip_path, guest_temp_zip, guest_log_path)
+    if args.post and file_exists(args.post):
+        run_script(args, cmd_base)
+
+    zip_failed = False
+    cmd = '{} "{}" -j "{}" "{}\\\\*.*"'.format(cmd_base, config['guest_zip_path'], config['guest_temp_zip'], config['guest_log_path'])
+    return_code = execute(cmd)
+    if return_code:
+        print('[!] Error trying to zip report archive. Error {}: {}'.format(hex(return_code),
+                                                                            get_error(return_code)))
+        zip_failed = True
+
+    """
+    if args.defense and not zip_failed:
+        cb_defense_file = 'C:\\\\Program Files\\\\Confer\\\\confer.log'
+        # Get Carbon Black Defense log. This is an example if you want to include additional files.
+        cmd = '{} "{}" -j "{}" "{}"'.format(cmd_base, config['guest_zip_path'], config['guest_temp_zip'], cb_defense_file)
         return_code = execute(cmd)
         if return_code:
-            print('[!] Error trying to zip report archive. Error {}: {}'.format(hex(return_code),
-                                                                                get_error(return_code)))
-            zip_failed = True
+            print(('[!] Error trying to add additional file to archive. Continuing. '
+                   'Error {}; File: {}'.format(return_code, cb_defense_file)))
+    """
 
-        if args.defense and not zip_failed:
-            cb_defense_file = "C:\\\\Program Files\\\\Confer\\\\confer.log"
-            # Get Carbon Black Defense log. This is an example if you want to include additional files.
-            cmd = '{} "{}" -j "{}" "{}"'.format(cmd_base, guest_zip_path, guest_temp_zip, cb_defense_file)
-            return_code = execute(cmd)
-            if return_code:
-                print(('[!] Error trying to add additional file to archive. Continuing. '
-                       'Error {}; File: {}'.format(return_code, cb_defense_file)))
+    if not args.nolog and not zip_failed:
+        host_report_path = config['report_path_structure'].format(host_malware_path, host_malware_name_base)
+        cmd = '"{}" -gu {} -gp {} copyFileFromGuestToHost {} "{}" "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'], config['vmx'],
+                                                                                 config['guest_temp_zip'], host_report_path)
+        return_code = execute(cmd)
+        if return_code:
+            print('[!] Error trying to copy file from guest. Continuing. Error {}: {}'.format(hex(return_code),
+                                                                                              get_error(return_code)))
 
-        if not args.nolog and not zip_failed:
-            host_report_path = report_path_structure.format(host_malware_path, host_malware_name_base)
-            cmd = '"{}" -gu {} -gp {} copyFileFromGuestToHost "{}" "{}" "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'], config['vmx'],
-                                                                                   guest_temp_zip, host_report_path)
-            return_code = execute(cmd)
-            if return_code:
-                print('[!] Error trying to copy file from guest. Continuing. Error {}: {}'.format(hex(return_code),
-                                                                                                  get_error(return_code)))
+    if args.screenshot:
+        host_screenshot_path = config['host_screenshot_path_structure'].format(host_malware_path, host_malware_name_base)
+        cmd = '"{}" -gu {} -gp {} captureScreen {} "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'], config['vmx'],
+                                                                  host_screenshot_path)
+        return_code = execute(cmd)
+        if return_code:
+            print('[!] Error trying to create screenshot. Error {}: {}'.format(hex(return_code),
+                                                                               get_error(return_code)))
+        else:
+            print('[*] Screenshot of desktop saved to: {}'.format(host_screenshot_path))
 
-        if args.screenshot:
-            host_screenshot_path = host_screenshot_path_structure.format(host_malware_path, host_malware_name_base)
-            cmd = '"{}" -gu {} -gp {} captureScreen "{}" "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'], config['vmx'],
-                                                                      host_screenshot_path)
-            return_code = execute(cmd)
-            if return_code:
-                print('[!] Error trying to create screenshot. Error {}: {}'.format(hex(return_code),
-                                                                                   get_error(return_code)))
+    if args.shutdown:
+        cmd = '"{}" -T ws stop {}'.format(config['vmrun'], config['vmx'])
+        return_code = execute(cmd)
+        if return_code:
+            print('[!] Error trying to start VM. Error {}: {}'.format(hex(return_code), get_error(return_code)))
+            error_count += 1
+            return return_code
 
-        if args.shutdown:
-            cmd = '"{}" -T ws stop {}'.format(config['vmrun'], config['vmx'])
-            return_code = execute(cmd)
-            if return_code:
-                print('[!] Error trying to start VM. Error {}: {}'.format(hex(return_code), get_error(return_code)))
-                error_count += 1
-                return return_code
+    if args.suspend:
+        cmd = '"{}" -T ws suspend {}'.format(config['vmrun'], config['vmx'])
+        return_code = execute(cmd)
+        if return_code:
+            print('[!] Error trying to start VM. Error {}: {}'.format(hex(return_code), get_error(return_code)))
+            error_count += 1
+            return return_code
 
-        if args.suspend:
-            cmd = '"{}" -T ws suspend {}'.format(config['vmrun'], config['vmx'])
-            return_code = execute(cmd)
-            if return_code:
-                print('[!] Error trying to start VM. Error {}: {}'.format(hex(return_code), get_error(return_code)))
-                error_count += 1
-                return return_code
+    # At this point, execution should be completed for the given file.
+    print('[*] Execution completed for {}'.format(malware_file))
+    print('[*] Logs stored at: {}'.format(host_report_path))
 
 
 def get_magic(magic_handle, filename):
@@ -329,7 +344,7 @@ def copy_file_to_zip(cmd_base, filename):
         error_count += 1
         return return_code
 
-    cmd = '{} C:\\\\windows\\\\system32\\\\xcopy.exe "{}" "{}"'.format(cmd_base, filename, guest_log_path)
+    cmd = '{} C:\\\\windows\\\\system32\\\\xcopy.exe "{}" "{}"'.format(cmd_base, filename, config['guest_log_path'])
     return_code = execute(cmd)
     if return_code:
         print(('[!] Error trying to copy file to log folder. Continuing. '
@@ -337,7 +352,7 @@ def copy_file_to_zip(cmd_base, filename):
         error_count += 1
         return return_code
 
-    cmd = '{} "{}" -j "{}" "{}"'.format(cmd_base, guest_zip_path, guest_temp_zip, filename)
+    cmd = '{} "{}" -j "{}" "{}"'.format(cmd_base, config['guest_zip_path'], config['guest_temp_zip'], filename)
     return_code = execute(cmd)
     if return_code:
         print(('[!] Error trying to add additional file to archive. Continuing. '
@@ -359,8 +374,9 @@ def main():
     parser.add_argument('-d', '--debug', dest='debug', action='store_true', help='Show all commands for debugging',
                         required=False)
     parser.add_argument('-t', '--timeout', help='Number of seconds to collect activity', required=False, type=int)
-    parser.add_argument('-x', '--dontrun', dest='dontrun', action='store_true', help='Do not run file', required=False)
-    parser.add_argument('-xx', '--dontrunnothing', dest='dontrunnothing', action='store_true', help='Run nothing',
+    parser.add_argument('-x', '--dontrun', dest='dontrun', action='store_true', help='Execute Noriben, but not sample',
+                        required=False)
+    parser.add_argument('-xx', '--dontrunanything', dest='dontrunanything', action='store_true', help='Execute nothing',
                         required=False)
     parser.add_argument('--dir', help='Run all executables from a specified directory', required=False)
     parser.add_argument('--recursive', action='store_true', help='Recursively process a directory', required=False)
@@ -373,19 +389,20 @@ def main():
     parser.add_argument('--screenshot', action='store_true', help='Take screenshot after execution (PNG)',
                         required=False)
     parser.add_argument('--skip', action='store_true', help='Skip already executed files', required=False)
-    parser.add_argument('-s', '--snapshot', help='Specify VM Snapshot to revert to', required=False)
+    parser.add_argument('--snapshot', help='Specify VM Snapshot to revert to', required=False)
     parser.add_argument('--vmx', help='Specify VM VMX file', required=False)
     parser.add_argument('--ignore', help='Ignore files or folders that contain this term', required=False)
     parser.add_argument('--nonoriben', action='store_true', help='Do not run Noriben in guest, just the sample',
-                        required=False)  # Do not run Noriben script
+                        required=False)
     parser.add_argument('--os', help='Specify Windows or Mac for that specific vmrun path', required=False)
     parser.add_argument('--config', help='Runtime configuration file', type=str, nargs='?', default='Noriben.config')
     parser.add_argument('--guestconfig', help='Optional guest Noriben runtime configuration file', required=False)
     parser.add_argument('--shutdown', action='store_true', help='Powers down guest VM after execution', required=False)
     parser.add_argument('--suspend', action='store_true', help='Sleeps guest VM after execution', required=False)
 
+    # Particular to Carbon Black Defense. This is just an example of adding your own extraction routine
     parser.add_argument('--cb_defense', action='store_true', help='Extract Carbon Black Defense log to host',
-                        required=False)  # Particular to Carbon Black Defense. This is just an example of adding your own files
+                        required=False)
 
     args = parser.parse_args()
 
@@ -396,14 +413,13 @@ def main():
         else:
             print('[!] Config file {} not found!'.format(args.config))
 
-
     if not args.file and not args.dir:
         print('[!] A filename or directory name are required. Run with --help for more options')
-        sys.exit(1)
+        sys.exit(13)
 
     if args.recursive and not args.dir:
         print('[!] Directory Recursive option specified, but not a directory')
-        sys.exit(1)
+        sys.exit(13)
 
     if args.os:
         if args.os in vmrun_os:
@@ -420,8 +436,10 @@ def main():
         print('[!] Path to vmrun does not exist: {}'.format(config['vmrun']))
         sys.exit(1)
 
-    if args.debug or config['debug']:
+    if args.debug or config['debug'] == True:
         debug = True
+    else:
+        debug = False
 
     if not config['vm_pass']:
         print('[!] vm_pass must be set in the configuration. VMware requires guest accounts to have passwords for remote access.')
@@ -446,6 +464,8 @@ def main():
 
     if args.dontrun:
         dontrun = True
+    else:
+        dontrun = False
 
     if args.snapshot:
         config['vm_snapshot'] = args.snapshot
@@ -455,53 +475,63 @@ def main():
             config['vmx'] = os.path.expanduser(args.vmx)
 
     if args.timeout:
-        timeout_seconds = args.timeout
+        config['timeout_seconds'] = args.timeout
 
-    if not args.dir and args.file and file_exists(args.file):
-        magic_result = get_magic(magic_handle, args.file)
+    if args.file:
+        if file_exists(args.file):
+            magic_result = get_magic(magic_handle, args.file)
 
-        if magic_result and (not magic_result.startswith('PE32') or 'DLL' in magic_result):
-            if 'DOS batch' not in magic_result:
-                dontrun = True
-                print('[*] Disabling automatic running due to magic signature: {}'.format(magic_result))
-        run_file(args, magic_result, args.file)
+            if magic_result and (not magic_result.startswith('PE32') or 'DLL' in magic_result):
+                if 'DOS batch' not in magic_result:
+                    dontrun = True
+                    print('[*] Disabling automatic execution due to magic signature: {}'.format(magic_result))
+            run_file_response = run_file(args, magic_result, args.file)
+        else:
+            print('[!] Specified file cannot be found: {}'.format(args.file))
+            sys.exit(13)
 
-    if args.dir:  # and file_exists(args.dir):
-        files = list()
-        # sys.stdout = io.TextIOWrapper(sys.stdout.detach(), sys.stdout.encoding, 'replace')
-        for result in glob.iglob(args.dir):
-            for (root, subdirs, filenames) in os.walk(result):
-                for fname in filenames:
-                    ignore = False
-                    if args.ignore:
-                        for item in args.ignore.split(','):
-                            if item.lower() in root.lower() or item.lower() in fname.lower():
-                                ignore = True
-                    if not ignore:
-                        files.append(os.path.join(root, fname))
+    if args.dir:
+        if file_exists(args.dir):
+            exec_time = time.time()
 
-                if not args.recursive:
-                    break
+            files = list()
+            # sys.stdout = io.TextIOWrapper(sys.stdout.detach(), sys.stdout.encoding, 'replace')
+            for result in glob.iglob(args.dir):
+                for (root, subdirs, filenames) in os.walk(result):
+                    for fname in filenames:
+                        ignore = False
+                        if args.ignore:
+                            for item in args.ignore.split(','):
+                                if item.lower() in root.lower() or item.lower() in fname.lower():
+                                    ignore = True
+                        if not ignore:
+                            files.append(os.path.join(root, fname))
 
-        for filename in files:
-            if error_count >= error_tolerance:
-                print('[!] Too many errors encountered in this run. Exiting.')
-                sys.exit(100)
-            # TODO: This is HACKY. MUST FIX SOON
-            if args.skip and file_exists(filename + '_NoribenReport.zip'):
-                print('[!] Report already run for file: {}'.format(filename))
-                continue
+                    if not args.recursive:
+                        break
 
-            # Front load magic processing to avoid unnecessary calls to run_file
-            magic_result = get_magic(magic_handle, filename)
-            if magic_result and magic_result.startswith('PE32') and 'DLL' not in magic_result:
-                if debug:
-                    print('{}: {}'.format(filename, magic_result))
-                exec_time = time.time()
-                run_file(args, magic_result, filename)
-                exec_time_diff = time.time() - exec_time
-                print('[*] Completed. Execution Time: {}'.format(exec_time_diff))
+            for filename in files:
+                if error_count >= int(config['error_tolerance']):
+                    print('[!] Too many errors encountered in this run. Exiting.')
+                    sys.exit(100)
 
+                # TODO: This is HACKY. MUST FIX SOON
+                if args.skip and file_exists(filename + '_NoribenReport.zip'):
+                    print('[!] Report already run for file: {}'.format(filename))
+                    continue
+
+                # Front load magic processing to avoid unnecessary calls to run_file
+                magic_result = get_magic(magic_handle, filename)
+                if magic_result and magic_result.startswith('PE32') and 'DLL' not in magic_result:
+                    if debug:
+                        print('{}: {}'.format(filename, magic_result))
+                    run_file_response = run_file(args, magic_result, filename)
+
+            exec_time_diff = time.time() - exec_time
+            print('[*] Completed. Execution Time: {}'.format(exec_time_diff))
+        else:
+            print('[!] Specified directory cannot be found: {}'.format(args.dir))
+    
 
 if __name__ == '__main__':
     main()
