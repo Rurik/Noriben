@@ -8,6 +8,12 @@
 # clean text report and timeline
 #
 # Changelog:
+# Version 2.0 - September-ish 2022
+#       Major changes to NoribenSandbox host script
+#           Updated many of the functions, such as properly deleting files in guest
+#           Remove unneeded or obtuse options
+#       Move everything to all major settings to a configuration file
+
 # Version 1.8.7 - 30 Aug 22
 #       Replaced csv.reader with csv.DictReader to have better forward and backward
 #       compatibility. Small changes in style, PEP8

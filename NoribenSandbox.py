@@ -1,18 +1,21 @@
 # Noriben Sandbox Automation Script
-# V 1.0 - 3 Apr 17
-# V 1.1 - 5 Jun 17
-# V 1.1.1 - 8 Jan 18
-# V 1.2 - 14 Jun 18
-# V 1.2.1 - 12 Sep 18 - Bug fix to allow for snapshots with spaces in them.
+# 
+# 
+# Changelog:
+# V 2.0 - XXX Sep 22 - Placed all editable data into Noriben.config file. Cleaned up some logic and bugs
 # V 1.3 - 15 Apr 19 - Added ability to suspend or shutdown guest afterward. Minor bug fixes.
+# V 1.2.1 - 12 Sep 18 - Bug fix to allow for snapshots with spaces in them.
+# V 1.2 - 14 Jun 18
+# V 1.1.1 - 8 Jan 18
+# V 1.1 - 5 Jun 17
+# V 1.0 - 3 Apr 17
 #
 # Responsible for:
 # * Copying sample into a known VM
 # * Running sample
 # * Copying off results
 #
-# Ensure you set the environment variables below to match your system. I've left defaults to help.
-# This is definitely a work in progress. However, efforts made to make it clear per PyCharm code inspection.
+# Ensure you set the environment variables in Noriben.conf to match your system. I've left defaults to help.
 
 import argparse
 import ast
@@ -40,20 +43,49 @@ noriben_errors = {
     10: 'Invalid arguments given',
     11: 'Missing Python module',
     12: 'Error in host module configuration',
-    13: 'Required file not found'
+    13: 'Required file not found',
+    50: 'General error'
 }
 
 error_count = 0
 
 
 def get_error(code):
+    """
+    Looks up a given code in dictionary set of errors of noriben_errors.
+
+    Arguments:
+        code: Integer that corresponds to a pre-set entry
+    Results:
+         string value of a error code
+    """
     if code in noriben_errors:
         return noriben_errors[code]
     return 'Unexpected Error'
 
 
-def file_exists(fname):
-    return os.path.exists(fname) and os.access(fname, os.F_OK)
+def file_exists(path):
+    """
+    Determine if a file exists
+
+    Arguments:
+        path: path to a file
+    Results:
+        boolean value if file exists
+    """
+    return os.path.exists(path) and os.access(path, os.F_OK) and not os.path.isdir(path)
+
+
+def dir_exists(path):
+    """
+    Determine if a directory exists
+
+    Arguments:
+        path: path to a directory
+    Results:
+        boolean value if directory exists
+    """
+    return os.path.exists(path) and os.path.isdir(path)
 
 
 def execute(cmd):
@@ -104,6 +136,7 @@ def run_file(args, magic_result, malware_file):
     host_malware_name_base = os.path.split(malware_file)[-1].split('.')[0]
     if dontrun:
         filename = '{}{}'.format(config['guest_malware_path'], host_malware_name_base)
+        print('[*] File to be staged for analysis: {}'.format(filename))
     elif 'DOS batch' in magic_result:
         filename = '{}{}.bat'.format(config['guest_malware_path'], host_malware_name_base)
     else:
@@ -111,6 +144,11 @@ def run_file(args, magic_result, malware_file):
     host_malware_path = os.path.dirname(malware_file)
     if host_malware_path == '':
         host_malware_path = '.'
+
+    # These refer to Windows-based paths. As the host OS is unknown, we'll build them manually
+    guest_noriben_path_script = '{}\\{}'.format(guest_noriben_path, 'Noriben.py')
+    guest_noriben_path_config = '{}\\{}'.format(guest_noriben_path, 'Noriben.config')
+
 
     print('[*] Processing sample: {}'.format(malware_file))
 
@@ -120,7 +158,8 @@ def run_file(args, magic_result, malware_file):
         active = ''
     cmd_base = '"{}" -T ws -gu {} -gp {} runProgramInGuest {} {} -interactive'.format(config['vmrun'], config['vm_user'], config['vm_pass'], os.path.expanduser(config['vmx']),
                                                                                       active)
-    if not args.norevert:
+    
+    if not args.norevert and not config['vm_snapshot'] == 'NO_SNAPSHOT_SPECIFIED':
         cmd = '"{}" -T ws revertToSnapshot {} "{}"'.format(config['vmrun'], os.path.expanduser(config['vmx']), os.path.expanduser(config['vm_snapshot']))
         return_code = execute(cmd)
         if return_code:
@@ -154,10 +193,6 @@ def run_file(args, magic_result, malware_file):
 
         host_noriben_path_script = os.path.join(host_noriben_path, 'Noriben.py')
         host_noriben_path_config = os.path.join(host_noriben_path, 'Noriben.config')
-
-        # These refef to Windows-based paths. As the host OS is unknown, we'll build them manually
-        guest_noriben_path_script = '{}\\{}'.format(guest_noriben_path, 'Noriben.py')
-        guest_noriben_path_config = '{}\\{}'.format(guest_noriben_path, 'Noriben.config')
 
         if file_exists(host_noriben_path_script):
             cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest {} "{}" "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'], config['vmx'],
@@ -199,7 +234,8 @@ def run_file(args, magic_result, malware_file):
     # causes ProcMon to collect with default filters.
     if args.raw:
         procmon_config_path = config['procmon_config_path'].format(config['vm_user'])
-        cmd = '{} C:\\windows\\system32\\cmd.exe "/c del {}"'.format(cmd_base, procmon_config_path)
+        cmd = '"{}" -T ws -gu {} -gp {} deleteFileInGuest {} "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'], os.path.expanduser(config['vmx']),
+                                                                                      procmon_config_path)
         return_code = execute(cmd)
 
         # This errors if the Procmon filter cannot be found. We will allow this error.
@@ -208,7 +244,6 @@ def run_file(args, magic_result, malware_file):
                                                                                       hex(return_code),
                                                                                       get_error(return_code)))
             error_count += 1
-            
 
     # Build the command line to run Noriben
     cmd = '{} "{}" "{}" -t {} --headless --output "{}" '.format(cmd_base, config['guest_python_path'],
@@ -228,9 +263,6 @@ def run_file(args, magic_result, malware_file):
         error_count += 1
         return return_code
 
-    if dontrun:
-        print('[*] File is now staged for analysis: {}'.format(filename))
-        return
 
     if args.post and file_exists(args.post):
         run_script(args, cmd_base)
@@ -243,19 +275,8 @@ def run_file(args, magic_result, malware_file):
                                                                             get_error(return_code)))
         zip_failed = True
 
-    """
-    if args.defense and not zip_failed:
-        cb_defense_file = 'C:\\\\Program Files\\\\Confer\\\\confer.log'
-        # Get Carbon Black Defense log. This is an example if you want to include additional files.
-        cmd = '{} "{}" -j "{}" "{}"'.format(cmd_base, config['guest_zip_path'], config['guest_temp_zip'], cb_defense_file)
-        return_code = execute(cmd)
-        if return_code:
-            print(('[!] Error trying to add additional file to archive. Continuing. '
-                   'Error {}; File: {}'.format(return_code, cb_defense_file)))
-    """
-
+    host_report_path = config['report_path_structure'].format(host_malware_path, host_malware_name_base)
     if not args.nolog and not zip_failed:
-        host_report_path = config['report_path_structure'].format(host_malware_path, host_malware_name_base)
         cmd = '"{}" -gu {} -gp {} copyFileFromGuestToHost {} "{}" "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'], config['vmx'],
                                                                                  config['guest_temp_zip'], host_report_path)
         return_code = execute(cmd)
@@ -292,7 +313,8 @@ def run_file(args, magic_result, malware_file):
 
     # At this point, execution should be completed for the given file.
     print('[*] Execution completed for {}'.format(malware_file))
-    print('[*] Logs stored at: {}'.format(host_report_path))
+    if not args.nolog:
+        print('[*] Logs stored at: {}'.format(host_report_path))
 
 
 def get_magic(magic_handle, filename):
@@ -389,20 +411,12 @@ def main():
     parser.add_argument('--screenshot', action='store_true', help='Take screenshot after execution (PNG)',
                         required=False)
     parser.add_argument('--skip', action='store_true', help='Skip already executed files', required=False)
-    parser.add_argument('--snapshot', help='Specify VM Snapshot to revert to', required=False)
+    parser.add_argument('--snapshot', help='Specify VM Snapshot to revert to', nargs='?', const='NO_SNAPSHOT_SPECIFIED', type=str)
     parser.add_argument('--vmx', help='Specify VM VMX file', required=False)
-    parser.add_argument('--ignore', help='Ignore files or folders that contain this term', required=False)
-    parser.add_argument('--nonoriben', action='store_true', help='Do not run Noriben in guest, just the sample',
-                        required=False)
-    parser.add_argument('--os', help='Specify Windows or Mac for that specific vmrun path', required=False)
+    parser.add_argument('--ignore', help='Ignore file or folder names that contain these comma-delimited terms', required=False)
     parser.add_argument('--config', help='Runtime configuration file', type=str, nargs='?', default='Noriben.config')
-    parser.add_argument('--guestconfig', help='Optional guest Noriben runtime configuration file', required=False)
     parser.add_argument('--shutdown', action='store_true', help='Powers down guest VM after execution', required=False)
-    parser.add_argument('--suspend', action='store_true', help='Sleeps guest VM after execution', required=False)
-
-    # Particular to Carbon Black Defense. This is just an example of adding your own extraction routine
-    parser.add_argument('--cb_defense', action='store_true', help='Extract Carbon Black Defense log to host',
-                        required=False)
+    parser.add_argument('--suspend', action='store_true', help='Suspends guest VM after execution', required=False)
 
     args = parser.parse_args()
 
@@ -412,6 +426,8 @@ def main():
             read_config(args.config)
         else:
             print('[!] Config file {} not found!'.format(args.config))
+            sys.exit(50)
+
 
     if not args.file and not args.dir:
         print('[!] A filename or directory name are required. Run with --help for more options')
@@ -421,17 +437,6 @@ def main():
         print('[!] Directory Recursive option specified, but not a directory')
         sys.exit(13)
 
-    if args.os:
-        if args.os in vmrun_os:
-            try:
-                config['vmrun'] = vmrun_os[args.os.lower()]
-            except KeyError:
-                print('[!] Unable to find vmrun entry for value: {}'.format(args.os))
-                sys.exit(1)
-        else:
-            print('[!] Unable to find vmrun entry for value: {}'.format(args.os))
-            sys.exit(1)
-
     if not file_exists(config['vmrun']):
         print('[!] Path to vmrun does not exist: {}'.format(config['vmrun']))
         sys.exit(1)
@@ -440,6 +445,11 @@ def main():
         debug = True
     else:
         debug = False
+
+    if args.dontrun:
+        dontrun = True
+    else:
+        dontrun = False
 
     if not config['vm_pass']:
         print('[!] vm_pass must be set in the configuration. VMware requires guest accounts to have passwords for remote access.')
@@ -462,11 +472,6 @@ def main():
             print('[!] Directory mode will not function without a magic database. Exiting')
             sys.exit(1)
 
-    if args.dontrun:
-        dontrun = True
-    else:
-        dontrun = False
-
     if args.snapshot:
         config['vm_snapshot'] = args.snapshot
 
@@ -484,14 +489,14 @@ def main():
             if magic_result and (not magic_result.startswith('PE32') or 'DLL' in magic_result):
                 if 'DOS batch' not in magic_result:
                     dontrun = True
-                    print('[*] Disabling automatic execution due to magic signature: {}'.format(magic_result))
+                    print('[*] Disabling automatic execution of sample due to magic signature: {}'.format(magic_result))
             run_file_response = run_file(args, magic_result, args.file)
         else:
             print('[!] Specified file cannot be found: {}'.format(args.file))
             sys.exit(13)
 
     if args.dir:
-        if file_exists(args.dir):
+        if dir_exists(args.dir):
             exec_time = time.time()
 
             files = list()
@@ -526,6 +531,10 @@ def main():
                     if debug:
                         print('{}: {}'.format(filename, magic_result))
                     run_file_response = run_file(args, magic_result, filename)
+                else:
+                   print('[*] Directory parsing. File skipped as not an EXE or DLL: {} ({}...)'.format(filename, magic_result[0:50]))
+                   continue
+
 
             exec_time_diff = time.time() - exec_time
             print('[*] Completed. Execution Time: {}'.format(exec_time_diff))
