@@ -152,35 +152,65 @@ def run_file(args, magic_result, malware_file):
 
     print('[*] Processing sample: {}'.format(malware_file))
 
-    if not args.screenshot:
-        active = '-activeWindow'
-    else:
-        active = ''
-    cmd_base = '"{}" -T ws -gu {} -gp {} runProgramInGuest {} {} -interactive'.format(config['vmrun'], config['vm_user'], config['vm_pass'], os.path.expanduser(config['vmx']),
-                                                                                      active)
-    
-    if not args.norevert and not config['vm_snapshot'] == 'NO_SNAPSHOT_SPECIFIED':
-        cmd = '"{}" -T ws revertToSnapshot {} "{}"'.format(config['vmrun'], os.path.expanduser(config['vmx']), os.path.expanduser(config['vm_snapshot']))
-        return_code = execute(cmd)
-        if return_code:
-            print('[!] Error: Possible unknown snapshot or corrupt VMX: {}'.format(os.path.expanduser(config['vm_snapshot'])))
-            sys.exit(return_code)
 
-    cmd = '"{}" -T ws start {}'.format(config['vmrun'], os.path.expanduser(config['vmx']))
+    if not args.norevert and not config['vm_snapshot'] == 'NO_SNAPSHOT_SPECIFIED':
+        if vm_hypervisor == 'vmw':
+            cmd = '"{}" -T ws revertToSnapshot {} "{}"'.format(config['vmrun'], os.path.expanduser(config['vmx']), os.path.expanduser(config['vm_snapshot']))
+            return_code = execute(cmd)
+            if return_code:
+                print('[!] Error: Possible unknown snapshot or corrupt VMX: {}'.format(os.path.expanduser(config['vm_snapshot'])))
+                sys.exit(return_code)            
+        
+        elif vm_hypervisor == 'vbox':
+            # VirtualBox requires powering off before restoring a snapshot.
+
+            cmd = '"{}" controlvm {} poweroff'.format(config['vboxmanage'], config['vbox_uuid'])
+            return_code = execute(cmd)
+            if return_code == 1:
+                # This is a normal return code. It's trying to poweroff a VM that is not running
+                pass
+            elif return_code:
+                print('[!] Error code "{}": Unable to poweroff VM {{{}}}'.format(return_code, config['vbox_uuid']))
+                sys.exit(return_code)  
+
+            cmd = '"{}" snapshot {} restore "{}"'.format(config['vboxmanage'], config['vbox_uuid'], os.path.expanduser(config['vm_snapshot']))
+            return_code = execute(cmd)
+            if return_code:
+                print('[!] Error: Possible unknown snapshot or corrupt VMX: {}'.format(os.path.expanduser(config['vm_snapshot'])))
+                sys.exit(return_code)  
+
+    if vm_hypervisor == 'vmx':
+        cmd = '"{}" -T ws start {}'.format(config['vmrun'], os.path.expanduser(config['vmx']))
+    elif vm_hypervisor == 'vbox':
+        cmd = '"{}" startvm {}'.format(config['vboxmanage'], config['vbox_uuid'])
+    
     return_code = execute(cmd)
     if return_code:
-        print('[!] Error trying to start VM. Error {}: {}'.format(hex(return_code), get_error(return_code)))
-        error_count += 1
-        return return_code
+        if vm_hypervisor == 'vbox' and return_code == 1:
+            # This is standard response for VM is already running. Ignore it
+            print('[*] The above VBoxManage error is from trying to start a VM that is already running. This will be ignored.')
+            pass
+        else:
+            print('[!] Error trying to start VM. Error {}: {}'.format(hex(return_code), get_error(return_code)))
+            error_count += 1
+            return return_code
+    
+    # Copy malware sample from host into VM
+    if vm_hypervisor == 'vmx':
+        cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest {} "{}" "{}"'.format(config['vmrun'], config['vm_user'],
+                                                                               config['vm_pass'], os.path.expanduser(config['vmx']),
+                                                                               malware_file, filename)
+    elif vm_hypervisor == 'vbox':
+        cmd = '"{}" guestcontrol {} copyto --username {} --password {} "{}" "{}"'.format(config['vboxmanage'], config['vbox_uuid'],
+                                                                                         config['vm_user'], config['vm_pass'],
+                                                                                         malware_file, filename)
 
-    cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest {} "{}" "{}"'.format(config['vmrun'], config['vm_user'],
-                                                                           config['vm_pass'], os.path.expanduser(config['vmx']),
-                                                                           malware_file, filename)
     return_code = execute(cmd)
     if return_code:
         print('[!] Error trying to copy file to guest. Error {}: {}'.format(hex(return_code), get_error(return_code)))
         error_count += 1
         return return_code
+
 
     # --update - Copy the newest Noriben.py from the host into the guest VM. This saves one from having to make new snapshots
     #            just for new versions of the script. It also helps to run Noriben on VM that doesn't already have it.
@@ -195,29 +225,39 @@ def run_file(args, magic_result, malware_file):
         host_noriben_path_config = os.path.join(host_noriben_path, 'Noriben.config')
 
         if file_exists(host_noriben_path_script):
-            cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest {} "{}" "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'], config['vmx'],
-                                                                                   host_noriben_path_script.format(config['vm_user']),
-                                                                                   guest_noriben_path_script)
+            if vm_hypervisor == 'vmw':
+                cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest {} "{}" "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'], config['vmx'],
+                                                                                       host_noriben_path_script.format(config['vm_user']),
+                                                                                       guest_noriben_path_script)
+            elif vm_hypervisor == 'vbox':
+                cmd = '"{}" guestcontrol {} copyto --username {} --password {} "{}" "{}"'.format(config['vboxmanage'], config['vbox_uuid'],
+                                                                                                 config['vm_user'], config['vm_pass'],
+                                                                                                 host_noriben_path_script.format(config['vm_user']),
+                                                                                                 guest_noriben_path_script)
             return_code = execute(cmd)
             if return_code:
                 print('[!] Error trying to copy updated Noriben.py to guest. Continuing. Error {}: {}'.format(
                     hex(return_code), get_error(return_code)))
                 quit()
-
         else:
             print('[!] Noriben.py on host not found: {}'.format(host_noriben_path.format(config['vm_user'])))
             error_count += 1
             return return_code
 
         if file_exists(host_noriben_path_config):
-            cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest {} "{}" "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'], config['vmx'],
-                                                                                   host_noriben_path_config.format(config['vm_user']),
-                                                                                   guest_noriben_path_config)
+            if vm_hypervisor == 'vmw':
+                cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest {} "{}" "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'], config['vmx'],
+                                                                                       host_noriben_path_config.format(config['vm_user']),
+                                                                                       guest_noriben_path_config)
+            elif vm_hypervisor == 'vbox':
+                cmd = '"{}" guestcontrol {} copyto --username {} --password {} "{}" "{}"'.format(config['vboxmanage'], config['vbox_uuid'],
+                                                                                                 config['vm_user'], config['vm_pass'],
+                                                                                                 host_noriben_path_config.format(config['vm_user']),
+                                                                                                 guest_noriben_path_config)
             return_code = execute(cmd)
             if return_code:
                 print('[!] Error trying to copy updated Noriben.config to guest. Continuing. Error {}: {}'.format(
                     hex(return_code), get_error(return_code)))
-
         else:
             # Not having Noriben.config will not error out. This can be expected in some situations.
             print('[!] Noriben.py on host not found: {}'.format(host_noriben_path.format(config['vm_user'])))
@@ -246,9 +286,23 @@ def run_file(args, magic_result, malware_file):
             error_count += 1
 
     # Build the command line to run Noriben
-    cmd = '{} "{}" "{}" -t {} --headless --output "{}" '.format(cmd_base, config['guest_python_path'],
+    if vm_hypervisor == 'vmw':
+        if not args.screenshot:
+            active = '-activeWindow'
+        else:
+            active = ''
+
+        cmd_base = '"{}" -T ws -gu {} -gp {} runProgramInGuest {} {} -interactive'.format(config['vmrun'], config['vm_user'], config['vm_pass'], os.path.expanduser(config['vmx']),
+                                                                                          active)
+    elif vm_hypervisor == 'vbox':
+        cmd_base = '"{}" guestcontrol {} start --username {} --password {}'.format(config['vboxmanage'], config['vbox_uuid'], config['vm_user'], config['vm_pass'])
+        print('cmd_base: {}'.format(cmd_base))
+
+    cmd = '{} --exe "{}" -- "{}" -t {} --headless --output "{}" '.format(cmd_base, config['guest_python_path'],
                                                                 guest_noriben_path_script,
                                                                 config['timeout_seconds'], config['guest_log_path'])
+    print(cmd)
+    quit()
     if not dontrun:
         cmd = '{} --cmd "{}" '.format(cmd, filename)
 
@@ -388,6 +442,7 @@ def main():
     global dontrun
     global config
     global error_count
+    global vm_hypervisor
 
     error_count = 0
 
@@ -417,6 +472,7 @@ def main():
     parser.add_argument('--config', help='Runtime configuration file', type=str, nargs='?', default='Noriben.config')
     parser.add_argument('--shutdown', action='store_true', help='Powers down guest VM after execution', required=False)
     parser.add_argument('--suspend', action='store_true', help='Suspends guest VM after execution', required=False)
+    parser.add_argument('--vbox', action='store_true', help='Use VirtualBox Hypervisor', required=False)
 
     args = parser.parse_args()
 
@@ -445,6 +501,11 @@ def main():
         debug = True
     else:
         debug = False
+
+    if args.vbox:
+        vm_hypervisor = 'vbox'
+    else:
+        vm_hypervisor = 'vmw'
 
     if args.dontrun:
         dontrun = True
