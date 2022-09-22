@@ -3,6 +3,8 @@
 # 
 # Changelog:
 # V 2.0 - XXX Sep 22 - Placed all editable data into Noriben.config file. Cleaned up some logic and bugs
+#       Added basic support for VirtualBox... still TODO
+#       Rewrote post execution script parsing
 # V 1.3 - 15 Apr 19 - Added ability to suspend or shutdown guest afterward. Minor bug fixes.
 # V 1.2.1 - 12 Sep 18 - Bug fix to allow for snapshots with spaces in them.
 # V 1.2 - 14 Jun 18
@@ -25,6 +27,7 @@ import io
 import glob
 import magic  # pip python-magic and libmagic
 import os
+import shlex
 import subprocess
 import sys
 import time
@@ -129,6 +132,9 @@ def read_config(config_filename):
 
 def run_file(args, magic_result, malware_file):
     global error_count
+    if vm_hypervisor not in ['vmw', 'vbox']:
+        print('[!] Error! Unknown VM Hypervisor is set. Currently set to: {}'.format(vm_hypervisor))
+        sys.exit(50)
 
     # First, normalize the configuration paths:
     guest_noriben_path = os.path.expanduser(config['guest_noriben_path'].format(config['vm_user']))
@@ -152,7 +158,6 @@ def run_file(args, magic_result, malware_file):
 
     print('[*] Processing sample: {}'.format(malware_file))
 
-
     if not args.norevert and not config['vm_snapshot'] == 'NO_SNAPSHOT_SPECIFIED':
         if vm_hypervisor == 'vmw':
             cmd = '"{}" -T ws revertToSnapshot {} "{}"'.format(config['vmrun'], os.path.expanduser(config['vmx']), os.path.expanduser(config['vm_snapshot']))
@@ -160,7 +165,7 @@ def run_file(args, magic_result, malware_file):
             if return_code:
                 print('[!] Error: Possible unknown snapshot or corrupt VMX: {}'.format(os.path.expanduser(config['vm_snapshot'])))
                 sys.exit(return_code)            
-        
+
         elif vm_hypervisor == 'vbox':
             # VirtualBox requires powering off before restoring a snapshot.
 
@@ -179,7 +184,7 @@ def run_file(args, magic_result, malware_file):
                 print('[!] Error: Possible unknown snapshot or corrupt VMX: {}'.format(os.path.expanduser(config['vm_snapshot'])))
                 sys.exit(return_code)  
 
-    if vm_hypervisor == 'vmx':
+    if vm_hypervisor == 'vmw':
         cmd = '"{}" -T ws start {}'.format(config['vmrun'], os.path.expanduser(config['vmx']))
     elif vm_hypervisor == 'vbox':
         cmd = '"{}" startvm {}'.format(config['vboxmanage'], config['vbox_uuid'])
@@ -194,9 +199,9 @@ def run_file(args, magic_result, malware_file):
             print('[!] Error trying to start VM. Error {}: {}'.format(hex(return_code), get_error(return_code)))
             error_count += 1
             return return_code
-    
+
     # Copy malware sample from host into VM
-    if vm_hypervisor == 'vmx':
+    if vm_hypervisor == 'vmw':
         cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest {} "{}" "{}"'.format(config['vmrun'], config['vm_user'],
                                                                                config['vm_pass'], os.path.expanduser(config['vmx']),
                                                                                malware_file, filename)
@@ -294,15 +299,16 @@ def run_file(args, magic_result, malware_file):
 
         cmd_base = '"{}" -T ws -gu {} -gp {} runProgramInGuest {} {} -interactive'.format(config['vmrun'], config['vm_user'], config['vm_pass'], os.path.expanduser(config['vmx']),
                                                                                           active)
+        cmd = '{} "{}" "{}" -t {} --headless --output "{}" '.format(cmd_base, config['guest_python_path'],
+                                                                    guest_noriben_path_script,
+                                                                    config['timeout_seconds'], config['guest_log_path'])
     elif vm_hypervisor == 'vbox':
         cmd_base = '"{}" guestcontrol {} start --username {} --password {}'.format(config['vboxmanage'], config['vbox_uuid'], config['vm_user'], config['vm_pass'])
         print('cmd_base: {}'.format(cmd_base))
 
-    cmd = '{} --exe "{}" -- "{}" -t {} --headless --output "{}" '.format(cmd_base, config['guest_python_path'],
-                                                                guest_noriben_path_script,
-                                                                config['timeout_seconds'], config['guest_log_path'])
-    print(cmd)
-    quit()
+        cmd = '{} --exe "{}" -- "{}" -t {} --headless --output "{}" '.format(cmd_base, config['guest_python_path'],
+                                                                    guest_noriben_path_script,
+                                                                    config['timeout_seconds'], config['guest_log_path'])
     if not dontrun:
         cmd = '{} --cmd "{}" '.format(cmd, filename)
 
@@ -387,33 +393,62 @@ def get_magic(magic_handle, filename):
 def run_script(args, cmd_base):
     source_path = ''
 
-    # if sys.version_info[0] == '2':
-    with io.open(args.post, encoding='utf-8') as hScript:
-        for line in hScript:
+    with io.open(args.post, encoding='utf-8') as post_script:
+        for line in post_script:
             if debug:
                 print('[*] Script: {}'.format(line.strip()))
+            if len(line) <= 1:
+                continue
+
             if line.startswith('#'):
-                pass
-            elif line.lower().startswith('collect'):
+                continue
+            
+            elif line.lower().startswith('collect '):
                 try:
                     source_path = line.split('collect ')[1].strip()
                 except IndexError:
-                    print('[!] Ignoring bad script line: {}'.format(line.strip()))
+                    print('[!] Ignoring bad script collect: {}'.format(line.strip()))
                 copy_file_to_zip(cmd_base, source_path)
-            else:
-                cmd = '{} "{}"'.format(cmd_base, line.strip())
+            
+            elif line.startswith('sleep '):
+                try:
+                    sleep_seconds = int(line.split('sleep ')[1].strip())
+                except (IndexError, ValueError):
+                    print('[!] Ignoring bad script sleep: {}'.format(line.strip()))
+                    continue
+                    
+                time.sleep(sleep_seconds)
+            
+            elif line.startswith('exec ') or line.startswith('execwait '):
+                try:
+                    items = shlex.split(line, posix=False)
+                    cmd_type = items[0]
+                    cmd_path = items[1]
+                    cmd_args = ' '.join(items[2::])
+                except IndexError:
+                    print('[!] Ignoring bad script execution: {}'.format(line.strip()))
+                    continue
+
+                if cmd_type == 'exec':
+                    cmd_nowait = '-noWait'
+                else:
+                    cmd_nowait = ''
+
+                cmd = '{} {} "{}" "{}"'.format(cmd_base, cmd_nowait, cmd_path, cmd_args)
                 return_code = execute(cmd)
                 if return_code:
                     print('[!] Error trying to run script command. Error {}: {}'.format(hex(return_code),
                                                                                         get_error(return_code)))
-
+            else:
+                continue
 
 def copy_file_to_zip(cmd_base, filename):
     # This is a two-step process as zip.exe will not allow direct zipping of some system files.
     # Therefore, first copy file to log folder and then add to the zip.
     global error_count
 
-    cmd = '"{}" -gu {} -gp {} fileExistsInGuest "{}" "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'], config['vmx'], filename)
+    cmd = '"{}" -gu {} -gp {} fileExistsInGuest {} "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'],
+                                                                  os.path.expanduser(config['vmx']), filename)
     return_code = execute(cmd)
     if return_code:
         print('[!] File does not exist in guest. Continuing. File: {}'.format(filename))
