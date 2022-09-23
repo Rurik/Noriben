@@ -47,6 +47,7 @@ noriben_errors = {
     11: 'Missing Python module',
     12: 'Error in host module configuration',
     13: 'Required file not found',
+    14: 'Configuration issue',
     50: 'General error'
 }
 
@@ -120,7 +121,10 @@ def read_config(config_filename):
         options = file_config.options('Noriben_host')
         for option in options:
             config[option] = file_config.get('Noriben_host', option)
-            if config[option] == -1:
+            
+            if config[option].lower() in ['true', 'false']:
+                config[option] = file_config.getboolean('Noriben_host', option)
+            elif config[option] == -1:
                 print('[*] Invalid configuration option detected: {}'.format(option))
     except configparser.MissingSectionHeaderError:
         print('[!] Error found in reading config file. Invalid section header detected.')
@@ -132,6 +136,8 @@ def read_config(config_filename):
 
 def run_file(args, magic_result, malware_file):
     global error_count
+    
+    # Do this check once, so that all future comparisons can be simplified
     if vm_hypervisor not in ['vmw', 'vbox']:
         print('[!] Error! Unknown VM Hypervisor is set. Currently set to: {}'.format(vm_hypervisor))
         sys.exit(50)
@@ -151,13 +157,16 @@ def run_file(args, magic_result, malware_file):
     if host_malware_path == '':
         host_malware_path = '.'
 
-    # These refer to Windows-based paths. As the host OS is unknown, we'll build them manually
+    # These refer to the guest Windows-based paths
+    # As the host OS is unknown, we'll build them manually instead of trying all the various methods
     guest_noriben_path_script = '{}\\{}'.format(guest_noriben_path, 'Noriben.py')
     guest_noriben_path_config = '{}\\{}'.format(guest_noriben_path, 'Noriben.config')
 
 
     print('[*] Processing sample: {}'.format(malware_file))
 
+    # First restore the VM to the specified snapshot
+    # This is optional, especially for when one has prepped the VM manually for this specific execution
     if not args.norevert and not config['vm_snapshot'] == 'NO_SNAPSHOT_SPECIFIED':
         if vm_hypervisor == 'vmw':
             cmd = '"{}" -T ws revertToSnapshot {} "{}"'.format(config['vmrun'], os.path.expanduser(config['vmx']), os.path.expanduser(config['vm_snapshot']))
@@ -168,7 +177,6 @@ def run_file(args, magic_result, malware_file):
 
         elif vm_hypervisor == 'vbox':
             # VirtualBox requires powering off before restoring a snapshot.
-
             cmd = '"{}" controlvm {} poweroff'.format(config['vboxmanage'], config['vbox_uuid'])
             return_code = execute(cmd)
             if return_code == 1:
@@ -184,6 +192,7 @@ def run_file(args, magic_result, malware_file):
                 print('[!] Error: Possible unknown snapshot or corrupt VMX: {}'.format(os.path.expanduser(config['vm_snapshot'])))
                 sys.exit(return_code)  
 
+    # Power on the VM
     if vm_hypervisor == 'vmw':
         cmd = '"{}" -T ws start {}'.format(config['vmrun'], os.path.expanduser(config['vmx']))
     elif vm_hypervisor == 'vbox':
@@ -191,8 +200,9 @@ def run_file(args, magic_result, malware_file):
     
     return_code = execute(cmd)
     if return_code:
-        if vm_hypervisor == 'vbox' and return_code == 1:
-            # This is standard response for VM is already running. Ignore it
+        if return_code == 1 and vm_hypervisor == 'vbox':
+            # This is the standard response for a VBox VM that is already running
+            # Ignore it and move on to the next step
             print('[*] The above VBoxManage error is from trying to start a VM that is already running. This will be ignored.')
             pass
         else:
@@ -243,7 +253,6 @@ def run_file(args, magic_result, malware_file):
             if return_code:
                 print('[!] Error trying to copy updated Noriben.py to guest. Continuing. Error {}: {}'.format(
                     hex(return_code), get_error(return_code)))
-                quit()
         else:
             print('[!] Noriben.py on host not found: {}'.format(host_noriben_path.format(config['vm_user'])))
             error_count += 1
@@ -314,6 +323,9 @@ def run_file(args, magic_result, malware_file):
 
     if debug:
         cmd = '{} -d'.format(cmd)
+
+    if config['human']:
+        cmd = '{} --human'.format(cmd)
 
     # Finally, execute the command line
     return_code = execute(cmd)
@@ -387,6 +399,10 @@ def get_magic(magic_handle, filename):
                   'https://github.com/ahupp/python-magic')
             print('[!] You may need to manually specify magic file location using --magic')
         print('[!] Error in running magic against file: {}'.format(err))
+        
+    if debug:
+        print('[*] Magic result: {}'.format(magic_result))
+
     return magic_result
 
 
@@ -479,6 +495,8 @@ def main():
     global error_count
     global vm_hypervisor
 
+    # Error count is a soft trigger used for mass-execution to track when there was an abnormal 
+    # number of issues that execution should just stop
     error_count = 0
 
     parser = argparse.ArgumentParser()
@@ -490,24 +508,26 @@ def main():
                         required=False)
     parser.add_argument('-xx', '--dontrunanything', dest='dontrunanything', action='store_true', help='Execute nothing',
                         required=False)
+    parser.add_argument('--raw', action='store_true', help='Remove ProcMon filters', required=False)
+    parser.add_argument('--update', action='store_true', help='Update Noriben.py in guest', required=False)
+
     parser.add_argument('--dir', help='Run all executables from a specified directory', required=False)
     parser.add_argument('--recursive', action='store_true', help='Recursively process a directory', required=False)
+    parser.add_argument('--skip', action='store_true', help='Skip already executed files', required=False)
     parser.add_argument('--magic', help='Specify file magic database (may be necessary for Windows)', required=False)
+    parser.add_argument('--config', help='Runtime configuration file', type=str, nargs='?', default='Noriben.config')
+    
     parser.add_argument('--nolog', action='store_true', help='Do not extract logs back', required=False)
     parser.add_argument('--norevert', action='store_true', help='Do not revert to snapshot', required=False)
     parser.add_argument('--post', help='Post-execution script', required=False)
-    parser.add_argument('--raw', action='store_true', help='Remove ProcMon filters', required=False)
-    parser.add_argument('--update', action='store_true', help='Update Noriben.py in guest', required=False)
-    parser.add_argument('--screenshot', action='store_true', help='Take screenshot after execution (PNG)',
-                        required=False)
-    parser.add_argument('--skip', action='store_true', help='Skip already executed files', required=False)
     parser.add_argument('--snapshot', help='Specify VM Snapshot to revert to', nargs='?', const='NO_SNAPSHOT_SPECIFIED', type=str)
     parser.add_argument('--vmx', help='Specify VM VMX file', required=False)
     parser.add_argument('--ignore', help='Ignore file or folder names that contain these comma-delimited terms', required=False)
-    parser.add_argument('--config', help='Runtime configuration file', type=str, nargs='?', default='Noriben.config')
     parser.add_argument('--shutdown', action='store_true', help='Powers down guest VM after execution', required=False)
     parser.add_argument('--suspend', action='store_true', help='Suspends guest VM after execution', required=False)
     parser.add_argument('--vbox', action='store_true', help='Use VirtualBox Hypervisor', required=False)
+    parser.add_argument('--screenshot', action='store_true', help='Take screenshot after execution (PNG)',
+                        required=False)
 
     args = parser.parse_args()
 
@@ -517,7 +537,7 @@ def main():
             read_config(args.config)
         else:
             print('[!] Config file {} not found!'.format(args.config))
-            sys.exit(50)
+            sys.exit(14)
 
 
     if not args.file and not args.dir:
@@ -578,10 +598,12 @@ def main():
     if args.timeout:
         config['timeout_seconds'] = args.timeout
 
+    # Execute a specified file. This is typically the primary usage
     if args.file:
         if file_exists(args.file):
             magic_result = get_magic(magic_handle, args.file)
 
+            # Make sure magic didn't fail, then let's determine if we want to skip it
             if magic_result and (not magic_result.startswith('PE32') or 'DLL' in magic_result):
                 if 'DOS batch' not in magic_result:
                     dontrun = True
@@ -591,26 +613,35 @@ def main():
             print('[!] Specified file cannot be found: {}'.format(args.file))
             sys.exit(13)
 
+    # Enumerate all files within a specific directory for execution
     if args.dir:
         if dir_exists(args.dir):
+            # Start the clock to measure total execution time
+            # Helps to gather metrics for amount of time and resources required
+            # If too short, it's a sign that detonation had issues. Exclude too much?
             exec_time = time.time()
 
+            # Create a primary list of files to execute beforehand
             files = list()
-            # sys.stdout = io.TextIOWrapper(sys.stdout.detach(), sys.stdout.encoding, 'replace')
             for result in glob.iglob(args.dir):
                 for (root, subdirs, filenames) in os.walk(result):
                     for fname in filenames:
+
+                        # Parse out the specified ignore keywords for comparison against current file/folder
                         ignore = False
                         if args.ignore:
-                            for item in args.ignore.split(','):
-                                if item.lower() in root.lower() or item.lower() in fname.lower():
+                            # Iterate through --ignore keywords and compare for exclusion
+                            for ignore_item in args.ignore.split(','):
+                                if (ignore_item.lower() in root.lower()) or (ignore_item.lower() in fname.lower()):
                                     ignore = True
                         if not ignore:
                             files.append(os.path.join(root, fname))
 
+                    # If --recursive is not specified, then stop at the specified folder
                     if not args.recursive:
                         break
 
+            # Parse through the list of accepted files
             for filename in files:
                 if error_count >= int(config['error_tolerance']):
                     print('[!] Too many errors encountered in this run. Exiting.')
@@ -618,7 +649,7 @@ def main():
 
                 # TODO: This is HACKY. MUST FIX SOON
                 if args.skip and file_exists(filename + '_NoribenReport.zip'):
-                    print('[!] Report already run for file: {}'.format(filename))
+                    print('[!] Detonation already performed for file: {}'.format(filename))
                     continue
 
                 # Front load magic processing to avoid unnecessary calls to run_file

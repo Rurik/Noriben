@@ -125,8 +125,6 @@
 # * Upload files directly to VirusTotal (2.X feature?)
 # * extract data directly from registry? (may require python-registry)
 # * scan for mutexes, preferably in a way that doesn't require wmi/pywin32
-# * Fix CSV issues (see GitHub issue)
-# * Place filters into external file so that core script does not need change to update
 
 import argparse
 import ast
@@ -169,293 +167,9 @@ except ImportError:
     print('[!] Python module "configparser" not found. Python 3 required.')
     configparser = None
 
-# The below are customizable variables. Change these as you see fit.
-config = {
-    'procmon': 'procmon.exe',  # Change this if you have a renamed procmon.exe
-    'generalize_paths': True,  # Generalize paths to their base environment variable
-    'debug': False,
-    'headless': False,
-    'troubleshoot': False,  # If True, pause before all exit's
-    'timeout_seconds': 0,  # Set to 0 to manually end monitoring with Ctrl-C
-    'virustotal_api_key': '',  # Set API here
-    'yara_folder': '',
-    'hash_type': 'SHA256',
-    'txt_extension': 'txt',
-    'output_folder': '',
-    'global_approvelist_append': ''
-}
-
-
-if os.path.exists('virustotal.api'):  # Or put it in here
-    config['virustotal_api_key'] = open('virustotal.api', 'r').readline().strip()
-valid_hash_types = ['MD5', 'SHA1', 'SHA256']
-
-# Rules for creating rules:
-# 1. Every rule string must begin with the `r` for regular expressions to work.
-# 1.a. This signifies a 'raw' string.
-# 2. No backslashes at the end of a filter. Either:
-# 2.a. truncate the backslash, or
-# 2.b. use '\*' to signify 'zero or more slashes'.
-# 3. To find a list of available '%%' variables, type `set` from a command prompt
-
-# These entries are applied to all approvelists
-global_approvelist = [
-        r'VMwareUser.exe',  # VMware User Tools
-        r'CaptureBAT.exe',  # CaptureBAT Malware Tool
-        r'SearchIndexer.exe',  # Windows Search Indexer
-        r'Fakenet.exe',  # Practical Malware Analysis FakeNET
-        r'idaq.exe',  # IDA Pro
-        r'ngen.exe',  # Windows Native Image Generator
-        r'ngentask.exe',  # Windows Native Image Generator
-        r'consent.exe',  # Windows UAC prompt
-        r'taskhost.exe',
-        r'SearchIndexer.exe',
-        r'RepUx.exe',
-        r'RepMgr64.exe',
-        r'Ecat.exe',
-        r'WindowsApps\Microsoft.Windows.Photos.*\Microsoft.Photos.exe',
-        r'Microsoft Visual Studio\Installer\resources\app\ServiceHub\Services\Microsoft.VisualStudio.Setup.Service\BackgroundDownload.exe',
-        config['procmon'],
-        config['procmon'].split('.')[0] + '64.exe'  # Procmon drops embed as <name>+64
-        ]
-
-cmd_approvelist = [
-        r'AppData\Local\Microsoft\OneDrive\StandaloneUpdater\OneDriveSetup.exe',  # MS is so noisy
-        r'%SystemRoot%\system32\wbem\wmiprvse.exe',
-        r'%SystemRoot%\system32\wscntfy.exe',
-        r'wuauclt.exe',
-        r'jqs.exe',
-        r'avgrsa.exe',  # AVG AntiVirus
-        r'avgcsrva.exe',  # AVG AntiVirus
-        r'avgidsagenta.exe',  # AVG AntiVirus
-        r'Program File.*\Microsoft\EdgeUpdate\MicrosoftEdgeUpdate.exe',
-        r'TCPView.exe',
-        r'%WinDir%\System32\mobsync.exe',
-        r'XblGameSaveTask.exe',
-        r'/Processid:{AB8902B4-09CA-4BB6-B78D-A8F59079A8D5}',  # Thumbnail server
-        r'/Processid:{F9717507-6651-4EDB-BFF7-AE615179BCCF}',  # DCOM error
-        r'\??\%WinDir%\system32\conhost.exe .*-.*-.*-.*'  # Experimental
-        ]
-
-file_approvelist = [
-        r'Desired Access: Execute/Traverse',
-        r'Desired Access: Synchronize',
-        r'Desired Access: Generic Read/Execute',
-        r'Desired Access: Read EA',
-        r'Desired Access: Read Data/List',
-        r'Desired Access: Generic Read, ',
-        r'Desired Access: Read Attributes',
-
-        r'desktop.ini$',
-        r'Google\Chrome\User Data\.*.tmp',
-        r'Microsoft\Windows\Explorer\iconcache_*',
-        r'Microsoft\Windows\Explorer\thumbcache_.*.db',
-        r'Thumbs.db$',
-        r'wuauclt.exe',
-        r'wmiprvse.exe',
-
-        r'%AllUsersProfile%\Application Data\Microsoft\OFFICE\DATA',
-        r'%AllUsersProfile%\Microsoft\MapData\*',
-        r'%AllUsersProfile%\Microsoft\RAC',
-        r'%AllUsersProfile%\Microsoft\Windows\AppRepository\StateRepository',
-        r'%AppData%\Microsoft\Proof\*',
-        r'%AppData%\Microsoft\Templates\*',
-        r'%AppData%\Microsoft\Windows\Recent\AutomaticDestinations\1b4dd67f29cb1962.automaticDestinations-ms',
-        r'%LocalAppData%\Google\Drive\sync_config.db*',
-        r'%LocalAppData%\GDIPFONTCACHEV1.DAT',
-        r'%LocalAppData%\Microsoft\OneDrive\StandaloneUpdater\*',
-        r'%LocalAppData%\Microsoft\VSApplicationInsights\vstelAIF',
-        r'%LocalAppData%\Packages\Microsoft.Windows.Photos_',
-        r'%ProgramFiles%\Capture\*',
-        r'%SystemDrive%\Python',
-        r'%SystemRoot%\assembly',
-        r'%SystemRoot%\Microsoft.NET\Framework64',
-        r'%SystemRoot%\Prefetch\*',
-        r'%SystemRoot%\system32\wbem\Logs\*',
-        r'%SystemRoot%\System32\LogFiles\Scm',
-        r'%SystemRoot%\System32\Tasks\Microsoft\Windows',  # Some may want to remove this
-        r'%UserProfile%$',
-        r'%UserProfile%\Desktop$',
-        r'%UserProfile%\AppData\LocalLow$',
-        r'%UserProfile%\Recent\*',
-        r'%UserProfile%\Local Settings\History\History.IE5\*',
-        r'%WinDir%\AppCompat\Programs\RecentFileCache.bcf',
-        r'%WinDir%\ServiceProfiles\LocalService\AppData\Local\FontCache\Fonts\*',
-        r'%WinDir%\ServiceProfiles\LocalService\AppData\Local\Microsoft\Dlna\*',
-        r'%WinDir%\SoftwareDistribution\DataStore\DataStore.edb',
-        r'%WinDir%\SoftwareDistribution\DataStore\Logs\edb....',
-        r'%WinDir%\SoftwareDistribution\ReportingEvents.log',
-        r'%WinDir%\System32\catroot2\edb....',
-        r'%WinDir%\System32\config\systemprofile\AppData\LocalLow\Microsoft\CryptnetUrlCache\MetaData\*',
-        r'%WinDir%\System32\spool\drivers\*',
-        r'%WinDir%\Temp\fwtsqmfile00.sqm',  # Software Quality Metrics (SQM) from iphlpsvc
-        r'MAILSLOT\NET\NETLOGON',
-        r'Windows\Temporary Internet Files\counters.dat',
-        r'Program Files.*\confer\*'
-        ]
-
-reg_approvelist = [
-        r'CaptureProcessMonitor',
-        r'consent.exe',
-        r'verclsid.exe',
-        r'wmiprvse.exe',
-        r'wscntfy.exe',
-        r'wuauclt.exe',
-        r'PROCMON',
-        r'}\DefaultObjectStore\*',
-        r'}\LocalState\SessionSummaryData\.*\*',
-
-        r'HKCR$',
-        r'HKCR\AllFilesystemObjects\shell',
-
-        r'HKCU$',
-        r'HKCU\Printers\DevModePerUser',
-        r'HKCU\SessionInformation\ProgramCount',
-        r'HKCU\Software$',
-        r'HKCU\Software\Classes\Software\Microsoft\Windows\CurrentVersion\Deployment\SideBySide',
-        r'HKCU\Software\Classes\Local Settings\MuiCache\*',
-        r'HKCU\Software\Classes\Local Settings\MrtCache\*',
-        r'HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\SyncMgr\*',
-        r'HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\*',
-        r'HKCU\Software\Microsoft\Calc$',
-        r'HKCU\Software\Microsoft\.*\Window_Placement',
-        r'HKCU\Software\Microsoft\Internet Explorer\TypedURLs',
-        r'HKCU\Software\Microsoft\Notepad',
-        r'HKCU\Software\Microsoft\Office',
-        r'HKCU\Software\Microsoft\Shared Tools',
-        r'HKCU\Software\Microsoft\SystemCertificates\Root$',
-        r'HKCU\Software\Microsoft\VisualStudio\*',
-        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Applets',
-        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\CIDOpen',
-        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\CIDSave\Modules\GlobalSettings',
-        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\ComDlg32\.*MRU.*',
-        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Modules',
-        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2',
-        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU',
-        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo',
-        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartPage',
-        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartPage2',
-        r'HKCU\Software\Microsoft\Windows\Currentversion\Explorer\StreamMRU',
-        r'HKCU\Software\Microsoft\Windows\Currentversion\Explorer\Streams',
-        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Group Policy',
-        r'HKCU\Software\Microsoft\Windows\CurrentVersion\HomeGroup',
-        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings\Wpad\*',
-        r'HKCU\Software\Microsoft\Windows\Shell',
-        r'HKCU\Software\Microsoft\Windows\Shell\BagMRU',
-        r'HKCU\Software\Microsoft\Windows\Shell\Bags',
-        r'HKCU\Software\Microsoft\Windows\ShellNoRoam\MUICache',
-        r'HKCU\Software\Microsoft\Windows\ShellNoRoam\BagMRU',
-        r'HKCU\Software\Microsoft\Windows\ShellNoRoam\Bags',
-        r'HKCU\Software\Microsoft\Windows NT\CurrentVersion\Devices',
-        r'HKCU\Software\Microsoft\Windows NT\CurrentVersion\PrinterPorts\*',
-        r'HKCU\Software\Microsoft\Windows NT\CurrentVersion\Windows\UserSelectedDefault',
-        r'HKCU\Software\Policies$',
-        r'HKCU\Software\Policies\Microsoft$',
-
-        r'HKLM$',
-        r'HKLM\.*\Enum$',
-        r'HKLM\Software$',
-        r'HKLM\Software\Microsoft\Cryptography\RNG\Seed',  # Some people prefer to leave this in.
-        r'HKLM\Software\Microsoft$',
-        r'HKLM\SOFTWARE\Microsoft\Device Association Framework\Store\*',
-        r'HKLM\Software\MICROSOFT\Dfrg\Statistics',
-        r'HKLM\Software\Microsoft\Reliability Analysis\RAC',
-        r'HKLM\Software\MICROSOFT\SystemCertificates$',
-        r'HKLM\Software\Microsoft\WBEM',
-        r'HKLM\Software\Microsoft\Windows\CurrentVersion\Group Policy\History\PolicyOverdue',
-        r'HKLM\Software\Microsoft\Windows\CurrentVersion\Group Policy\State\Machine\Extension-List',
-        r'HKLM\Software\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products',
-        r'HKLM\Software\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\*',
-        r'HKLM\Software\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render',
-        r'HKLM\Software\Microsoft\Windows\CurrentVersion\Shell Extensions',
-        r'HKLM\Software\Microsoft\Windows Media Player NSS\*',
-        r'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Appraiser\*',
-        r'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Inventory',
-        r'HKLM\Software\Microsoft\Windows NT\CurrentVersion\NetworkList\Nla\Cache\*',
-        r'HKLM\Software\Microsoft\Windows NT\CurrentVersion\Prefetcher\*',
-        r'HKLM\Software\Microsoft\Windows NT\CurrentVersion\Print\*',
-        r'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\.*\RefCount$',
-        r'HKLM\Software\Microsoft\Windows NT\CurrentVersion\Tracing\*',
-
-        r'HKLM\Software\Policies$',
-        r'HKLM\Software\Policies\Microsoft$',
-        r'HKLM\Software\Wow6432Node\Google\Update\ClientState\{',
-        r'HKLM\Software\Wow6432Node\Google\Update\old-uid',
-        r'HKLM\Software\Wow6432Node\Google\Update\uid',
-
-        r'HKLM\System\CurrentControlSet\Control\Class\{.*-E325-11CE-BFC1-08002BE10318}',
-        r'HKLM\System\CurrentControlSet\Control\Class\{6bdd1fc6-810f-11d0-bec7-08002be2092f}',
-        r'HKLM\System\CurrentControlSet\Control\DeviceClasses',
-        r'HKLM\System\CurrentControlSet\Control\DeviceContainers\{.*}\Properties\{.*}\*',
-        r'HKLM\System\CurrentControlSet\Control\MediaProperties',
-        r'HKLM\System\CurrentControlSet\Control\Network\{.*-e325-11ce-bfc1-08002be10318}',
-        r'HKLM\System\CurrentControlSet\Control\Network\NetCfgLockHolder',
-        r'HKLM\System\CurrentControlSet\Control\NetworkSetup2\Interfaces\{.*}\*',
-        r'HKLM\System\CurrentControlSet\Control\Nsi\{eb004a03-9b1a-11d4-9123-0050047759bc}',
-        r'HKLM\System\CurrentControlSet\Control\Print\Environments\*',
-        r'HKLM\System\CurrentControlSet\Enum\*',
-        r'HKLM\System\CurrentControlSet\Services\CaptureRegistryMonitor',
-        r'HKLM\System\CurrentControlSet\Services\Eventlog\*',
-        r'HKLM\System\CurrentControlSet\Services\iphlpsvc\*',
-        r'HKLM\System\CurrentControlSet\Services\ksthunk\*',
-        r'HKLM\System\CurrentControlSet\Services\NetBT\*',
-        r'HKLM\System\CurrentControlSet\Services\SharedAccess\Epoch2',
-        r'HKLM\System\CurrentControlSet\Services\Tcpip\Parameters',
-        r'HKLM\System\CurrentControlSet\Services\Tcpip6\Parameters',
-        r'HKLM\System\CurrentControlSet\Services\tunnel\*',
-        r'HKLM\System\CurrentControlSet\Services\W32Time\*',
-        r'HKLM\System\CurrentControlSet\Services\WinSock2\Parameters',
-        r'HKLM\System\CurrentControlSet\Services\WSD',
-        r'HKLM\System\CurrentControlSet\Services\VSS\Diag',
-        r'HKLM\SYSTEM\Maps\*',
-
-        r'HKU\.DEFAULT\Printers\*',
-        r'HKU\.DEFAULT\SOFTWARE\Classes\Local Settings\MuiCache',
-
-        r'LEGACY_CAPTUREREGISTRYMONITOR',
-        r'Microsoft\Device Association Framework\Store\DAFUPnPProvider',
-        r'Microsoft\EdgeUpdate\ClientState\{.*}\CurrentState\*',
-        r'Microsoft\Windows\CurrentVersion\Internet Settings\Wpad\*',
-        r'Root\InventoryD.*\*',
-        r'Software\Microsoft\Multimedia\Audio$',
-        r'Software\Microsoft\Multimedia\Audio Compression Manager',
-        r'Software\Microsoft\Windows\CurrentVersion\Explorer\MenuOrder',
-        r'Software\Microsoft\Windows\ShellNoRoam\Bags',
-        r'Software\Microsoft\Windows\ShellNoRoam\BagMRU',
-        r'Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.doc',
-        r'Software\Microsoft\Windows\CurrentVersion\Explorer\RecentDocs',
-        r'Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders',
-        r'Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders',
-        r'UserAssist\{5E6AB780-7743-11CF-A12B-00AA004AE837}',
-        r'UserAssist\{75048700-EF1F-11D0-9888-006097DEACF9}',
-        r'UserAssist\{CEBFF5CD-ACE2-4F4F-9178-9926F41749EA}'
-        ]
-
-net_approvelist = [
-        r'hasplms.exe'  # Hasp dongle beacons
-        # r'192.168.2.',                     # Example for blocking net ranges
-        # r'Verizon_router.home']            # Example for blocking local domains
-        # r' -> .*\..*\..*\..*:1900
-        ]
-
-hash_approvelist = [
-        r'f8f0d25ca553e39dde485d8fc7fcce89',  # WinXP ntdll.dll
-        r'b60dddd2d63ce41cb8c487fcfbb6419e',  # iexplore.exe 8.0
-        r'6fe42512ab1b89f32a7407f261b1d2d0',  # kernel32.dll
-        r'8b1f3320aebb536e021a5014409862de',  # gdi32.dll
-        r'b26b135ff1b9f60c9388b4a7d16f600b',  # user32.dll
-        r'355edbb4d412b01f1740c17e3f50fa00',  # msvcrt.dll
-        r'd4502f124289a31976130cccb014c9aa',  # rpcrt4.dll
-        r'81faefc42d0b236c62c3401558867faa',  # iertutil.dll
-        r'e40fcf943127ddc8fd60554b722d762b',  # msctf.dll
-        r'0da85218e92526972a821587e6a8bf8f'   # imm32.dll
-        ]
-
 # Below are global internal variables. Do not edit these. ################
 __VERSION__ = '1.8.7'
 path_general_list = []
-virustotal_upload = True if config['virustotal_api_key'] else False  # TODO
-use_virustotal = True if config['virustotal_api_key'] and has_internet else False
 use_pmc = False
 vt_results = {}
 vt_dump = list()
@@ -465,6 +179,7 @@ time_exec = 0
 time_process = 0
 script_cwd = ''
 debug_file = ''
+valid_hash_types = ['MD5', 'SHA1', 'SHA256']
 ##########################################################################
 
 
@@ -495,24 +210,6 @@ def get_error(code):
     return 'Unexpected Error'
 
 
-def read_global_append(append_filename):
-    """
-    Read additional global values from a specific set of filenames.
-
-    Arguments:
-        append_filename: Wildcard-supported file(s) from which to read filters
-    Result:
-        none
-    """
-    global global_approvelist
-
-    for filename in glob.iglob(append_filename, recursive=True):
-        with codecs.open(filename, 'r', encoding='utf-8') as f:
-            for line in f:
-                if not line[0] == '#':
-                    global_approvelist.append(line.strip())
-
-
 def read_config(config_filename):
     """
     Parse an external configuration file.
@@ -524,21 +221,62 @@ def read_config(config_filename):
     """
     global config
     global use_virustotal
+    global global_approvelist, reg_approvelist, file_approvelist, cmd_approvelist
+    global net_approvelist, hash_approvelist
 
-    file_config = configparser.ConfigParser()
-    with codecs.open(config_filename, 'r', encoding='utf-8') as f:
-        file_config.read_file(f)
+    try:
+        file_config = configparser.ConfigParser(inline_comment_prefixes=('#', ';'))
+        with codecs.open(config_filename, 'r', encoding='utf-8') as f:
+            file_config.read_file(f)
 
-    new_config = {}
-    for key, value in file_config.items('Noriben'):
-        try:
-            new_config[key] = ast.literal_eval(value)
-        except (ValueError, SyntaxError):
-            new_config[key] = value
+        config = {}
+        options = file_config.options('Noriben')
+        for option in options:
+            config[option] = file_config.get('Noriben', option)
+            if config[option].lower() in ['true', 'false']:
+                config[option] = file_config.getboolean('Noriben', option)
+            if config[option] == -1:
+                print('[*] Invalid configuration option detected: {}'.format(option))
+                
 
-    config.update(new_config)
+        global_approvelist = file_config.get('Filters', 'global_approvelist').replace('\n','').split(',')
+        reg_approvelist = file_config.get('Filters', 'reg_approvelist').replace('\n','').split(',')
+        file_approvelist = file_config.get('Filters', 'file_approvelist').replace('\n','').split(',')
+        cmd_approvelist = file_config.get('Filters', 'cmd_approvelist').replace('\n','').split(',')
+        net_approvelist = file_config.get('Filters', 'net_approvelist').replace('\n','').split(',')
+        hash_approvelist = file_config.get('Filters', 'hash_approvelist').replace('\n','').split(',')
+        
+        # Throwing a large one in here to ignore anything that the configured procmon executable creates
+        global_approvelist.append(config['procmon'])
+        global_approvelist.append(config['procmon'].split('.')[0] + '64.exe')  # Procmon drops embed as <name>+64
+        
+    except configparser.MissingSectionHeaderError:
+        print('[!] Error found in reading config file. Invalid section header detected.')
+        sys.exit(12)
+    except Exception as e: 
+        print(e)
+        time.sleep(5)
+
     if config['virustotal_api_key'] and has_internet:
         use_virustotal = True
+    else:
+        use_virustotal = False
+
+
+def human():
+    import pyautogui
+    import math
+
+    SIZE_X, SIZE_Y = pyautogui.size()
+    STEPS = 20
+    TIME_STEP = 0
+
+    for i in range(0,STEPS):
+        j = (((i/STEPS)*2)*math.pi)
+        x = math.cos(j) 
+        y = math.sin(j) 
+        pyautogui.moveTo( SIZE_X/2 + (SIZE_Y/3)*x
+                ,SIZE_Y/2 + (SIZE_Y/3)*y, duration=TIME_STEP)
 
 
 def terminate_self(error):
@@ -569,9 +307,13 @@ def log_debug(msg):
     """
     global debug_messages
 
-    if msg and config['debug']:
-        print(msg)
-
+    # Sanity check in case this is called before configuration is loaded
+    try:
+        debug = config['debug']
+    except KeyError:
+        debug = False
+    
+    if msg and debug:
         if debug_file:  # File already set, check for message buffer
             if debug_messages:  # If buffer, write and erase buffer
                 hdbg = open(debug_file, 'a')
@@ -765,7 +507,7 @@ def yara_import_rules(yara_path):
     if yara_files:
         try:
             rules = yara.compile(filepaths=yara_files)
-            print('[*] YARA rules loaded. Total files imported: %d' % (len(yara_files)))
+            print('[*] YARA rules loaded. Total files imported: {}'.format(len(yara_files)))
         except yara.SyntaxError:
             print('[!] YARA: Unknown Syntax Errors found.')
             print('[!] YARA rules disabled until all Syntax Errors are fixed.')
@@ -1247,48 +989,48 @@ def parse_csv(csv_file, report, timeline):
 
     report.append('Processes Created:')
     report.append('==================')
-    log_debug('[*] Writing %d Process Events results to report' % (len(process_output)))
+    log_debug('[*] Writing {} Process Events results to report'.format(len(process_output)))
     for event in process_output:
         report.append(event)
 
     report.append('')
     report.append('File Activity:')
     report.append('==================')
-    log_debug('[*] Writing %d Filesystem Events results to report' % (len(file_output)))
+    log_debug('[*] Writing {} Filesystem Events results to report'.format(len(file_output)))
     for event in file_output:
         report.append(event)
 
     report.append('')
     report.append('Registry Activity:')
     report.append('==================')
-    log_debug('[*] Writing %d Registry Events results to report' % (len(reg_output)))
+    log_debug('[*] Writing {} Registry Events results to report'.format(len(reg_output)))
     for event in reg_output:
         report.append(event)
 
     report.append('')
     report.append('Network Traffic:')
     report.append('==================')
-    log_debug('[*] Writing %d Network Events results to report' % (len(net_output)))
+    log_debug('[*] Writing {} Network Events results to report'.format(len(net_output)))
     for event in net_output:
         report.append(event)
 
     report.append('')
     report.append('Unique Hosts:')
     report.append('==================')
-    log_debug('[*] Writing %d Remote Servers results to report' % (len(remote_servers)))
+    log_debug('[*] Writing {} Remote Servers results to report'.format(len(remote_servers)))
     for server in sorted(remote_servers):
         report.append(protocol_replace(server).strip())
 
     if error_output:
         report.append('\r\n\r\n\r\n\r\n\r\n\r\nERRORS DETECTED')
         report.append('The following items could not be parsed correctly:')
-        log_debug('[*] Writing %d Output Errors results to report' % (len(error_output)))
+        log_debug('[*] Writing {} Output Errors results to report'.format(len(error_output)))
         for error in error_output:
             report.append(error)
 
     if config['debug'] and vt_dump:
         vt_file = os.path.join(config['output_folder'], os.path.splitext(csv_file)[0] + '.vt.json')
-        log_debug('[*] Writing %d VirusTotal results to %s' % (len(vt_dump), vt_file))
+        log_debug('[*] Writing {} VirusTotal results to {}'.format(len(vt_dump), vt_file))
         vt_out = open(vt_file, 'w')
         json.dump(vt_dump, vt_out)
         vt_out.close()
@@ -1327,23 +1069,22 @@ def main():
     parser.add_argument('--hashtype', help='Specify hash type', required=False, choices=valid_hash_types)
     parser.add_argument('--headless', action='store_true', help='Do not open results on VM after processing',
                         required=False)
+    parser.add_argument('--human', action='store_true', help='Perform human activity', required=False)
     parser.add_argument('-t', '--timeout', help='Number of seconds to collect activity', required=False, type=int)
     parser.add_argument('--output', help='Folder to store output files', required=False)
     parser.add_argument('--yara', help='Folder containing YARA rules', required=False)
-    parser.add_argument('--generalize', dest='generalize_paths', default=False, action='store_true',
-                        help='Generalize file paths to environment variables.\n' +
-                        'Default: {}'.format(config['generalize_paths']), required=False)
     parser.add_argument('--cmd', help='Command line to execute (in quotes)', required=False)
     parser.add_argument('-d', '--debug', action='store_true', help='Enable debugging', required=False)
     parser.add_argument('--troubleshoot', action='store_true', help='Pause before exiting for troubleshooting',
                         required=False)
-    parser.add_argument('--append', help='Specify external filter files (Wildcard supported)', required=False)
     args = parser.parse_args()
     report = list()
     timeline = list()
     script_cwd = os.path.dirname(os.path.abspath(__file__))
 
     # Load config file first, then use additional args to override those values if necessary
+    default_config_location = os.path.join(script_cwd, 'Noriben.config')
+    read_config(default_config_location)
     if args.config:
         if file_exists(args.config):
             read_config(args.config)
@@ -1353,12 +1094,17 @@ def main():
     if args.debug:
         config['debug'] = True
 
+
+    if os.path.exists('virustotal.api'):  # Or put it in here
+        config['virustotal_api_key'] = open('virustotal.api', 'r').readline().strip()
+    virustotal_upload = True if config['virustotal_api_key'] else False  # TODO
+    use_virustotal = True if config['virustotal_api_key'] and has_internet else False
+
     if args.troubleshoot:
         config['troubleshoot'] = True
 
     # Check to see if string generalization is wanted
-    if args.generalize_paths:
-        config['generalize_paths'] = True
+    if config['generalize_paths']:
         generalize_vars_init()
 
     if args.headless:
@@ -1426,9 +1172,6 @@ def main():
             print('[!] YARA rule path not found: {}'.format(config['yara_folder']))
             config['yara_folder'] = ''
     log_debug('[*] YARA directory: {}'.format(config['yara_folder']))
-
-    if args.append:
-        read_global_append(args.append)
 
     # Print feature list
     log_debug(
@@ -1538,12 +1281,13 @@ def main():
         print('[*] Procmon is running. Run your executable now.')
 
     if config['timeout_seconds']:
-        print('[*] Running for %d seconds. Press Ctrl-C to stop logging early.' % (config['timeout_seconds']))
-        # Print a small progress indicator, for those REALLY long time.sleeps.
+        print('[*] Running for {} seconds. Press Ctrl-C to stop logging early.'.format(config['timeout_seconds']))
+        # Print a small progress indicator, for those REALLY long sleeps.
         try:
-            for i in range(config['timeout_seconds']):
-                progress = (100 / config['timeout_seconds']) * i
-                sys.stdout.write('\r%d%% complete' % progress)
+            timeout_seconds = int(config['timeout_seconds'])
+            for i in range(timeout_seconds):
+                progress = (100 / timeout_seconds) * i
+                sys.stdout.write('\r%d{} complete'.format(progress))
                 sys.stdout.flush()
                 time.sleep(1)
         except KeyboardInterrupt:
