@@ -265,18 +265,19 @@ def read_config(config_filename):
 
 def human():
     import pyautogui
-    import math
 
-    SIZE_X, SIZE_Y = pyautogui.size()
-    STEPS = 20
-    TIME_STEP = 0
+    screenwidth, screenheight = pyautogui.size()  
+    x_pos = screenwidth/2
+    y_pos = screenheight/2
+    for i in range(5):
+        pyautogui.moveTo(x_pos, y_pos, duration = 0.1)
 
-    for i in range(0,STEPS):
-        j = (((i/STEPS)*2)*math.pi)
-        x = math.cos(j) 
-        y = math.sin(j) 
-        pyautogui.moveTo( SIZE_X/2 + (SIZE_Y/3)*x
-                ,SIZE_Y/2 + (SIZE_Y/3)*y, duration=TIME_STEP)
+        pyautogui.moveTo(x_pos+250, y_pos+250, duration = 0.1)
+        pyautogui.moveTo(x_pos-250, y_pos, duration = 0.1)
+
+        pyautogui.moveTo(x_pos-500, y_pos, duration = 0.1)
+        pyautogui.moveTo(x_pos-250, y_pos+500, duration = 0.1)
+    
 
 
 def terminate_self(error):
@@ -1279,6 +1280,9 @@ def main():
 
     else:
         print('[*] Procmon is running. Run your executable now.')
+
+    if config['human']:
+        human()
 
     if config['timeout_seconds']:
         print('[*] Running for {} seconds. Press Ctrl-C to stop logging early.'.format(config['timeout_seconds']))
