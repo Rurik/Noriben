@@ -112,19 +112,11 @@
 #       Much improved filters and filter parsing
 # Version 1.0 - 10 Apr 13 - @bbaskin - brian [@] thebaskins.com
 #       Gracious edits, revisions, and corrections by Daniel Raygoza
-
-
-
-
-
-
-
-
 #
-# TODO:
+#
+# TODO?
 # * Upload files directly to VirusTotal (2.X feature?)
 # * extract data directly from registry? (may require python-registry)
-# * scan for mutexes, preferably in a way that doesn't require wmi/pywin32
 
 import argparse
 import ast
@@ -350,11 +342,13 @@ def generalize_vars_init():
 
     for env in envvar_list:
         try:
-            resolved = os.path.expandvars(env).replace("\\", "\\\\")
+            # ProgramFiles is handled specially in 64-bit environments. 
+            # It's real value is in ProgramW6432
+            if env == '%ProgramFiles%':
+                resolved = os.path.expandvars('%ProgramW6432%').replace("\\", "\\\\")
+            else:
+                resolved = os.path.expandvars(env).replace("\\", "\\\\")
 
-            # TODO: Resolve this issue with Py3 for x86 folder.
-            # resolved = resolved.replace(b'(', b'\\(').replace(b')', b'\\)')
-            # if not resolved == env and not resolved == env.replace(b'(', b'\\(').replace(b')', b'\\)'):
             path_general_list.append([env, resolved])
         except TypeError:
             if resolved in locals():
@@ -980,12 +974,12 @@ def parse_csv(csv_file, report, timeline):
         report.append('-=] Analysis of command line: {}'.format(exe_cmdline))
 
     if time_exec:
-        report.append('-=] Execution time: %0.2f seconds' % time_exec)
+        report.append('-=] Execution time: {:.2f} seconds'.format(time_exec))
     if time_process:
-        report.append('-=] Processing time: %0.2f seconds' % time_process)
+        report.append('-=] Processing time: {:.2f} seconds'.format(time_process))
 
     time_analyze = time_parse_csv_end - time_parse_csv_start
-    report.append('-=] Analysis time: %0.2f seconds' % time_analyze)
+    report.append('-=] Analysis time: {:.2f} seconds'.format(time_analyze))
     report.append('')
 
     report.append('Processes Created:')
