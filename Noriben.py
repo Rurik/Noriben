@@ -8,7 +8,7 @@
 # clean text report and timeline
 #
 # Changelog:
-# Version 2.0 - September-ish 2022
+# Version 2.0.0 - September-ish 2022
 #       Major changes to NoribenSandbox host script
 #           Updated many of the functions, such as properly deleting files in guest
 #           Remove unneeded or obtuse options
@@ -160,7 +160,7 @@ except ImportError:
     configparser = None
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '1.8.7'
+__VERSION__ = '2.0.0 beta'
 path_general_list = []
 use_pmc = False
 vt_results = {}
@@ -175,17 +175,24 @@ valid_hash_types = ['MD5', 'SHA1', 'SHA256']
 ##########################################################################
 
 
-noriben_errors = {0: 'Normal exit',
-                  1: 'PML file was not found',
-                  2: 'Unable to find procmon.exe',
-                  3: 'Unable to create output directory',
-                  4: 'Windows is refusing execution based upon permissions',
-                  5: 'Could not create CSV',
-                  6: 'Could not find malware file',
-                  7: 'Error creating CSV',
-                  8: 'Error creating PML',
-                  9: 'Unknown error',
-                  10: 'Invalid arguments given'}
+noriben_errors = {
+    0: 'Successful execution',
+    1: 'PML file was not found',
+    2: 'Unable to find procmon.exe',
+    3: 'Unable to create output directory',
+    4: 'Windows is refusing execution based upon permissions',
+    5: 'Could not create CSV',
+    6: 'Could not find malware file',
+    7: 'Error creating CSV',
+    8: 'Error creating PML',
+    9: 'Unknown error',
+    10: 'Invalid arguments given',
+    11: 'Missing Python module',
+    12: 'Error in host module configuration',
+    13: 'Required file not found',
+    14: 'Configuration issue',
+    50: 'General error'
+}
 
 
 def get_error(code):
@@ -248,6 +255,7 @@ def read_config(config_filename):
     except Exception as e: 
         print(e)
         time.sleep(5)
+        sys.exit(12)
 
     if config['virustotal_api_key'] and has_internet:
         use_virustotal = True
@@ -261,6 +269,8 @@ def human():
     screenwidth, screenheight = pyautogui.size()  
     x_pos = screenwidth/2
     y_pos = screenheight/2
+    print('[*] Performing human mouse emulation. Starting coordinates: {}, {}'.format(x_pos, y_pos))
+
     for i in range(5):
         pyautogui.moveTo(x_pos, y_pos, duration = 0.1)
 
@@ -281,9 +291,10 @@ def terminate_self(error):
     Result:
         none
     """
-    print('[*] Exiting with error code: {}: {}'.format(error, get_error(error)))
+    if not error == 0:
+        print('[*] Exiting with error code: {}: {}'.format(error, get_error(error)))
     if config['troubleshoot']:
-        errormsg = '[*] Paused for troubleshooting. Press enter to close Noriben.'
+        errormsg = '[*] Configured to pause for troubleshooting. Press enter to close Noriben.'
         input(errormsg)
     sys.exit(error)
 
@@ -309,10 +320,10 @@ def log_debug(msg):
     if msg and debug:
         if debug_file:  # File already set, check for message buffer
             if debug_messages:  # If buffer, write and erase buffer
-                hdbg = open(debug_file, 'a')
+                debug_file_handle = open(debug_file, 'a')
                 for item in debug_messages:
-                    hdbg.write(item)
-                hdbg.close()
+                    debug_file_handle.write(item)
+                debug_file_handle.close()
                 debug_messages = list()
             else:
                 open(debug_file, 'a').write('{}\n'.format(msg))
@@ -961,7 +972,7 @@ def parse_csv(csv_file, report, timeline):
         # Enumerate unique remote hosts into their own section
         if server:
             server = server.split(':')[0]
-            if server not in remote_servers and server != 'localhost':
+            if server not in remote_servers and not server == 'localhost':
                 remote_servers.append(server)
     # } End of file input processing
 
@@ -1278,7 +1289,7 @@ def main():
     if config['human']:
         human()
 
-    if config['timeout_seconds']:
+    if not config['timeout_seconds'] == '0':
         print('[*] Running for {} seconds. Press Ctrl-C to stop logging early.'.format(config['timeout_seconds']))
         # Print a small progress indicator, for those REALLY long sleeps.
         try:
