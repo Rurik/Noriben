@@ -8,6 +8,9 @@
 # clean text report and timeline
 #
 # Changelog:
+# Version 1.8.8 - 20 Jan 23
+#       Replaced subprocess .wait() to .communicate() due to known process exec issue 
+#       which causes deadlocks in a small amount of cases
 # Version 1.8.7 - 30 Aug 22
 #       Replaced csv.reader with csv.DictReader to have better forward and backward
 #       compatibility. Small changes in style, PEP8
@@ -446,7 +449,7 @@ hash_approvelist = [
         ]
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '1.8.7'
+__VERSION__ = '1.8.8'
 path_general_list = []
 virustotal_upload = True if config['virustotal_api_key'] else False  # TODO
 use_virustotal = True if config['virustotal_api_key'] and has_internet else False
@@ -944,8 +947,9 @@ def process_pml_to_csv(procmonexe, pml_file, pmc_file, csv_file):
     if use_pmc and file_exists(pmc_file):
         cmdline += ' /LoadConfig "{}"'.format(pmc_file)
     log_debug('[*] Running cmdline: {}'.format(cmdline))
-    stdnull = subprocess.Popen(cmdline)
-    stdnull.wait()
+    process = subprocess.Popen(cmdline, stdout=subprocess.PIPE, 
+                               stderr=subprocess.PIPE)
+    stdout, stderr = process.communicate()
 
     time_convert_end = time.time()
     time_process = time_convert_end - time_convert_start
@@ -987,8 +991,9 @@ def terminate_procmon(procmonexe):
 
     cmdline = '"{}" /Terminate'.format(procmonexe)
     log_debug('[*] Running cmdline: {}'.format(cmdline))
-    stdnull = subprocess.Popen(cmdline)
-    stdnull.wait()
+    process = subprocess.Popen(cmdline, stdout=subprocess.PIPE, 
+                               stderr=subprocess.PIPE)
+    stdout, stderr = process.communicate()
 
 
 def parse_csv(csv_file, report, timeline):
