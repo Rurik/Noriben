@@ -13,6 +13,7 @@
 #           Updated many of the functions, such as properly deleting files in guest
 #           Remove unneeded or obtuse options
 #       Move everything to all major settings to a configuration file
+#       Many formatting changes
 #
 # Version 1.8.8 - 20 Jan 23
 #       Replaced subprocess .wait() to .communicate() due to known process exec issue
@@ -173,6 +174,15 @@ time_exec = 0
 time_process = 0
 script_cwd = ''
 debug_file = ''
+config = ''
+global_approvelist = ''
+reg_approvelist = ''
+file_approvelist = ''
+cmd_approvelist = ''
+net_approvelist = ''
+hash_approvelist = ''
+path_general_list = []
+
 valid_hash_types = ['MD5', 'SHA1', 'SHA256']
 ##########################################################################
 
@@ -203,7 +213,7 @@ def get_error(code):
 
     Arguments:
         code: Integer that corresponds to a pre-set entry
-    Results:
+    Returns:
          string value of a error code
     """
     if code in noriben_errors:
@@ -217,7 +227,7 @@ def read_config(config_filename):
 
     Arguments:
         config_filename: String of filename, predetermined if exists
-    Result:
+    Returns:
         none
     """
     global config
@@ -262,6 +272,15 @@ def read_config(config_filename):
 
 
 def human():
+    """
+    Implemented basic human emulation code. This performs minor interaction
+    with the OS that could help bypass anti-analysis in some malware families
+
+    Arguments:
+        none
+    Returns:
+        none
+    """
     import pyautogui
 
     screenwidth, screenheight = pyautogui.size()
@@ -285,7 +304,7 @@ def terminate_self(error):
 
     Arguments:
         error: Int of error code to return to system parent
-    Result:
+    Returns:
         none
     """
     if not error == 0:
@@ -303,7 +322,7 @@ def log_debug(msg):
 
     Arguments:
         msg: Text string of message.
-    Results:
+    Returns:
         none
     """
     global debug_messages
@@ -332,6 +351,11 @@ def generalize_vars_init():
     """
     Initialize a dictionary with the local system's environment variables.
     Returns via a global variable, path_general_list
+
+    Arguments:
+        none
+    Returns:
+        none
     """
     envvar_list = [r'%AllUsersProfile%',
                    r'%LocalAppData%',
@@ -370,10 +394,10 @@ def generalize_var(path_string):
 
     Arguments:
         path_string: string value to generalize
-    Results:
+    Returns:
         string value of a generalized string
     """
-    if not len(path_general_list):
+    if path_general_list:
         generalize_vars_init()  # For edge cases when this isn't previously called.
 
     for item in path_general_list:
@@ -438,27 +462,28 @@ def virustotal_query_hash(hashval):
         print('[!] VirusTotal Rate Limit Exceeded. Sleeping for 60 seconds.')
         time.sleep(60)
         return virustotal_query_hash(hashval)
-    else:
-        try:
-            data = http_response.json()
-        except ValueError:
-            result = 'Error'
 
-        try:
-            if data['response_code'] == -2:
-                result = ' [VT: Queued]'
-            elif data['response_code'] == -1:
-                result = ' [VT: Error 001]'
-            elif data['response_code'] == 0:
-                result = ' [VT: Not Scanned]'
-            elif data['response_code'] == 1:
-                if data['total']:
-                    vt_dump.append(data)
-                    result = ' [VT: {}/{}]'.format(data['positives'], data['total'])
-                else:
-                    result = ' [VT: Error 002]'
-        except TypeError:
-            result = ' [VT: Error 003]'
+    try:
+        data = http_response.json()
+    except ValueError:
+        result = 'Error'
+
+    try:
+        if data['response_code'] == -2:
+            result = ' [VT: Queued]'
+        elif data['response_code'] == -1:
+            result = ' [VT: Error 001]'
+        elif data['response_code'] == 0:
+            result = ' [VT: Not Scanned]'
+        elif data['response_code'] == 1:
+            if data['total']:
+                vt_dump.append(data)
+                result = ' [VT: {}/{}]'.format(data['positives'], data['total'])
+            else:
+                result = ' [VT: Error 002]'
+    except TypeError:
+        result = ' [VT: Error 003]'
+
     vt_results[hashval] = result
     log_debug('[*] VirusTotal result for hash {}: {}'.format(hashval, result))
     return result
@@ -490,7 +515,7 @@ def yara_import_rules(yara_path):
 
     Arguments:
         yara_path: path to folder containing rules
-    Results:
+    Returns:
         rules: a yara.Rules structure of available YARA rules
     """
     yara_files = {}
@@ -526,7 +551,7 @@ def yara_filescan(file_path, rules):
     Arguments:
         file_path: full path to a file to scan
         rules: a yara.Rules structure of available YARA rules
-    Results:
+    Returns:
         results: a string value that's either null (no hits)
                  or formatted with hit results
     """
@@ -553,7 +578,7 @@ def open_file_with_assoc(fname):
 
     Arguments:
         fname: full path to a file to open
-    Results:
+    Returns:
         integer value for command return code
     """
     if config['headless']:
@@ -577,7 +602,7 @@ def file_exists(fname):
 
     Arguments:
         fname: path to a file
-    Results:
+    Returns:
         boolean value if file exists
     """
     log_debug('[*] Checking for existence of file: {}'.format(fname))
@@ -588,7 +613,7 @@ def check_procmon():
     """
     Finds the local path to Procmon
 
-    Results:
+    Returns:
         folder path to procmon executable
     """
     log_debug('[*] Checking for procmon in the following location: {}'.format(config['procmon']))
@@ -612,7 +637,7 @@ def hash_file(fname):
 
     Arguments:
         fname: path to a file
-    Results:
+    Returns:
         hex hash value of file's contents as a string
     """
     log_debug('[*] Performing {} hash on file: {}'.format(config['hash_type'], fname))
@@ -629,7 +654,7 @@ def get_session_name():
     """
     Returns current date and time stamp for file name
 
-    Results:
+    Returns:
         string value of a current timestamp to apply to log file names
     """
     return datetime.datetime.now().strftime('%d_%b_%y__%H_%M_%f')
@@ -641,7 +666,7 @@ def protocol_replace(text):
 
     Arguments:
         text: string of domain with resolved port name
-    Results:
+    Returns:
         string value with resolved port name in decimal format
     """
     replacements = [(':https', ':443'),
@@ -659,7 +684,7 @@ def approvelist_scan(approvelist, data):
     Arguments:
         approvelist: list of items to ignore
         data: string value to compare against approvelist
-    Results:
+    Returns:
         boolean value of if item exists in approvelist
     """
     for event in data:
@@ -684,7 +709,7 @@ def process_pml_to_csv(procmonexe, pml_file, pmc_file, csv_file):
         pml_file: path to Procmon PML output file
         pmc_file: path to PMC filter file
         csv_file: path to output CSV file
-    Results:
+    Returns:
         None
     """
     global time_process
@@ -714,7 +739,7 @@ def launch_procmon_capture(procmonexe, pml_file, pmc_file):
         procmonexe: path to Procmon executable
         pml_file: path to Procmon PML output file
         pmc_file: path to PMC filter file
-    Results:
+    Returns:
         None
     """
     global time_exec
@@ -734,7 +759,7 @@ def terminate_procmon(procmonexe):
 
     Arguments:
         procmonexe: path to Procmon executable
-    Results:
+    Returns:
         None
     """
     global time_exec
@@ -1166,7 +1191,7 @@ def main():
         if not os.path.exists(config['output_folder']):
             try:
                 os.mkdir(config['output_folder'])
-            except WindowsError:
+            except OSError:
                 print('[!] Fatal: Unable to create output directory: {}'.format(config['output_folder']))
                 terminate_self(3)
     log_debug('[*] Log output directory: {}'.format(config['output_folder']))
@@ -1276,11 +1301,11 @@ def main():
         print('[*] Launching command line: {}'.format(exe_cmdline))
         try:
             subprocess.Popen(exe_cmdline)
-        except WindowsError:  # Occurs if VMWare bug removes Owner from file
+        except OSError:  # Occurs if VMWare bug removes Owner from file
             print('[*] Execution failed. File is potentially not an executable. Trying to open with associated application.')
             try:
                 open_file_with_assoc(exe_cmdline)
-            except WindowsError:
+            except OSError:
                 print('\n[*] Unexpected termination of Procmon commencing... please wait')
                 print('[!] Error executing file. Windows is refusing execution based upon permissions.')
                 terminate_procmon(procmonexe)
