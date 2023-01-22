@@ -1,36 +1,43 @@
 # Noriben Sandbox Automation Script
-# 
-# 
+#
 # Changelog:
-# V 2.0 - XXX Sep 22 - Placed all editable data into Noriben.config file. Cleaned up some logic and bugs
+# V 2.0   - January 2023
+#       Placed all editable data into Noriben.config file.
+#       Cleaned up some logic and bugs
 #       Added basic support for VirtualBox... still TODO
 #       Rewrote post execution script parsing
-# V 1.3 - 15 Apr 19 - Added ability to suspend or shutdown guest afterward. Minor bug fixes.
-# V 1.2.1 - 12 Sep 18 - Bug fix to allow for snapshots with spaces in them.
-# V 1.2 - 14 Jun 18
+#       A lot of random code cleanup
+#
+# V 1.3   - 15 Apr 19
+#       Added ability to suspend or shutdown guest afterward.
+#       Minor bug fixes.
+# V 1.2.1 - 12 Sep 18
+#       Bug fix to allow for snapshots with spaces in them.
+# V 1.2   - 14 Jun 18
 # V 1.1.1 - 8 Jan 18
-# V 1.1 - 5 Jun 17
-# V 1.0 - 3 Apr 17
+# V 1.1   - 5 Jun 17
+# V 1.0   - 3 Apr 17
 #
 # Responsible for:
 # * Copying sample into a known VM
 # * Running sample
 # * Copying off results
 #
-# Ensure you set the environment variables in Noriben.conf to match your system. I've left defaults to help.
+# Ensure you set the environment variables in Noriben.conf to match your system.
+# I've left defaults to help.
 
-import argparse
-import ast
-import codecs
-import configparser
-import io
-import glob
-import magic  # pip python-magic and libmagic
 import os
 import shlex
 import subprocess
 import sys
 import time
+
+import argparse
+import codecs
+import configparser
+import io
+import glob
+import magic  # pip python-magic and libmagic
 
 
 noriben_errors = {
@@ -52,6 +59,11 @@ noriben_errors = {
 }
 
 error_count = 0
+vm_hypervisor = ''
+config = {}
+debug = False
+dontrun = False
+
 
 
 def get_error(code):
@@ -93,6 +105,14 @@ def dir_exists(path):
 
 
 def execute(cmd):
+    """
+    Executes a given command line on the host
+
+    Arguments:
+        cmd: String of command line to execute
+    Result:
+        none
+    """
     if debug:
         print('[*] Executing: {}'.format(cmd))
     time.sleep(2)  # Extra sleep buffer as vmrun sometimes trips over itself
@@ -121,7 +141,7 @@ def read_config(config_filename):
         options = file_config.options('Noriben_host')
         for option in options:
             config[option] = file_config.get('Noriben_host', option)
-            
+
             if config[option].lower() in ['true', 'false']:
                 config[option] = file_config.getboolean('Noriben_host', option)
             elif config[option] == -1:
@@ -135,8 +155,19 @@ def read_config(config_filename):
 
 
 def run_file(args, magic_result, malware_file):
+    """
+    Performs the actual execution of a file within the VM.
+    This sets up the environment correctly and executes the file.
+
+    Arguments:
+        args: Object from argparse library containing all cmdline options
+        magic_result: String containing Magic value of file
+        malware_file: String path to file to execute
+    Results:
+         none
+    """
     global error_count
-    
+
     # Do this check once, so that all future comparisons can be simplified
     if vm_hypervisor not in ['vmw', 'vbox']:
         print('[!] Error! Unknown VM Hypervisor is set. Currently set to: {}'.format(vm_hypervisor))
@@ -162,18 +193,19 @@ def run_file(args, magic_result, malware_file):
     guest_noriben_path_script = '{}\\{}'.format(guest_noriben_path, 'Noriben.py')
     guest_noriben_path_config = '{}\\{}'.format(guest_noriben_path, 'Noriben.config')
 
-
     print('[*] Processing sample: {}'.format(malware_file))
 
     # First restore the VM to the specified snapshot
     # This is optional, especially for when one has prepped the VM manually for this specific execution
     if not args.norevert and not config['vm_snapshot'] == 'NO_SNAPSHOT_SPECIFIED':
         if vm_hypervisor == 'vmw':
-            cmd = '"{}" -T ws revertToSnapshot {} "{}"'.format(config['vmrun'], os.path.expanduser(config['vmx']), os.path.expanduser(config['vm_snapshot']))
+            cmd = '"{}" -T ws revertToSnapshot {} "{}"'.format(config['vmrun'],
+                                                               os.path.expanduser(config['vmx']),
+                                                               os.path.expanduser(config['vm_snapshot']))
             return_code = execute(cmd)
             if return_code:
                 print('[!] Error: Possible unknown snapshot or corrupt VMX: {}'.format(os.path.expanduser(config['vm_snapshot'])))
-                sys.exit(return_code)            
+                sys.exit(return_code)
 
         elif vm_hypervisor == 'vbox':
             # VirtualBox requires powering off before restoring a snapshot.
@@ -184,27 +216,26 @@ def run_file(args, magic_result, malware_file):
                 pass
             elif return_code:
                 print('[!] Error code "{}": Unable to poweroff VM {{{}}}'.format(return_code, config['vbox_uuid']))
-                sys.exit(return_code)  
+                sys.exit(return_code)
 
             cmd = '"{}" snapshot {} restore "{}"'.format(config['vboxmanage'], config['vbox_uuid'], os.path.expanduser(config['vm_snapshot']))
             return_code = execute(cmd)
             if return_code:
                 print('[!] Error: Possible unknown snapshot or corrupt VMX: {}'.format(os.path.expanduser(config['vm_snapshot'])))
-                sys.exit(return_code)  
+                sys.exit(return_code)
 
     # Power on the VM
     if vm_hypervisor == 'vmw':
         cmd = '"{}" -T ws start {}'.format(config['vmrun'], os.path.expanduser(config['vmx']))
     elif vm_hypervisor == 'vbox':
         cmd = '"{}" startvm {}'.format(config['vboxmanage'], config['vbox_uuid'])
-    
+
     return_code = execute(cmd)
     if return_code:
         if return_code == 1 and vm_hypervisor == 'vbox':
             # This is the standard response for a VBox VM that is already running
             # Ignore it and move on to the next step
             print('[*] The above VBoxManage error is from trying to start a VM that is already running. This will be ignored.')
-            pass
         else:
             print('[!] Error trying to start VM. Error {}: {}'.format(hex(return_code), get_error(return_code)))
             error_count += 1
@@ -284,7 +315,7 @@ def run_file(args, magic_result, malware_file):
 
     time.sleep(5)
 
-    # --raw deletes the Procmon filter file prior to execution. There are likely better ways, but this 
+    # --raw deletes the Procmon filter file prior to execution. There are likely better ways, but this
     # causes ProcMon to collect with default filters.
     if args.raw:
         procmon_config_path = config['procmon_config_path'].format(config['vm_user'])
@@ -337,7 +368,7 @@ def run_file(args, magic_result, malware_file):
 
 
     if args.post and file_exists(args.post):
-        run_script(args, cmd_base)
+        run_postexec_script(args.post, cmd_base)
 
     zip_failed = False
     cmd = '{} "{}" -j "{}" "{}\\\\*.*"'.format(cmd_base, config['guest_zip_path'], config['guest_temp_zip'], config['guest_log_path'])
@@ -387,9 +418,19 @@ def run_file(args, magic_result, malware_file):
     print('[*] Execution completed for {}'.format(malware_file))
     if not args.nolog:
         print('[*] Logs stored at: {}'.format(host_report_path))
+    return 0
 
 
 def get_magic(magic_handle, filename):
+    """
+    Analyzes a given file to determine its magic value
+
+    Arguments:
+        magic_handle: Object from Magic library used to perform analysis
+        filename: String path to file to analyze
+    Results:
+         none
+    """
     try:
         magic_result = magic_handle.from_file(filename)
     except magic.MagicException as err:
@@ -399,17 +440,27 @@ def get_magic(magic_handle, filename):
                   'https://github.com/ahupp/python-magic')
             print('[!] You may need to manually specify magic file location using --magic')
         print('[!] Error in running magic against file: {}'.format(err))
-        
+
     if debug:
         print('[*] Magic result: {}'.format(magic_result))
 
     return magic_result
 
 
-def run_script(args, cmd_base):
+def run_postexec_script(postexec_script, cmd_base):
+    """
+    When the argument to run a post execution script is given, this function
+    will open the specified file and process each line within it.
+
+    Arguments:
+        postexec_script: String path to post execution script
+        cmd_base: String command line prefix for all execution
+    Results:
+         none
+    """
     source_path = ''
 
-    with io.open(args.post, encoding='utf-8') as post_script:
+    with io.open(postexec_script, encoding='utf-8') as post_script:
         for line in post_script:
             if debug:
                 print('[*] Script: {}'.format(line.strip()))
@@ -418,23 +469,23 @@ def run_script(args, cmd_base):
 
             if line.startswith('#'):
                 continue
-            
-            elif line.lower().startswith('collect '):
+
+            if line.lower().startswith('collect '):
                 try:
                     source_path = line.split('collect ')[1].strip()
                 except IndexError:
                     print('[!] Ignoring bad script collect: {}'.format(line.strip()))
                 copy_file_to_zip(cmd_base, source_path)
-            
+
             elif line.startswith('sleep '):
                 try:
                     sleep_seconds = int(line.split('sleep ')[1].strip())
                 except (IndexError, ValueError):
                     print('[!] Ignoring bad script sleep: {}'.format(line.strip()))
                     continue
-                    
+
                 time.sleep(sleep_seconds)
-            
+
             elif line.startswith('exec ') or line.startswith('execwait '):
                 try:
                     items = shlex.split(line, posix=False)
@@ -459,8 +510,19 @@ def run_script(args, cmd_base):
                 continue
 
 def copy_file_to_zip(cmd_base, filename):
-    # This is a two-step process as zip.exe will not allow direct zipping of some system files.
-    # Therefore, first copy file to log folder and then add to the zip.
+    """
+    Adds a file contained with the VM to the exfiltration zip.
+    This is a two-step process as zip.exe will not allow direct zipping
+    of some system files. Therefore, first copy file to log folder and
+    then add to the zip.
+
+    Arguments:
+        cmd_base: String command line prefix for all execution
+        filename: String path of file within VM to extract
+    Results:
+         integer value of command line execution return code
+    """
+
     global error_count
 
     cmd = '"{}" -gu {} -gp {} fileExistsInGuest {} "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'],
@@ -481,21 +543,31 @@ def copy_file_to_zip(cmd_base, filename):
 
     cmd = '{} "{}" -j "{}" "{}"'.format(cmd_base, config['guest_zip_path'], config['guest_temp_zip'], filename)
     return_code = execute(cmd)
+
     if return_code:
         print(('[!] Error trying to add additional file to archive. Continuing. '
                'Error {}; File: {}'.format(return_code, filename)))
         error_count += 1
         return return_code
-
+    return 0
 
 def main():
+    """
+    Primary code. This parses command line arguments, sets configuration options,
+    and starts the execution process
+
+    Arguments:
+        none
+    Result:
+        none
+    """
     global debug
     global dontrun
     global config
     global error_count
     global vm_hypervisor
 
-    # Error count is a soft trigger used for mass-execution to track when there was an abnormal 
+    # Error count is a soft trigger used for mass-execution to track when there was an abnormal
     # number of issues that execution should just stop
     error_count = 0
 
@@ -516,7 +588,7 @@ def main():
     parser.add_argument('--skip', action='store_true', help='Skip already executed files', required=False)
     parser.add_argument('--magic', help='Specify file magic database (may be necessary for Windows)', required=False)
     parser.add_argument('--config', help='Runtime configuration file', type=str, nargs='?', default='Noriben.config')
-    
+
     parser.add_argument('--nolog', action='store_true', help='Do not extract logs back', required=False)
     parser.add_argument('--norevert', action='store_true', help='Do not revert to snapshot', required=False)
     parser.add_argument('--post', help='Post-execution script', required=False)
@@ -552,20 +624,13 @@ def main():
         print('[!] Path to vmrun does not exist: {}'.format(config['vmrun']))
         sys.exit(1)
 
-    if args.debug or config['debug'] == True:
-        debug = True
-    else:
-        debug = False
+    debug = bool(args.debug or config['debug'])
+    dontrun = args.dontrun
 
     if args.vbox:
         vm_hypervisor = 'vbox'
     else:
         vm_hypervisor = 'vmw'
-
-    if args.dontrun:
-        dontrun = True
-    else:
-        dontrun = False
 
     if not config['vm_pass']:
         print('[!] vm_pass must be set in the configuration. VMware requires guest accounts to have passwords for remote access.')
@@ -622,7 +687,7 @@ def main():
             exec_time = time.time()
 
             # Create a primary list of files to execute beforehand
-            files = list()
+            files = []
             for result in glob.iglob(args.dir):
                 for (root, subdirs, filenames) in os.walk(result):
                     for fname in filenames:
@@ -647,7 +712,6 @@ def main():
                     print('[!] Too many errors encountered in this run. Exiting.')
                     sys.exit(100)
 
-                # TODO: This is HACKY. MUST FIX SOON
                 if args.skip and file_exists(filename + '_NoribenReport.zip'):
                     print('[!] Detonation already performed for file: {}'.format(filename))
                     continue
@@ -659,15 +723,15 @@ def main():
                         print('{}: {}'.format(filename, magic_result))
                     run_file_response = run_file(args, magic_result, filename)
                 else:
-                   print('[*] Directory parsing. File skipped as not an EXE or DLL: {} ({}...)'.format(filename, magic_result[0:50]))
-                   continue
+                    print('[*] Directory parsing. File skipped as not an EXE or DLL: {} ({}...)'.format(filename, magic_result[0:50]))
+                    continue
 
 
             exec_time_diff = time.time() - exec_time
             print('[*] Completed. Execution Time: {}'.format(exec_time_diff))
         else:
             print('[!] Specified directory cannot be found: {}'.format(args.dir))
-    
+
 
 if __name__ == '__main__':
     main()

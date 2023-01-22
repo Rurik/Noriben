@@ -8,7 +8,7 @@
 # clean text report and timeline
 #
 # Changelog:
-# Version 2.0.0 - September-ish 2022
+# Version 2.0.0 - January-ish 2023
 #       Major changes to NoribenSandbox host script
 #           Updated many of the functions, such as properly deleting files in guest
 #           Remove unneeded or obtuse options
@@ -122,11 +122,9 @@
 # * extract data directly from registry? (may require python-registry)
 
 import argparse
-import ast
 import codecs
 import csv
 import datetime
-import glob
 import hashlib
 import os
 import re
@@ -166,9 +164,10 @@ except ImportError:
 __VERSION__ = '2.0.0 beta'
 path_general_list = []
 use_pmc = False
+use_virustotal = False
 vt_results = {}
-vt_dump = list()
-debug_messages = list()
+vt_dump = []
+debug_messages = []
 exe_cmdline = ''
 time_exec = 0
 time_process = 0
@@ -239,7 +238,6 @@ def read_config(config_filename):
                 config[option] = file_config.getboolean('Noriben', option)
             if config[option] == -1:
                 print('[*] Invalid configuration option detected: {}'.format(option))
-                
 
         global_approvelist = file_config.get('Filters', 'global_approvelist').replace('\n','').split(',')
         reg_approvelist = file_config.get('Filters', 'reg_approvelist').replace('\n','').split(',')
@@ -247,29 +245,26 @@ def read_config(config_filename):
         cmd_approvelist = file_config.get('Filters', 'cmd_approvelist').replace('\n','').split(',')
         net_approvelist = file_config.get('Filters', 'net_approvelist').replace('\n','').split(',')
         hash_approvelist = file_config.get('Filters', 'hash_approvelist').replace('\n','').split(',')
-        
+
         # Throwing a large one in here to ignore anything that the configured procmon executable creates
         global_approvelist.append(config['procmon'])
         global_approvelist.append(config['procmon'].split('.')[0] + '64.exe')  # Procmon drops embed as <name>+64
-        
+
     except configparser.MissingSectionHeaderError:
         print('[!] Error found in reading config file. Invalid section header detected.')
         sys.exit(12)
-    except Exception as e: 
+    except Exception as e:
         print(e)
         time.sleep(5)
         sys.exit(12)
 
-    if config['virustotal_api_key'] and has_internet:
-        use_virustotal = True
-    else:
-        use_virustotal = False
+    use_virustotal = bool(config['virustotal_api_key'] and has_internet)
 
 
 def human():
     import pyautogui
 
-    screenwidth, screenheight = pyautogui.size()  
+    screenwidth, screenheight = pyautogui.size()
     x_pos = screenwidth/2
     y_pos = screenheight/2
     print('[*] Performing human mouse emulation. Starting coordinates: {}, {}'.format(x_pos, y_pos))
@@ -282,7 +277,6 @@ def human():
 
         pyautogui.moveTo(x_pos-500, y_pos, duration = 0.1)
         pyautogui.moveTo(x_pos-250, y_pos+500, duration = 0.1)
-    
 
 
 def terminate_self(error):
@@ -319,17 +313,17 @@ def log_debug(msg):
         debug = config['debug']
     except KeyError:
         debug = False
-    
+
     if msg and debug:
         if debug_file:  # File already set, check for message buffer
             if debug_messages:  # If buffer, write and erase buffer
-                debug_file_handle = open(debug_file, 'a')
+                debug_file_handle = open(debug_file, 'a', encoding='utf-8')
                 for item in debug_messages:
                     debug_file_handle.write(item)
                 debug_file_handle.close()
-                debug_messages = list()
+                debug_messages = []
             else:
-                open(debug_file, 'a').write('{}\n'.format(msg))
+                open(debug_file, 'a', encoding='utf-8').write('{}\n'.format(msg))
         else:  # Output file hasn't been set yet, append to buffer
             debug_messages.append(msg + '\r\n')
 
@@ -356,7 +350,7 @@ def generalize_vars_init():
 
     for env in envvar_list:
         try:
-            # ProgramFiles is handled specially in 64-bit environments. 
+            # ProgramFiles is handled specially in 64-bit environments
             # It's real value is in ProgramW6432
             if env == '%ProgramFiles%':
                 resolved = os.path.expandvars('%ProgramW6432%').replace("\\", "\\\\")
@@ -478,7 +472,7 @@ def yara_rule_check(yara_files):
     Arguments:
         yara_files: path to folder containing rules
     """
-    result = dict()
+    result = {}
     for yara_id in yara_files:
         fname = yara_files[yara_id]
         try:
@@ -560,21 +554,21 @@ def open_file_with_assoc(fname):
     Arguments:
         fname: full path to a file to open
     Results:
-        None
+        integer value for command return code
     """
     if config['headless']:
         # Headless is for automated runs, don't open results on VM
-        return
+        return None
 
     if os.name == 'mac':
-        ret = subprocess.call(('open', fname))
-    elif os.name == 'nt':
+        return subprocess.call(('open', fname))
+    if os.name == 'nt':
         # os.startfile(fname)
-        ret = subprocess.call(('start', fname), shell=True)
-    elif os.name == 'posix':
-        ret = subprocess.call(('open', fname))
+        return subprocess.call(('start', fname), shell=True)
+    if os.name == 'posix':
+        return subprocess.call(('open', fname))
 
-    return ret
+    return None
 
 
 def file_exists(fname):
@@ -609,6 +603,8 @@ def check_procmon():
     if file_exists(os.path.join(script_cwd, procmon_exe)):
         return os.path.join(script_cwd, procmon_exe)
 
+    return ''
+
 
 def hash_file(fname):
     """
@@ -622,10 +618,11 @@ def hash_file(fname):
     log_debug('[*] Performing {} hash on file: {}'.format(config['hash_type'], fname))
     if config['hash_type'] == 'MD5':
         return hashlib.md5(codecs.open(fname, 'rb').read()).hexdigest()
-    elif config['hash_type'] == 'SHA1':
+    if config['hash_type'] == 'SHA1':
         return hashlib.sha1(codecs.open(fname, 'rb').read()).hexdigest()
-    elif config['hash_type'] == 'SHA256':
+    if config['hash_type'] == 'SHA256':
         return hashlib.sha256(codecs.open(fname, 'rb').read()).hexdigest()
+    return ''
 
 
 def get_session_name():
@@ -761,12 +758,12 @@ def parse_csv(csv_file, report, timeline):
     """
     log_debug('[*] Processing CSV: {}'.format(csv_file))
 
-    process_output = list()
-    file_output = list()
-    reg_output = list()
-    net_output = list()
-    error_output = list()
-    remote_servers = list()
+    process_output = []
+    file_output = []
+    reg_output = []
+    net_output = []
+    error_output = []
+    remote_servers = []
     if config['yara_folder'] and has_yara:
         yara_rules = yara_import_rules(config['yara_folder'])
     else:
@@ -1042,12 +1039,12 @@ def parse_csv(csv_file, report, timeline):
     if config['debug'] and vt_dump:
         vt_file = os.path.join(config['output_folder'], os.path.splitext(csv_file)[0] + '.vt.json')
         log_debug('[*] Writing {} VirusTotal results to {}'.format(len(vt_dump), vt_file))
-        vt_out = open(vt_file, 'w')
+        vt_out = open(vt_file, 'w', encoding='utf-8')
         json.dump(vt_dump, vt_out)
         vt_out.close()
 
     if config['debug'] and debug_messages:
-        debug_out = open(debug_file, 'a')
+        debug_out = open(debug_file, 'a', encoding='utf-8')
         for message in debug_messages:
             debug_out.write(message)
         debug_out.close()
@@ -1064,6 +1061,7 @@ def main():
     global exe_cmdline
     global script_cwd
     global debug_file
+    global use_virustotal
 
     print('\n--===[ Noriben v{}'.format(__VERSION__))
 
@@ -1089,8 +1087,8 @@ def main():
     parser.add_argument('--troubleshoot', action='store_true', help='Pause before exiting for troubleshooting',
                         required=False)
     args = parser.parse_args()
-    report = list()
-    timeline = list()
+    report = []
+    timeline = []
     script_cwd = os.path.dirname(os.path.abspath(__file__))
 
     # Load config file first, then use additional args to override those values if necessary
@@ -1107,9 +1105,9 @@ def main():
 
 
     if os.path.exists('virustotal.api'):  # Or put it in here
-        config['virustotal_api_key'] = open('virustotal.api', 'r').readline().strip()
-    virustotal_upload = True if config['virustotal_api_key'] else False  # TODO
-    use_virustotal = True if config['virustotal_api_key'] and has_internet else False
+        config['virustotal_api_key'] = open('virustotal.api', 'r', encoding='utf-8').readline().strip()
+    # virustotal_upload = bool(config['virustotal_api_key'])  # TODO
+    use_virustotal = bool(config['virustotal_api_key'])
 
     if args.troubleshoot:
         config['troubleshoot'] = True
@@ -1216,7 +1214,7 @@ def main():
                 writer = csv.writer(f)
                 writer.writerows(timeline)
 
-            ret = open_file_with_assoc(txt_file)
+            open_file_with_assoc(txt_file)
             terminate_self(0)
         else:
             print('[!] PML file does not exist: {}\n'.format(args.pml))
@@ -1242,7 +1240,7 @@ def main():
             print('[*] Saving timeline to: {}'.format(timeline_file))
             codecs.open(timeline_file, 'w', 'utf-8-sig').write('\r\n'.join(timeline))
 
-            ret = open_file_with_assoc(txt_file)
+            open_file_with_assoc(txt_file)
             terminate_self(0)
         else:
             parser.print_usage()
@@ -1281,7 +1279,7 @@ def main():
         except WindowsError:  # Occurs if VMWare bug removes Owner from file
             print('[*] Execution failed. File is potentially not an executable. Trying to open with associated application.')
             try:
-                ret = open_file_with_assoc(exe_cmdline)
+                open_file_with_assoc(exe_cmdline)
             except WindowsError:
                 print('\n[*] Unexpected termination of Procmon commencing... please wait')
                 print('[!] Error executing file. Windows is refusing execution based upon permissions.')
