@@ -993,7 +993,11 @@ def terminate_procmon(procmonexe):
     log_debug('[*] Running cmdline: {}'.format(cmdline))
     process = subprocess.Popen(cmdline, stdout=subprocess.PIPE, 
                                stderr=subprocess.PIPE)
-    stdout, stderr = process.communicate()
+    try:
+        process.wait(timeout=600)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        stdout, stderr = process.communicate()
 
 
 def parse_csv(csv_file, report, timeline):
