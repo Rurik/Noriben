@@ -11,6 +11,8 @@
 # Version 1.8.8 - 20 Jan 23
 #       Replaced subprocess .wait() to .communicate() due to known process exec issue 
 #       which causes deadlocks in a small amount of cases
+#       Added hardcoded timeout period for cases where it hangs
+#       Thanks to Roman Hussy of abuse.ch for identifying and suggesting fix
 # Version 1.8.7 - 30 Aug 22
 #       Replaced csv.reader with csv.DictReader to have better forward and backward
 #       compatibility. Small changes in style, PEP8
