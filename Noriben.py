@@ -127,6 +127,7 @@ import codecs
 import csv
 import datetime
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -163,7 +164,6 @@ except ImportError:
 
 # Below are global internal variables. Do not edit these. ################
 __VERSION__ = '2.0.0 beta'
-path_general_list = []
 use_pmc = False
 use_virustotal = False
 vt_results = {}
@@ -268,8 +268,6 @@ def read_config(config_filename):
         time.sleep(5)
         sys.exit(12)
 
-    use_virustotal = bool(config['virustotal_api_key'] and has_internet)
-
 
 def human():
     """
@@ -286,7 +284,7 @@ def human():
     screenwidth, screenheight = pyautogui.size()
     x_pos = screenwidth/2
     y_pos = screenheight/2
-    print('[*] Performing human mouse emulation. Starting coordinates: {}, {}'.format(x_pos, y_pos))
+    log_debug('[*] Performing human mouse emulation. Starting coordinates: {}, {}'.format(x_pos, y_pos))
 
     for i in range(5):
         pyautogui.moveTo(x_pos, y_pos, duration = 0.1)
@@ -315,25 +313,20 @@ def terminate_self(error):
     sys.exit(error)
 
 
-def log_debug(msg):
+def log_debug(msg, override=False):
     """
     Logs a passed message. Results are printed and stored in
     a list for later writing to the debug log.
 
     Arguments:
-        msg: Text string of message.
+        msg: Text string of message
+        override: optional value that forces the output even if debug is not set
     Returns:
         none
     """
     global debug_messages
 
-    # Sanity check in case this is called before configuration is loaded
-    try:
-        debug = config['debug']
-    except KeyError:
-        debug = False
-
-    if msg and debug:
+    if msg and (config['debug'] or override):
         if debug_file:  # File already set, check for message buffer
             if debug_messages:  # If buffer, write and erase buffer
                 debug_file_handle = open(debug_file, 'a', encoding='utf-8')
@@ -425,12 +418,35 @@ def read_hash_file(hash_filename):
             pass
 
 
-def virustotal_query_hash(hashval):
+def virustotal_upload_file(path):
+    """
+    Submit a given file to VirusTotal to retrieve number of alerts
+
+    Arguments:
+        path: string path to the file to be queried
+    """
+    global vt_results
+    global vt_dump
+
+    vt_url = 'https://www.virustotal.com/vtapi/v2/file/scan'
+
+    data = open(path, 'rb').read()
+
+    response = requests.post(vt_url, files={'file': (path, data)}, params={'apikey': config['virustotal_api_key']})
+
+    log_debug('[*] VirusTotal upload results for hash {}'.format(path))
+    if response['response_code'] != 1:
+        log_debug('[!] Error uploading file to VirusTotal: {}'.format(response['verbose_msg']))
+    return
+
+
+def virustotal_query_hash(hashval, path):
     """
     Submit a given hash to VirusTotal to retrieve number of alerts
 
     Arguments:
-        hashval: SHA256 hash to a given file
+        hashval: string of SHA256 hash to a given file
+        path: string path to the file to be queried
     """
     global vt_results
     global vt_dump
@@ -451,8 +467,9 @@ def virustotal_query_hash(hashval):
     vt_query_url = 'https://www.virustotal.com/vtapi/v2/file/report'
     post_params = {'apikey': config['virustotal_api_key'],
                    'resource': hashval}
+
     log_debug('[*] Querying VirusTotal for hash: {}'.format(hashval))
-    data = ''
+    data = {}
     try:
         http_response = requests.post(vt_query_url, post_params)
     except requests.exceptions.RequestException:
@@ -461,32 +478,52 @@ def virustotal_query_hash(hashval):
     if http_response.status_code == 204:
         print('[!] VirusTotal Rate Limit Exceeded. Sleeping for 60 seconds.')
         time.sleep(60)
-        return virustotal_query_hash(hashval)
+        return virustotal_query_hash(hashval, path)
 
-    try:
-        data = http_response.json()
-    except ValueError:
-        result = 'Error'
+    elif http_response.status_code == 404:
+        print("Delete me: 404")
+        log_debug('[*] File not available on VirusTotal. Submitting.')
+        virustotal_upload_file(path)
+        time.sleep(10)
+        return virustotal_query_hash(hashval, path)
 
-    try:
-        if data['response_code'] == -2:
-            result = ' [VT: Queued]'
-        elif data['response_code'] == -1:
-            result = ' [VT: Error 001]'
-        elif data['response_code'] == 0:
-            result = ' [VT: Not Scanned]'
-        elif data['response_code'] == 1:
-            if data['total']:
-                vt_dump.append(data)
-                result = ' [VT: {}/{}]'.format(data['positives'], data['total'])
-            else:
-                result = ' [VT: Error 002]'
-    except TypeError:
-        result = ' [VT: Error 003]'
+    elif http_response.status_code == 200:
+        try:
+            data = http_response.json()
+        except ValueError:
+            result = 'Error'
 
-    vt_results[hashval] = result
-    log_debug('[*] VirusTotal result for hash {}: {}'.format(hashval, result))
-    return result
+        print('='*20)
+        print(data)
+        
+        try:
+            if data['response_code'] == -2:
+                result = ' [VT: Queued]'
+            elif data['response_code'] == -1:
+                result = ' [VT API ERROR (-1)]'
+            elif data['response_code'] == 0:
+                #result = ' [VT: Not Scanned]'
+                log_debug('[*] File not available on VirusTotal. Submitting.')
+                print("Delete me: response=0")
+                virustotal_upload_file(path)
+                time.sleep(10)
+                return virustotal_query_hash(hashval, path)
+            elif data['response_code'] in [1, 2]:
+                if data['total']:
+                    vt_dump.append(data)
+                    result = ' [VT: {}/{}]'.format(data['positives'], data['total'])
+                else:
+                    result = ' [VT: Unknown Error {}]'.format(data['response_code'])
+        except TypeError:
+            result = ' [VT: Unknown Error {}]'.format(data['response_code'])
+
+        vt_results[hashval] = result
+        log_debug('[*] VirusTotal result for hash {}: {}'.format(hashval, result))
+        return result
+    else:
+        # Unknown return status code
+        # TODO
+        return False
 
 
 def yara_rule_check(yara_files):
@@ -691,7 +728,8 @@ def approvelist_scan(approvelist, data):
         for bad in approvelist + global_approvelist:
             bad = os.path.expandvars(bad).replace('\\', '\\\\')
             try:
-                if re.search(bad, event, flags=re.IGNORECASE):
+                search_result = re.search(bad, event, flags=re.IGNORECASE)
+                if search_result:
                     return True
             except re.error:
                 log_debug('[!] Error found while processing filters.\r\nFilter:\t{}\r\nEvent:\t{}'.format(bad, event))
@@ -769,7 +807,11 @@ def terminate_procmon(procmonexe):
     log_debug('[*] Running cmdline: {}'.format(cmdline))
     process = subprocess.Popen(cmdline, stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE)
-    stdout, stderr = process.communicate()
+    try:
+        process.wait(timeout=600)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        stdout, stderr = process.communicate()
 
 
 def parse_csv(csv_file, report, timeline):
@@ -845,7 +887,7 @@ def parse_csv(csv_file, report, timeline):
 
                             av_hits = ''
                             if use_virustotal and has_internet:
-                                av_hits = virustotal_query_hash(hashval)
+                                av_hits = virustotal_query_hash(hashval, path)
 
                             if config['generalize_paths']:
                                 path = generalize_var(path)
@@ -1129,10 +1171,11 @@ def main():
         config['debug'] = True
 
 
-    if os.path.exists('virustotal.api'):  # Or put it in here
+    if not config['virustotal_api_key'] and os.path.exists('virustotal.api'):
         config['virustotal_api_key'] = open('virustotal.api', 'r', encoding='utf-8').readline().strip()
-    # virustotal_upload = bool(config['virustotal_api_key'])  # TODO
-    use_virustotal = bool(config['virustotal_api_key'])
+        use_virustotal = bool(config['virustotal_api_key'] and has_internet)
+        if config['virustotal_upload'] and not use_virustotal:
+            config['virustotal_upload'] = False
 
     if args.troubleshoot:
         config['troubleshoot'] = True
@@ -1207,9 +1250,16 @@ def main():
             config['yara_folder'] = ''
     log_debug('[*] YARA directory: {}'.format(config['yara_folder']))
 
+
     # Print feature list
     log_debug(
         '[+] Features: (Debug: {}\tInternet: {}\tVirusTotal: {})'.format(config['debug'], has_internet, use_virustotal))
+
+
+    log_debug('[*] Configuration data read:', override=True)
+    for section in config.keys():
+        log_debug('[=] {} = {}'.format(section, config[section]), override=True)
+
 
     # Check if user-specified to rescan a PML
     if args.pml:
@@ -1301,8 +1351,9 @@ def main():
         print('[*] Launching command line: {}'.format(exe_cmdline))
         try:
             subprocess.Popen(exe_cmdline)
-        except OSError:  # Occurs if VMWare bug removes Owner from file
+        except OSError as e:  # Occurs if VMWare bug removes Owner from file
             print('[*] Execution failed. File is potentially not an executable. Trying to open with associated application.')
+            print(e)
             try:
                 open_file_with_assoc(exe_cmdline)
             except OSError:
@@ -1314,8 +1365,11 @@ def main():
     else:
         print('[*] Procmon is running. Run your executable now.')
 
-    if config['human']:
-        human()
+    try:
+        if config['human']:
+            human()
+    except KeyError:
+        pass
 
     if not config['timeout_seconds'] == '0':
         print('[*] Running for {} seconds. Press Ctrl-C to stop logging early.'.format(config['timeout_seconds']))
@@ -1324,7 +1378,7 @@ def main():
             timeout_seconds = int(config['timeout_seconds'])
             for i in range(timeout_seconds):
                 progress = (100 / timeout_seconds) * i
-                sys.stdout.write('\r%d{} complete'.format(progress))
+                sys.stdout.write('\r{} complete'.format(progress))
                 sys.stdout.flush()
                 time.sleep(1)
         except KeyboardInterrupt:

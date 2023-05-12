@@ -192,6 +192,8 @@ def run_file(args, magic_result, malware_file):
     # As the host OS is unknown, we'll build them manually instead of trying all the various methods
     guest_noriben_path_script = '{}\\{}'.format(guest_noriben_path, 'Noriben.py')
     guest_noriben_path_config = '{}\\{}'.format(guest_noriben_path, 'Noriben.config')
+    guest_noriben_path_vt = '{}\\{}'.format(guest_noriben_path, 'virustotal.api')
+
 
     print('[*] Processing sample: {}'.format(malware_file))
 
@@ -269,6 +271,7 @@ def run_file(args, magic_result, malware_file):
 
         host_noriben_path_script = os.path.join(host_noriben_path, 'Noriben.py')
         host_noriben_path_config = os.path.join(host_noriben_path, 'Noriben.config')
+        host_noriben_path_vt     = os.path.join(host_noriben_path, 'virustotal.api')
 
         if file_exists(host_noriben_path_script):
             if vm_hypervisor == 'vmw':
@@ -306,6 +309,25 @@ def run_file(args, magic_result, malware_file):
         else:
             # Not having Noriben.config will not error out. This can be expected in some situations.
             print('[!] Noriben.py on host not found: {}'.format(host_noriben_path.format(config['vm_user'])))
+
+        if file_exists(host_noriben_path_vt):
+            if vm_hypervisor == 'vmw':
+                cmd = '"{}" -gu {} -gp {} copyFileFromHostToGuest {} "{}" "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'], config['vmx'],
+                                                                                       host_noriben_path_vt.format(config['vm_user']),
+                                                                                       guest_noriben_path_vt)
+            elif vm_hypervisor == 'vbox':
+                cmd = '"{}" guestcontrol {} copyto --username {} --password {} "{}" "{}"'.format(config['vboxmanage'], config['vbox_uuid'],
+                                                                                                 config['vm_user'], config['vm_pass'],
+                                                                                                 host_noriben_path_vt.format(config['vm_user']),
+                                                                                                 guest_noriben_path_vt)
+            return_code = execute(cmd)
+            if return_code:
+                print('[!] Error trying to copy updated virustotal.api to guest. Continuing. Error {}: {}'.format(
+                    hex(return_code), get_error(return_code)))
+        else:
+            # Not having virustotal.api will not error out. This is expected in most situations.
+            # We won't even throw a message.
+            pass
 
     # --dontrunanything is for cases where the analyst would like to spin up the VM, get files in place, and then stop.
     # They can then take control and do their own manual analysis.
@@ -354,9 +376,6 @@ def run_file(args, magic_result, malware_file):
 
     if debug:
         cmd = '{} -d'.format(cmd)
-
-    if config['human']:
-        cmd = '{} --human'.format(cmd)
 
     # Finally, execute the command line
     return_code = execute(cmd)
