@@ -8,6 +8,8 @@
 # clean text report and timeline
 #
 # Changelog:
+# Version 1.8.9 - 12 May 23
+#       Fix bug where CSV update was not fully implemented for hash files.
 # Version 1.8.8 - 20 Jan 23
 #       Replaced subprocess .wait() to .communicate() due to known process exec issue 
 #       which causes deadlocks in a small amount of cases
@@ -643,7 +645,7 @@ def read_hash_file(hash_filename):
     """
     global hash_approvelist
     hash_file_handle = open(hash_filename, newline='', encoding='utf-8')
-    reader = csv.DictReader(hash_file_handle)
+    reader = csv.reader(hash_file_handle)
     for hash_line in reader:
         hashval = hash_line[0]
         try:
