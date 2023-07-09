@@ -18,6 +18,8 @@
 # Version 1.8.8 - 20 Jan 23
 #       Replaced subprocess .wait() to .communicate() due to known process exec issue
 #       which causes deadlocks in a small amount of cases
+#       Added hardcoded timeout period for cases where it hangs
+#       Thanks to Roman Hussy of abuse.ch for identifying and suggesting fix
 # Version 1.8.7 - 30 Aug 22
 #       Replaced csv.reader with csv.DictReader to have better forward and backward
 #       compatibility. Small changes in style, PEP8
@@ -117,10 +119,6 @@
 # Version 1.0 - 10 Apr 13 - @bbaskin - brian [@] thebaskins.com
 #       Gracious edits, revisions, and corrections by Daniel Raygoza
 #
-#
-# TODO?
-# * Upload files directly to VirusTotal (2.X feature?)
-# * extract data directly from registry? (may require python-registry)
 
 import argparse
 import codecs
@@ -150,7 +148,6 @@ try:
 
     has_internet = True
 except ImportError:
-    requests = None
     json = None
     has_internet = False
     print('[+] Python module "requests" not found. Internet functionality is disabled.')
@@ -174,7 +171,7 @@ time_exec = 0
 time_process = 0
 script_cwd = ''
 debug_file = ''
-config = ''
+config = {}
 global_approvelist = ''
 reg_approvelist = ''
 file_approvelist = ''
@@ -230,11 +227,11 @@ def read_config(config_filename):
     Returns:
         none
     """
-    global config
     global use_virustotal
     global global_approvelist, reg_approvelist, file_approvelist, cmd_approvelist
     global net_approvelist, hash_approvelist
 
+    config = {}
     try:
         file_config = configparser.ConfigParser(inline_comment_prefixes=('#', ';'))
         with codecs.open(config_filename, 'r', encoding='utf-8') as f:
@@ -267,6 +264,7 @@ def read_config(config_filename):
         print(e)
         time.sleep(5)
         sys.exit(12)
+    return config
 
 
 def human():
@@ -279,7 +277,10 @@ def human():
     Returns:
         none
     """
-    import pyautogui
+    try:
+        import pyautogui
+    except ImportError:
+        return None
 
     screenwidth, screenheight = pyautogui.size()
     x_pos = screenwidth/2
@@ -408,7 +409,7 @@ def read_hash_file(hash_filename):
     """
     global hash_approvelist
     hash_file_handle = open(hash_filename, newline='', encoding='utf-8')
-    reader = csv.DictReader(hash_file_handle)
+    reader = csv.reader(hash_file_handle)
     for hash_line in reader:
         hashval = hash_line[0]
         try:
@@ -428,6 +429,9 @@ def virustotal_upload_file(path):
     global vt_results
     global vt_dump
 
+    if not has_internet:
+        return False
+
     vt_url = 'https://www.virustotal.com/vtapi/v2/file/scan'
 
     data = open(path, 'rb').read()
@@ -435,9 +439,10 @@ def virustotal_upload_file(path):
     response = requests.post(vt_url, files={'file': (path, data)}, params={'apikey': config['virustotal_api_key']})
 
     log_debug('[*] VirusTotal upload results for hash {}'.format(path))
-    if response['response_code'] != 1:
+    if response.json()['response_code'] != 1:
         log_debug('[!] Error uploading file to VirusTotal: {}'.format(response['verbose_msg']))
-    return
+        return False
+    return True
 
 
 def virustotal_query_hash(hashval, path):
@@ -450,7 +455,24 @@ def virustotal_query_hash(hashval, path):
     """
     global vt_results
     global vt_dump
+
+    VT_NOT_EXIST = 0
+    VT_SUCCESS = 1
+    VT_IN_POST_QUEUE = -1
+    VT_IN_QUEUE = -2
+    VT_DELETED = -3
+    VT_UNSUPPORTED_FILE = -4
+    VT_UNAVAILABLE = -5
+    VT_REP_MALICIOUS = -6
+    VT_REP_HARMLESS = -7
+    VT_REP_SUSPICIOUS = -8
+    VT_REP_UNDECTEED = -9
+    VT_ERROR = -10
+
     result = ''
+
+    if not has_internet:
+        return ''
     try:
         if not (int(hashval, 16) and (len(hashval) == 32 or len(hashval) == 40 or len(hashval) == 64)):
             return ''
@@ -469,7 +491,9 @@ def virustotal_query_hash(hashval, path):
                    'resource': hashval}
 
     log_debug('[*] Querying VirusTotal for hash: {}'.format(hashval))
+
     data = {}
+
     try:
         http_response = requests.post(vt_query_url, post_params)
     except requests.exceptions.RequestException:
@@ -481,10 +505,11 @@ def virustotal_query_hash(hashval, path):
         return virustotal_query_hash(hashval, path)
 
     elif http_response.status_code == 404:
-        print("Delete me: 404")
         log_debug('[*] File not available on VirusTotal. Submitting.')
-        virustotal_upload_file(path)
-        time.sleep(10)
+        upload_complete = virustotal_upload_file(path)
+        if not upload_complete:
+            return ''
+
         return virustotal_query_hash(hashval, path)
 
     elif http_response.status_code == 200:
@@ -493,29 +518,23 @@ def virustotal_query_hash(hashval, path):
         except ValueError:
             result = 'Error'
 
-        print('='*20)
-        print(data)
-        
-        try:
-            if data['response_code'] == -2:
-                result = ' [VT: Queued]'
-            elif data['response_code'] == -1:
-                result = ' [VT API ERROR (-1)]'
-            elif data['response_code'] == 0:
-                #result = ' [VT: Not Scanned]'
-                log_debug('[*] File not available on VirusTotal. Submitting.')
-                print("Delete me: response=0")
-                virustotal_upload_file(path)
-                time.sleep(10)
-                return virustotal_query_hash(hashval, path)
-            elif data['response_code'] in [1, 2]:
-                if data['total']:
-                    vt_dump.append(data)
-                    result = ' [VT: {}/{}]'.format(data['positives'], data['total'])
-                else:
-                    result = ' [VT: Unknown Error {}]'.format(data['response_code'])
-        except TypeError:
-            result = ' [VT: Unknown Error {}]'.format(data['response_code'])
+        if data['response_code'] == VT_IN_QUEUE:
+            print('[*] {} queued by VT for analysis. Retrying in 30 seconds.'.format(hashval))
+            time.sleep(30)
+            return virustotal_query_hash(hashval, path)
+
+        elif data['response_code'] == VT_NOT_EXIST:
+            log_debug('[*] File not available on VirusTotal. Submitting.')
+            upload_complete = virustotal_upload_file(path)
+            time.sleep(10)
+            return virustotal_query_hash(hashval, path)
+
+        elif data['response_code'] == VT_SUCCESS:
+            if data['total']:
+                vt_dump.append(data)
+                result = ' [VT: {}/{}]'.format(data['positives'], data['total'])
+            else:
+                result = ' [VT: Unknown Error {}]'.format(data['response_code'])
 
         vt_results[hashval] = result
         log_debug('[*] VirusTotal result for hash {}: {}'.format(hashval, result))
@@ -1124,6 +1143,7 @@ def main():
     """
     Main routine, parses arguments and calls other routines
     """
+    global config
     global use_pmc
     global exe_cmdline
     global script_cwd
@@ -1160,10 +1180,10 @@ def main():
 
     # Load config file first, then use additional args to override those values if necessary
     default_config_location = os.path.join(script_cwd, 'Noriben.config')
-    read_config(default_config_location)
+    config = read_config(default_config_location)
     if args.config:
         if file_exists(args.config):
-            read_config(args.config)
+            config = read_config(args.config)
         else:
             print('[!] Config file {} not found. Continuing with default values.'.format(args.config))
 
@@ -1419,5 +1439,36 @@ def main():
     # End of main()
 
 
+
+
+
+
+
+
+
+### HEY! XXX! This is test code to be removed before final commit.
+
+def test_virustotal_query_hash(path):
+    hashval = hash_file(path)
+    if hashval in hash_approvelist:
+        print('[_] Skipping hash: {}'.format(hashval))
+    av_hits = ''
+    use_virustotal = has_internet = True
+    config['virustotal_api_key'] = open('virustotal.api', 'r', encoding='utf-8').readline().strip()
+
+    if use_virustotal and has_internet:
+        print('Unit test: calling virustotal_query_hash()')
+        av_hits = virustotal_query_hash(hashval, path)
+        print('Unit test result: ', av_hits)
+    print('Unit test: done')
+
 if __name__ == '__main__':
+    """
+    print('Unit test: virustotal_query_hash(hashval, path)')
+    print('Unit test: To query an unknown hash, upload file, and then retrieve results')
+    config = read_config('./Noriben.config')
+    open('test.dat', 'a').write('ms13ty89')
+    test_virustotal_query_hash('test.dat')
+    quit()
+    """
     main()
