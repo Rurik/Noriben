@@ -150,8 +150,6 @@ try:
 except ImportError:
     json = None
     has_internet = False
-    print('[+] Python module "requests" not found. Internet functionality is disabled.')
-    print('[+] This is acceptable if you do not wish to upload data to VirusTotal.')
 
 try:
     import configparser
@@ -306,8 +304,8 @@ def terminate_self(error):
     Returns:
         none
     """
-    if not error == 0:
-        print('[*] Exiting with error code: {}: {}'.format(error, get_error(error)))
+    if error != 0:
+        print(f'[*] Exiting with error code: {error}: {get_error(error)}')
     if config['troubleshoot']:
         errormsg = '[*] Configured to pause for troubleshooting. Press enter to close Noriben.'
         input(errormsg)
@@ -328,16 +326,15 @@ def log_debug(msg, override=False):
     global debug_messages
 
     if msg and (config['debug'] or override):
-        if debug_file:  # File already set, check for message buffer
+        if debug_file:
             if debug_messages:  # If buffer, write and erase buffer
-                debug_file_handle = open(debug_file, 'a', encoding='utf-8')
-                for item in debug_messages:
-                    debug_file_handle.write(item)
-                debug_file_handle.close()
+                with open(debug_file, 'a', encoding='utf-8') as debug_file_handle:
+                    for item in debug_messages:
+                        debug_file_handle.write(item)
                 debug_messages = []
             else:
-                open(debug_file, 'a', encoding='utf-8').write('{}\n'.format(msg))
-        else:  # Output file hasn't been set yet, append to buffer
+                open(debug_file, 'a', encoding='utf-8').write(f'{msg}\n')
+        else:
             debug_messages.append(msg + '\r\n')
 
 
@@ -637,9 +634,7 @@ def open_file_with_assoc(fname):
     Returns:
         integer value for command return code
     """
-    if config['headless']:
-        # Headless is for automated runs, don't open results on VM
-        return None
+    log_debug('[*] Opening with OS associated application: {}'.format(fname))
 
     if os.name == 'mac':
         return subprocess.call(('open', fname))
@@ -743,7 +738,7 @@ def approvelist_scan(approvelist, data):
     Returns:
         boolean value of if item exists in approvelist
     """
-    for event in data:
+    for event in data.values():
         for bad in approvelist + global_approvelist:
             bad = os.path.expandvars(bad).replace('\\', '\\\\')
             try:
@@ -869,8 +864,8 @@ def parse_csv(csv_file, report, timeline):
 
         try:
             if field['Operation'] == 'Process Create' and field['Result'] == 'SUCCESS':
-                cmdline = field['Detail'].split('Command line: ')[1]
                 if not approvelist_scan(cmd_approvelist, field):
+                    cmdline = field['Detail'].split('Command line: ')[1]
                     log_debug('[*] CreateProcess: {}'.format(cmdline))
 
                     if config['generalize_paths']:
@@ -994,7 +989,7 @@ def parse_csv(csv_file, report, timeline):
                 # SUCCESS is commented out to allow all attempted deletions, whether or not the value exists
                 if not approvelist_scan(reg_approvelist, field):
                     outputtext = '[RegDeleteValue] {}:{} > {}'.format(field['Process Name'], field['PID'], field['Path'])
-                    tl_text = '{},Registry,RegDeleteVal ue,{},{},{}'.format(date_stamp, field['Process Name'],
+                    tl_text = '{},Registry,RegDeleteValue,{},{},{}'.format(date_stamp, field['Process Name'],
                                                                             field['PID'], field['Path'])
                     reg_output.append(outputtext)
                     timeline.append(tl_text)
@@ -1211,9 +1206,8 @@ def main():
         config['hash_type'] = args.hashtype
 
     # Load hash approvelist and append to global approve list
-    if args.hash:
-        if file_exists(args.hash):
-            read_hash_file(args.hash)
+    if args.hash and file_exists(args.hash):
+        read_hash_file(args.hash)
 
     # Check for a valid filter file
     if args.filter:
@@ -1372,8 +1366,9 @@ def main():
         try:
             subprocess.Popen(exe_cmdline)
         except OSError as e:  # Occurs if VMWare bug removes Owner from file
-            print('[*] Execution failed. File is potentially not an executable. Trying to open with associated application.')
+            print('[*] Execution failed. File is potentially not an executable.')
             print(e)
+            print('[*] Attempting to open with associated application...')
             try:
                 open_file_with_assoc(exe_cmdline)
             except OSError:
@@ -1397,8 +1392,8 @@ def main():
         try:
             timeout_seconds = int(config['timeout_seconds'])
             for i in range(timeout_seconds):
-                progress = (100 / timeout_seconds) * i
-                sys.stdout.write('\r{} complete'.format(progress))
+                progress = round((100 / timeout_seconds) * i)
+                sys.stdout.write('\r{}% complete'.format(progress))
                 sys.stdout.flush()
                 time.sleep(1)
         except KeyboardInterrupt:
