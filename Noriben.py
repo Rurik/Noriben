@@ -1434,36 +1434,5 @@ def main():
     # End of main()
 
 
-
-
-
-
-
-
-
-### HEY! XXX! This is test code to be removed before final commit.
-
-def test_virustotal_query_hash(path):
-    hashval = hash_file(path)
-    if hashval in hash_approvelist:
-        print('[_] Skipping hash: {}'.format(hashval))
-    av_hits = ''
-    use_virustotal = has_internet = True
-    config['virustotal_api_key'] = open('virustotal.api', 'r', encoding='utf-8').readline().strip()
-
-    if use_virustotal and has_internet:
-        print('Unit test: calling virustotal_query_hash()')
-        av_hits = virustotal_query_hash(hashval, path)
-        print('Unit test result: ', av_hits)
-    print('Unit test: done')
-
 if __name__ == '__main__':
-    """
-    print('Unit test: virustotal_query_hash(hashval, path)')
-    print('Unit test: To query an unknown hash, upload file, and then retrieve results')
-    config = read_config('./Noriben.config')
-    open('test.dat', 'a').write('ms13ty89')
-    test_virustotal_query_hash('test.dat')
-    quit()
-    """
     main()
