@@ -8,7 +8,7 @@
 # clean text report and timeline
 #
 # Changelog:
-# Version 2.0.0 - January-ish 2023
+# Version 2.0.0 - August 2023
 #       Major changes to NoribenSandbox host script
 #           Updated many of the functions, such as properly deleting files in guest
 #           Remove unneeded or obtuse options
@@ -158,7 +158,7 @@ except ImportError:
     configparser = None
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '2.0.0 beta'
+__VERSION__ = '2.0.0'
 use_pmc = False
 use_virustotal = False
 vt_results = {}
