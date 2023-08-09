@@ -1,7 +1,10 @@
 # Noriben Sandbox Automation Script
+# Brian Baskin
+# Part of the Noriben analysis repo
+# Source: github.com/rurik/Noriben
 #
 # Changelog:
-# V 2.0   - January 2023
+# V 2.0   - August 2023
 #       Placed all editable data into Noriben.config file.
 #       Cleaned up some logic and bugs
 #       Added basic support for VirtualBox... still TODO
@@ -541,7 +544,6 @@ def copy_file_to_zip(cmd_base, filename):
     Results:
          integer value of command line execution return code
     """
-
     global error_count
 
     cmd = '"{}" -gu {} -gp {} fileExistsInGuest {} "{}"'.format(config['vmrun'], config['vm_user'], config['vm_pass'],
@@ -570,6 +572,7 @@ def copy_file_to_zip(cmd_base, filename):
         return return_code
     return 0
 
+
 def main():
     """
     Primary code. This parses command line arguments, sets configuration options,
@@ -580,15 +583,18 @@ def main():
     Result:
         none
     """
-    global debug
-    global dontrun
     global config
     global error_count
+    global debug
+    global dontrun
+    global script_cwd
     global vm_hypervisor
 
     # Error count is a soft trigger used for mass-execution to track when there was an abnormal
     # number of issues that execution should just stop
     error_count = 0
+
+    script_cwd = os.path.dirname(os.path.abspath(__file__))
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', '--file', help='filename', required=False)
@@ -624,15 +630,21 @@ def main():
 
     # Load config file first, then use additional args to override those values if necessary
     if args.config:
-        if file_exists(args.config):
+        config_cwd = os.path.join(script_cwd, 'Noriben.config')
+
+        if file_exists(args.config):  # Check arg path for current folder
             read_config(args.config)
+
+        elif file_exists(config_cwd):
+            read_config(config_cwd)
         else:
             print('[!] Config file {} not found!'.format(args.config))
             sys.exit(14)
 
 
     if not args.file and not args.dir:
-        print('[!] A filename or directory name are required. Run with --help for more options')
+        print(parser.print_help())
+        print('[!] A filename or directory name are required!')
         sys.exit(13)
 
     if args.recursive and not args.dir:

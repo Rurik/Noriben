@@ -1,6 +1,13 @@
-# exec launches the specified command line
-# execwait launches the specific command line and pauses until execution has completed (not guaranteed depending on program)
-# All commands require an absolute path to the executable 
+# Example post-execution script for Noriben
+#
+# All commands are run in the order specified here
+# All commands require an absolute path to the executable
+#
+# Valid commands:
+# exec <cmdline> will launch the specified command line
+# execwait <cmdline> will launch the specific command line and pauses until execution has completed (not guaranteed depending on program)
+# collect <file> will attempt to include specified file in the report ZIP
+# sleep <N> will sleep N number of seconds. Useful to let background processes catch up
 #
 exec C:\windows\system32\calc.exe
 execwait C:\windows\notepad.exe c:\test.txt
