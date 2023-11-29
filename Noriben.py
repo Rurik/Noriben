@@ -8,6 +8,10 @@
 # clean text report and timeline
 #
 # Changelog:
+# Version 2.0.1 - November 2023
+#       Logging is now based upon standard logging library
+#       Now supports --cmd as a full command line to allow arguments. e.g.:
+#       --cmd "c:\tools\malware.exe -r C:\"
 # Version 2.0.0 - August 2023
 #       Major changes to NoribenSandbox host script
 #           Updated many of the functions, such as properly deleting files in guest
@@ -126,8 +130,10 @@ import csv
 import datetime
 import hashlib
 import json
+import logging
 import os
 import re
+import shlex
 import subprocess
 import string
 import sys
@@ -316,6 +322,11 @@ def log_debug(msg, override=False):
     """
     Logs a passed message. Results are printed and stored in
     a list for later writing to the debug log.
+    Debug filename may not be set until later in execution. To avoid
+    out-of-order messages, if debug_file is not set, then messages
+    will be appended to a debug_messages buffer. Once debug_file is set
+    these are written to the log, then cleared and that buffer is never
+    used again.
 
     Arguments:
         msg: Text string of message
@@ -327,15 +338,19 @@ def log_debug(msg, override=False):
 
     if msg and (config['debug'] or override):
         if debug_file:
-            if debug_messages:  # If buffer, write and erase buffer
-                with open(debug_file, 'a', encoding='utf-8') as debug_file_handle:
-                    for item in debug_messages:
-                        debug_file_handle.write(item)
+            if debug_messages:
+                # If file is now set, and there's a buffer, treat this is
+                # first time log entries are written.
+                logging.basicConfig(filename=debug_file, encoding='utf-8', level=logging.DEBUG)
+
+                for item in debug_messages:
+                    logging.debug(item)
+
                 debug_messages = []
-            else:
-                open(debug_file, 'a', encoding='utf-8').write(f'{msg}\n')
-        else:
-            debug_messages.append(msg + '\r\n')
+
+            logging.debug(msg)
+        else: # No debug file set, so add to temp buffer for now
+            debug_messages.append(msg)
 
 
 def generalize_vars_init():
@@ -656,6 +671,7 @@ def file_exists(fname):
     Returns:
         boolean value if file exists
     """
+
     log_debug('[*] Checking for existence of file: {}'.format(fname))
     return os.path.exists(fname) and os.access(fname, os.F_OK) and not os.path.isdir(fname)
 
@@ -669,12 +685,15 @@ def check_procmon():
     """
     log_debug('[*] Checking for procmon in the following location: {}'.format(config['procmon']))
     procmon_exe = config['procmon']
+
     if file_exists(procmon_exe):
         return procmon_exe
 
     for path in os.environ['PATH'].split(os.pathsep):
-        if file_exists(os.path.join(path.strip('"'), procmon_exe)):
-            return os.path.join(path, procmon_exe)
+        procmon_path = os.path.join(path.strip('"'), procmon_exe)
+
+        if file_exists(procmon_path):
+            return procmon_path
 
     if file_exists(os.path.join(script_cwd, procmon_exe)):
         return os.path.join(script_cwd, procmon_exe)
@@ -739,14 +758,14 @@ def approvelist_scan(approvelist, data):
         boolean value of if item exists in approvelist
     """
     for event in data.values():
-        for bad in approvelist + global_approvelist:
-            bad = os.path.expandvars(bad).replace('\\', '\\\\')
+        for good_item in approvelist + global_approvelist:
+            good_item = os.path.expandvars(good_item).replace('\\', '\\\\')
             try:
-                search_result = re.search(bad, event, flags=re.IGNORECASE)
+                search_result = re.search(good_item, event, flags=re.IGNORECASE)
                 if search_result:
                     return True
             except re.error:
-                log_debug('[!] Error found while processing filters.\r\nFilter:\t{}\r\nEvent:\t{}'.format(bad, event))
+                log_debug('[!] Error found while processing filters.\r\nFilter:\t{}\r\nEvent:\t{}'.format(good_item, event))
                 log_debug(traceback.format_exc())
                 return False
     return False
@@ -1352,10 +1371,12 @@ def main():
     debug_file = os.path.join(config['output_folder'], 'Noriben_{}.log'.format(session_id))
 
     timeline_file = os.path.join(config['output_folder'], 'Noriben_{}_timeline.csv'.format(session_id))
+
     print('[*] Procmon session saved to: {}'.format(pml_file))
 
-    if exe_cmdline and not file_exists(exe_cmdline):
-        print('[!] Error: Specified malware executable does not exist: {}'.format(exe_cmdline))
+    exe_cmdline_base_file = shlex.split(exe_cmdline, posix=False)[0]
+    if exe_cmdline and not file_exists(exe_cmdline_base_file):
+        print('[!] Error: Specified malware executable does not exist: {}'.format(exe_cmdline_base_file))
         terminate_self(6)
 
     print('[*] Launching Procmon ...')
