@@ -164,7 +164,7 @@ except ImportError:
     configparser = None
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '2.0.0'
+__VERSION__ = '2.0.1'
 use_pmc = False
 use_virustotal = False
 vt_results = {}
@@ -1374,10 +1374,11 @@ def main():
 
     print('[*] Procmon session saved to: {}'.format(pml_file))
 
-    exe_cmdline_base_file = shlex.split(exe_cmdline, posix=False)[0]
-    if exe_cmdline and not file_exists(exe_cmdline_base_file):
-        print('[!] Error: Specified malware executable does not exist: {}'.format(exe_cmdline_base_file))
-        terminate_self(6)
+    if exe_cmdline:
+        exe_cmdline_base_file = shlex.split(exe_cmdline, posix=False)[0]
+        if not file_exists(exe_cmdline_base_file):
+            print('[!] Error: Specified malware executable does not exist: {}'.format(exe_cmdline_base_file))
+            terminate_self(6)
 
     print('[*] Launching Procmon ...')
     launch_procmon_capture(procmonexe, pml_file, pmc_file)
