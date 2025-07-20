@@ -8,6 +8,9 @@
 # clean text report and timeline
 #
 # Changelog:
+# Version 2.0.2 - Jul 2025
+#       Allow execution on Non-Windows solely for processing premade CSV files
+#       Added disable_file_hash to avoid hashing created files
 # Version 2.0.1 - November 2023
 #       Logging is now based upon standard logging library
 #       Now supports --cmd as a full command line to allow arguments. e.g.:
@@ -164,7 +167,7 @@ except ImportError:
     configparser = None
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '2.0.1'
+__VERSION__ = '2.0.2'
 use_pmc = False
 use_virustotal = False
 vt_results = {}
@@ -403,6 +406,10 @@ def generalize_var(path_string):
     Returns:
         string value of a generalized string
     """
+    # For running script in Non-Windows, it cannot eval env vars. Skip
+    if sys.platform in ('linux' ,'darwin'):
+        return path_string
+
     if path_general_list:
         generalize_vars_init()  # For edge cases when this isn't previously called.
 
@@ -912,25 +919,32 @@ def parse_csv(csv_file, report, timeline):
                         file_output.append(outputtext)
                         timeline.append(tl_text)
                     else:
+                        av_hits = ''
                         try:
-                            hashval = hash_file(path)
-                            if hashval in hash_approvelist:
-                                log_debug('[_] Skipping hash: {}'.format(hashval))
-                                continue
+                            if config['disable_file_hash']:
+                                hashval = ''
+                            else:
+                                hashval = hash_file(path)
+                                if hashval in hash_approvelist:
+                                    log_debug('[_] Skipping hash: {}'.format(hashval))
+                                    continue
 
-                            av_hits = ''
-                            if use_virustotal and has_internet:
-                                av_hits = virustotal_query_hash(hashval, path)
+                                if use_virustotal and has_internet:
+                                    av_hits = virustotal_query_hash(hashval, path)
 
                             if config['generalize_paths']:
                                 path = generalize_var(path)
-                            outputtext = '[CreateFile] {}:{} > {}\t[{}: {}]{}{}'.format(field['Process Name'], field['PID'], path,
-                                                                                        config['hash_type'], hashval,
-                                                                                        yara_hits, av_hits)
-                            tl_text = '{},File,CreateFile,{},{},{},{},{},{},{}'.format(date_stamp,
+
+                            if hashval:
+                                hashval_output = '[{}: {}]'.format(config['hash_type'], hashval)
+                            else:
+                                hashval_output = ''
+
+                            outputtext = '[CreateFile] {}:{} > {}\t{}{}{}'.format(field['Process Name'], field['PID'], path,
+                                                                                        hashval_output, yara_hits, av_hits)
+                            tl_text = '{},File,CreateFile,{},{},{},{},{},{}'.format(date_stamp,
                                                                                        field['Process Name'], field['PID'], path,
-                                                                                       config['hash_type'], hashval,
-                                                                                       yara_hits, av_hits)
+                                                                                       hashval_output, yara_hits, av_hits)
                             file_output.append(outputtext)
                             timeline.append(tl_text)
                         except (IndexError, IOError):
@@ -1177,6 +1191,7 @@ def main():
     parser.add_argument('--config', help='Specify configuration file', required=False)
     parser.add_argument('--hash', help='Specify hash approvelist file', required=False)
     parser.add_argument('--hashtype', help='Specify hash type', required=False, choices=valid_hash_types)
+    parser.add_argument('--disable_file_hash', action='store_true', help='Disable hashing new files', required=False)
     parser.add_argument('--headless', action='store_true', help='Do not open results on VM after processing',
                         required=False)
     parser.add_argument('--human', action='store_true', help='Perform human activity', required=False)
@@ -1218,6 +1233,9 @@ def main():
     if config['generalize_paths']:
         generalize_vars_init()
 
+    if args.disable_file_hash:
+        config['disable_file_hash'] = True
+
     if args.headless:
         config['headless'] = True
 
@@ -1253,12 +1271,6 @@ def main():
             log_debug('[*] Using filter file: {}'.format(pmc_file))
     else:
         use_pmc = False
-
-    # Find a valid procmon executable.
-    procmonexe = check_procmon()
-    if not procmonexe:
-        print('[!] Unable to find Procmon ({}) in path.'.format(config['procmon']))
-        terminate_self(2)
 
     # Check to see if specified output folder exists. If not, make it.
     # This only works one path deep. In future, may make it recursive.
@@ -1361,6 +1373,12 @@ def main():
         exe_cmdline = args.cmd
     else:
         exe_cmdline = ''
+
+    # Find a valid procmon executable.
+    procmonexe = check_procmon()
+    if not procmonexe:
+        print('[!] Unable to find Procmon ({}) in path.'.format(config['procmon']))
+        terminate_self(2)
 
     # Start main data collection and processing
     print('[*] Using procmon EXE: {}'.format(procmonexe))
