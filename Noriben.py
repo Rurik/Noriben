@@ -8,7 +8,7 @@
 # clean text report and timeline
 #
 # Changelog:
-# Version 2.0.2 - Jul 2025
+# Version 2.0.2 - March 2026
 #       Allow execution on Non-Windows solely for processing premade CSV files
 #       Added disable_file_hash to avoid hashing created files
 # Version 2.0.1 - November 2023
