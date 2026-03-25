@@ -8,9 +8,12 @@
 # clean text report and timeline
 #
 # Changelog:
-# Version 2.0.2 - March 2026
+# Version 2.0.3 - 23 Mar 2026
+#       Change file checking to only approve regular files
+#       Changed file hashing to now read in chunks instead of all at once
+# Version 2.0.2 - 23 Mar 2026
 #       Allow execution on Non-Windows solely for processing premade CSV files
-#       Added disable_file_hash to avoid hashing created files
+#       Added disable-file-hash to avoid hashing created files
 # Version 2.0.1 - November 2023
 #       Logging is now based upon standard logging library
 #       Now supports --cmd as a full command line to allow arguments. e.g.:
@@ -167,7 +170,7 @@ except ImportError:
     configparser = None
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '2.0.2'
+__VERSION__ = '2.0.3'
 use_pmc = False
 use_virustotal = False
 vt_results = {}
@@ -671,7 +674,7 @@ def open_file_with_assoc(fname):
 
 def file_exists(fname):
     """
-    Determine if a file exists
+    Determine if a file exists and is a regular file
 
     Arguments:
         fname: path to a file
@@ -680,7 +683,11 @@ def file_exists(fname):
     """
 
     log_debug('[*] Checking for existence of file: {}'.format(fname))
-    return os.path.exists(fname) and os.access(fname, os.F_OK) and not os.path.isdir(fname)
+    try:
+        st = os.stat(fname)
+        return stat.S_ISREG(st.st_mode)  # Only true for regular files
+    except (FileNotFoundError, PermissionError):
+        return False
 
 
 def check_procmon():
@@ -718,13 +725,30 @@ def hash_file(fname):
         hex hash value of file's contents as a string
     """
     log_debug('[*] Performing {} hash on file: {}'.format(config['hash_type'], fname))
+    # Skip non-regular files
+    if not file_exists(fname):
+        log_debug('[!] Skipping non-regular file: {}'.format(fname))
+        return None
+
+    # choose hash type
     if config['hash_type'] == 'MD5':
-        return hashlib.md5(codecs.open(fname, 'rb').read()).hexdigest()
-    if config['hash_type'] == 'SHA1':
-        return hashlib.sha1(codecs.open(fname, 'rb').read()).hexdigest()
-    if config['hash_type'] == 'SHA256':
-        return hashlib.sha256(codecs.open(fname, 'rb').read()).hexdigest()
-    return ''
+        hasher = hashlib.md5()
+    elif config['hash_type'] == 'SHA1':
+        hasher = hashlib.sha1()
+    elif config['hash_type'] == 'SHA256':
+        hasher = hashlib.sha256()
+    else:
+        return ''
+
+    # Read file in chunks
+    try:
+        with open(fname, 'rb') as f:
+            while chunk := f.read(8192):
+                hasher.update(chunk)
+        return hasher.hexdigest()
+    except Exception as e:
+        log_debug(f"[!] Could not hash file {fname}: {e}")
+        return None
 
 
 def get_session_name():
@@ -921,7 +945,7 @@ def parse_csv(csv_file, report, timeline):
                     else:
                         av_hits = ''
                         try:
-                            if config['disable_file_hash']:
+                            if config['disable-file-hash']:
                                 hashval = ''
                             else:
                                 hashval = hash_file(path)
@@ -1191,7 +1215,7 @@ def main():
     parser.add_argument('--config', help='Specify configuration file', required=False)
     parser.add_argument('--hash', help='Specify hash approvelist file', required=False)
     parser.add_argument('--hashtype', help='Specify hash type', required=False, choices=valid_hash_types)
-    parser.add_argument('--disable_file_hash', action='store_true', help='Disable hashing new files', required=False)
+    parser.add_argument('--disable-file-hash', action='store_true', help='Disable hashing new files', required=False)
     parser.add_argument('--headless', action='store_true', help='Do not open results on VM after processing',
                         required=False)
     parser.add_argument('--human', action='store_true', help='Perform human activity', required=False)
