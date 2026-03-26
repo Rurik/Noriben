@@ -8,7 +8,10 @@
 # clean text report and timeline
 #
 # Changelog:
-# Version 2.0.3 - 23 Mar 2026
+# Version 2.0.4 - 26 Mar 2026
+#       Fixed bug of procmon variable referenced before set
+#       Fixed server hostname parsing
+# Version 2.0.3 - 25 Mar 2026
 #       Change file checking to only approve regular files
 #       Changed file hashing to now read in chunks instead of all at once
 # Version 2.0.2 - 23 Mar 2026
@@ -172,7 +175,7 @@ except ImportError:
     configparser = None
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '2.0.3'
+__VERSION__ = '2.0.4'
 use_pmc = False
 use_virustotal = False
 vt_results = {}
@@ -1142,7 +1145,7 @@ def parse_csv(csv_file, report, timeline):
             server_host, server_port = network_split_host_port(server)
             # server = server.split(':')[0]  # Bad method as it breaks IPv6
             if server_host not in remote_servers and not server_host == 'localhost':
-                remote_servers.append(server)
+                remote_servers.append(server_host)
     # } End of file input processing
 
     time_parse_csv_end = time.time()
