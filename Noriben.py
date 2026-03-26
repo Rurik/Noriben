@@ -135,6 +135,7 @@ import codecs
 import csv
 import datetime
 import hashlib
+import ipaddress
 import json
 import logging
 import os
@@ -306,6 +307,32 @@ def human():
 
         pyautogui.moveTo(x_pos-500, y_pos, duration = 0.1)
         pyautogui.moveTo(x_pos-250, y_pos+500, duration = 0.1)
+
+
+def network_split_host_port(server):
+    """
+    Split servers to unique host and port values.
+    A standard split breaks IPv6
+
+    Arguments:
+        server: String of server with optional port
+    Returns:
+        string of host, string of port
+    """
+    server = server.strip()
+
+    if server.startswith("["):  # [IPv6]:port
+        host, _, rest = server[1:].partition("]")
+        return host, (rest[1:] if rest.startswith(":") and rest[1:].isdigit() else None)
+
+    try:  # plain IPv4 or IPv6
+        ipaddress.ip_address(server)
+        return server, None
+    except ValueError:
+        pass
+
+    host, sep, port = server.rpartition(":")
+    return (host, port) if sep and port.isdigit() else (server, None)
 
 
 def terminate_self(error):
@@ -1112,8 +1139,9 @@ def parse_csv(csv_file, report, timeline):
 
         # Enumerate unique remote hosts into their own section
         if server:
-            server = server.split(':')[0]
-            if server not in remote_servers and not server == 'localhost':
+            server_host, server_port = network_split_host_port(server)
+            # server = server.split(':')[0]  # Bad method as it breaks IPv6
+            if server_host not in remote_servers and not server_host == 'localhost':
                 remote_servers.append(server)
     # } End of file input processing
 
@@ -1330,6 +1358,14 @@ def main():
     for section in config.keys():
         log_debug('[=] {} = {}'.format(section, config[section]), override=True)
 
+    # Find a valid procmon executable.
+    procmonexe = check_procmon()
+    if not procmonexe:
+        print('[!] Unable to find Procmon ({}) in path.'.format(config['procmon']))
+        terminate_self(2)
+
+    # Start main data collection and processing
+    print('[*] Using procmon EXE: {}'.format(procmonexe))
 
     # Check if user-specified to rescan a PML
     if args.pml:
@@ -1399,14 +1435,6 @@ def main():
     else:
         exe_cmdline = ''
 
-    # Find a valid procmon executable.
-    procmonexe = check_procmon()
-    if not procmonexe:
-        print('[!] Unable to find Procmon ({}) in path.'.format(config['procmon']))
-        terminate_self(2)
-
-    # Start main data collection and processing
-    print('[*] Using procmon EXE: {}'.format(procmonexe))
     session_id = get_session_name()
     pml_file = os.path.join(config['output_folder'], 'Noriben_{}.pml'.format(session_id))
     csv_file = os.path.join(config['output_folder'], 'Noriben_{}.csv'.format(session_id))
