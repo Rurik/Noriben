@@ -140,8 +140,9 @@ import logging
 import os
 import re
 import shlex
-import subprocess
+import stat
 import string
+import subprocess
 import sys
 import time
 import traceback
