@@ -152,8 +152,8 @@ def read_config(config_filename):
     except configparser.MissingSectionHeaderError:
         print('[!] Error found in reading config file. Invalid section header detected.')
         sys.exit(12)
-    except:
-        print('[!] Exception occurred while reading config file on option %s!' % option)
+    except Exception as exp:
+        print('[!] Exception occurred while reading config file on option %s: %s!' % (option, exp))
         config[option] = None
 
 
