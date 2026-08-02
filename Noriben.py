@@ -1361,14 +1361,15 @@ def main():
     for section in config.keys():
         log_debug('[=] {} = {}'.format(section, config[section]), override=True)
 
-    # Find a valid procmon executable.
-    procmonexe = check_procmon()
-    if not procmonexe:
-        print('[!] Unable to find Procmon ({}) in path.'.format(config['procmon']))
-        terminate_self(2)
-
-    # Start main data collection and processing
-    print('[*] Using procmon EXE: {}'.format(procmonexe))
+    # --csv re-analysis does not invoke procmon at all, so skip the check to allow
+    # non-Windows use as documented in v2.0.2. Restores behavior regressed in v2.0.4.
+    procmonexe = ''
+    if not args.csv:
+        procmonexe = check_procmon()
+        if not procmonexe:
+            print('[!] Unable to find Procmon ({}) in path.'.format(config['procmon']))
+            terminate_self(2)
+        print('[*] Using procmon EXE: {}'.format(procmonexe))
 
     # Check if user-specified to rescan a PML
     if args.pml:
