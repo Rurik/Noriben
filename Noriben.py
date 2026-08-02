@@ -161,11 +161,8 @@ except ImportError:
 
 try:
     import requests
-    import json
-
     has_internet = True
 except ImportError:
-    json = None
     has_internet = False
 
 try:
@@ -926,6 +923,10 @@ def parse_csv(csv_file, report, timeline):
     net_output = []
     error_output = []
     remote_servers = []
+    json_processes = []
+    json_files = []
+    json_registry = []
+    json_network = []
     if config['yara_folder'] and has_yara:
         yara_rules = yara_import_rules(config['yara_folder'])
     else:
@@ -957,6 +958,13 @@ def parse_csv(csv_file, report, timeline):
                     tl_text = '{},Process,CreateProcess,{},{},{},{}'.format(date_stamp, field['Process Name'], field['PID'], cmdline.replace('"', ''), child_pid)
                     process_output.append(outputtext)
                     timeline.append(tl_text)
+                    json_processes.append({
+                        'timestamp': date_stamp,
+                        'process': field['Process Name'],
+                        'pid': field['PID'],
+                        'cmdline': cmdline,
+                        'child_pid': child_pid
+                    })
 
             elif field['Operation'] == 'CreateFile' and field['Result'] == 'SUCCESS':
                 if not approvelist_scan(file_approvelist, field):
@@ -973,6 +981,13 @@ def parse_csv(csv_file, report, timeline):
                                                                          field['PID'], path)
                         file_output.append(outputtext)
                         timeline.append(tl_text)
+                        json_files.append({
+                            'timestamp': date_stamp,
+                            'operation': 'CreateFolder',
+                            'process': field['Process Name'],
+                            'pid': field['PID'],
+                            'path': path
+                        })
                     else:
                         av_hits = ''
                         try:
@@ -1002,6 +1017,15 @@ def parse_csv(csv_file, report, timeline):
                                                                                        hashval_output, yara_hits, av_hits)
                             file_output.append(outputtext)
                             timeline.append(tl_text)
+                            json_files.append({
+                                'timestamp': date_stamp,
+                                'operation': 'CreateFile',
+                                'process': field['Process Name'],
+                                'pid': field['PID'],
+                                'path': path,
+                                'hash_type': config['hash_type'] if hashval else '',
+                                'hash': hashval or ''
+                            })
                         except (IndexError, IOError):
                             if config['generalize_paths']:
                                 path = generalize_var(path)
@@ -1011,6 +1035,14 @@ def parse_csv(csv_file, report, timeline):
                                                                                field['Process Name'], field['PID'], path)
                             file_output.append(outputtext)
                             timeline.append(tl_text)
+                            json_files.append({
+                                'timestamp': date_stamp,
+                                'operation': 'CreateFile',
+                                'process': field['Process Name'],
+                                'pid': field['PID'],
+                                'path': path,
+                                'note': 'File no longer exists'
+                            })
 
             elif field['Operation'] == 'SetDispositionInformationFile' and field['Result'] == 'SUCCESS':
                 if not approvelist_scan(file_approvelist, field):
@@ -1023,6 +1055,13 @@ def parse_csv(csv_file, report, timeline):
                                                                    field['PID'], path)
                     file_output.append(outputtext)
                     timeline.append(tl_text)
+                    json_files.append({
+                        'timestamp': date_stamp,
+                        'operation': 'DeleteFile',
+                        'process': field['Process Name'],
+                        'pid': field['PID'],
+                        'path': path
+                    })
 
             elif field['Operation'] == 'SetRenameInformationFile':
                 if not approvelist_scan(file_approvelist, field):
@@ -1036,6 +1075,14 @@ def parse_csv(csv_file, report, timeline):
                                                                       field['PID'], from_file, to_file)
                     file_output.append(outputtext)
                     timeline.append(tl_text)
+                    json_files.append({
+                        'timestamp': date_stamp,
+                        'operation': 'RenameFile',
+                        'process': field['Process Name'],
+                        'pid': field['PID'],
+                        'from': from_file,
+                        'to': to_file
+                    })
 
             elif field['Operation'] == 'RegCreateKey' and field['Result'] == 'SUCCESS':
                 if not approvelist_scan(reg_approvelist, field):
@@ -1048,6 +1095,13 @@ def parse_csv(csv_file, report, timeline):
                                                                              field['Process Name'], field['PID'], field['Path'])
                         reg_output.append(outputtext)
                         timeline.append(tl_text)
+                        json_registry.append({
+                            'timestamp': date_stamp,
+                            'operation': 'RegCreateKey',
+                            'process': field['Process Name'],
+                            'pid': field['PID'],
+                            'path': field['Path']
+                        })
 
             elif field['Operation'] == 'RegSetValue' and field['Result'] == 'SUCCESS':
                 if not approvelist_scan(reg_approvelist, field):
@@ -1069,6 +1123,14 @@ def parse_csv(csv_file, report, timeline):
                                                                                    data_field)
                             reg_output.append(outputtext)
                             timeline.append(tl_text)
+                            json_registry.append({
+                                'timestamp': date_stamp,
+                                'operation': 'RegSetValue',
+                                'process': field['Process Name'],
+                                'pid': field['PID'],
+                                'path': field['Path'],
+                                'data': data_field.strip().lstrip('=').strip()
+                            })
 
                     except (IndexError, ValueError):
                         error_output.append(''.join(original_line))
@@ -1081,6 +1143,13 @@ def parse_csv(csv_file, report, timeline):
                                                                             field['PID'], field['Path'])
                     reg_output.append(outputtext)
                     timeline.append(tl_text)
+                    json_registry.append({
+                        'timestamp': date_stamp,
+                        'operation': 'RegDeleteValue',
+                        'process': field['Process Name'],
+                        'pid': field['PID'],
+                        'path': field['Path']
+                    })
 
             elif field['Operation'] == 'RegDeleteKey':  # and field['Result'] == 'SUCCESS':
                 # SUCCESS is commented out to allow all attempted deletions, whether or not the value exists
@@ -1090,6 +1159,13 @@ def parse_csv(csv_file, report, timeline):
                                                                          field['PID'], field['Path'])
                     reg_output.append(outputtext)
                     timeline.append(tl_text)
+                    json_registry.append({
+                        'timestamp': date_stamp,
+                        'operation': 'RegDeleteKey',
+                        'process': field['Process Name'],
+                        'pid': field['PID'],
+                        'path': field['Path']
+                    })
 
             elif field['Operation'] == 'UDP Send' and field['Result'] == 'SUCCESS':
                 if not approvelist_scan(net_approvelist, field):
@@ -1104,6 +1180,14 @@ def parse_csv(csv_file, report, timeline):
                                                                         field['PID'], protocol_replace(server))
                         net_output.append(outputtext)
                         timeline.append(tl_text)
+                        json_network.append({
+                            'timestamp': date_stamp,
+                            'protocol': 'UDP',
+                            'direction': 'Send',
+                            'process': field['Process Name'],
+                            'pid': field['PID'],
+                            'server': protocol_replace(server)
+                        })
 
             elif field['Operation'] == 'UDP Receive' and field['Result'] == 'SUCCESS':
                 if not approvelist_scan(net_approvelist, field):
@@ -1114,6 +1198,14 @@ def parse_csv(csv_file, report, timeline):
                                                                         field['PID'])
                         net_output.append(outputtext)
                         timeline.append(tl_text)
+                        json_network.append({
+                            'timestamp': date_stamp,
+                            'protocol': 'UDP',
+                            'direction': 'Receive',
+                            'process': field['Process Name'],
+                            'pid': field['PID'],
+                            'server': protocol_replace(server)
+                        })
 
             elif field['Operation'] == 'TCP Send' and field['Result'] == 'SUCCESS':
                 if not approvelist_scan(net_approvelist, field):
@@ -1124,6 +1216,14 @@ def parse_csv(csv_file, report, timeline):
                                                                         field['PID'], protocol_replace(server))
                         net_output.append(outputtext)
                         timeline.append(tl_text)
+                        json_network.append({
+                            'timestamp': date_stamp,
+                            'protocol': 'TCP',
+                            'direction': 'Send',
+                            'process': field['Process Name'],
+                            'pid': field['PID'],
+                            'server': protocol_replace(server)
+                        })
 
             elif field['Operation'] == 'TCP Receive' and field['Result'] == 'SUCCESS':
                 if not approvelist_scan(net_approvelist, field):
@@ -1134,6 +1234,14 @@ def parse_csv(csv_file, report, timeline):
                                                                         field['PID'])
                         net_output.append(outputtext)
                         timeline.append(tl_text)
+                        json_network.append({
+                            'timestamp': date_stamp,
+                            'protocol': 'TCP',
+                            'direction': 'Receive',
+                            'process': field['Process Name'],
+                            'pid': field['PID'],
+                            'server': protocol_replace(server)
+                        })
 
         except IndexError:
             log_debug(original_line)
@@ -1219,6 +1327,23 @@ def parse_csv(csv_file, report, timeline):
             debug_out.write(message)
         debug_out.close()
 
+    json_data = {
+        'metadata': {
+            'noriben_version': __VERSION__,
+            'github': 'https://github.com/Rurik/Noriben',
+            'cmdline': exe_cmdline,
+            'exec_time_seconds': round(time_exec, 2),
+            'processing_time_seconds': round(time_process, 2),
+            'analysis_time_seconds': round(time_analyze, 2)
+        },
+        'processes': json_processes,
+        'files': json_files,
+        'registry': json_registry,
+        'network': json_network,
+        'unique_hosts': sorted(remote_servers)
+    }
+    return json_data
+
 
 # End of parse_csv()
 
@@ -1255,6 +1380,7 @@ def main():
     parser.add_argument('--output', help='Folder to store output files', required=False)
     parser.add_argument('--yara', help='Folder containing YARA rules', required=False)
     parser.add_argument('--cmd', help='Command line to execute (in quotes)', required=False)
+    parser.add_argument('--json', action='store_true', help='Output results in JSON format', required=False)
     parser.add_argument('-d', '--debug', action='store_true', help='Enable debugging', required=False)
     parser.add_argument('--troubleshoot', action='store_true', help='Pause before exiting for troubleshooting',
                         required=False)
@@ -1382,13 +1508,14 @@ def main():
             txt_file = os.path.join(config['output_folder'], pml_basename + '.' + config['txt_extension'])
             debug_file = os.path.join(config['output_folder'], pml_basename + '.log')
             timeline_file = os.path.join(config['output_folder'], pml_basename + '_timeline.csv')
+            json_file = os.path.join(config['output_folder'], pml_basename + '.json')
 
             process_pml_to_csv(procmonexe, args.pml, pmc_file, csv_file)
             if not file_exists(csv_file):
                 print('[!] Error detected. Could not create CSV file: {}'.format(csv_file))
                 terminate_self(5)
 
-            parse_csv(csv_file, report, timeline)
+            json_data = parse_csv(csv_file, report, timeline)
 
             print('[*] Saving report to: {}'.format(txt_file))
             codecs.open(txt_file, 'w', 'utf-8-sig').write('\r\n'.join(report))
@@ -1398,6 +1525,11 @@ def main():
             with open(timeline_file, 'w', newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
                 writer.writerows(timeline)
+
+            if args.json:
+                print('[*] Saving JSON report to: {}'.format(json_file))
+                with open(json_file, 'w', encoding='utf-8') as f:
+                    json.dump(json_data, f, indent=2)
 
             open_file_with_assoc(txt_file)
             terminate_self(0)
@@ -1416,14 +1548,20 @@ def main():
             txt_file = os.path.join(config['output_folder'], csv_basename + '.' + config['txt_extension'])
             debug_file = os.path.join(config['output_folder'], csv_basename + '.log')
             timeline_file = os.path.join(config['output_folder'], csv_basename + '_timeline.csv')
+            json_file = os.path.join(config['output_folder'], csv_basename + '.json')
 
-            parse_csv(args.csv, report, timeline)
+            json_data = parse_csv(args.csv, report, timeline)
 
             print('[*] Saving report to: {}'.format(txt_file))
             codecs.open(txt_file, 'w', 'utf-8-sig').write('\r\n'.join(report))
 
             print('[*] Saving timeline to: {}'.format(timeline_file))
             codecs.open(timeline_file, 'w', 'utf-8-sig').write('\r\n'.join(timeline))
+
+            if args.json:
+                print('[*] Saving JSON report to: {}'.format(json_file))
+                with open(json_file, 'w', encoding='utf-8') as f:
+                    json.dump(json_data, f, indent=2)
 
             open_file_with_assoc(txt_file)
             terminate_self(0)
@@ -1444,8 +1582,8 @@ def main():
     csv_file = os.path.join(config['output_folder'], 'Noriben_{}.csv'.format(session_id))
     txt_file = os.path.join(config['output_folder'], 'Noriben_{}.{}'.format(session_id, config['txt_extension']))
     debug_file = os.path.join(config['output_folder'], 'Noriben_{}.log'.format(session_id))
-
     timeline_file = os.path.join(config['output_folder'], 'Noriben_{}_timeline.csv'.format(session_id))
+    json_file = os.path.join(config['output_folder'], 'Noriben_{}.json'.format(session_id))
 
     print('[*] Procmon session saved to: {}'.format(pml_file))
 
@@ -1519,12 +1657,17 @@ def main():
         terminate_self(7)
 
     # Process CSV file, results in 'report' and 'timeline' output lists
-    parse_csv(csv_file, report, timeline)
+    json_data = parse_csv(csv_file, report, timeline)
     print('[*] Saving report to: {}'.format(txt_file))
     codecs.open(txt_file, 'w', 'utf-8').write('\r\n'.join(report))
 
     print('[*] Saving timeline to: {}'.format(timeline_file))
     codecs.open(timeline_file, 'w', 'utf-8').write('\r\n'.join(timeline))
+
+    if args.json:
+        print('[*] Saving JSON report to: {}'.format(json_file))
+        with open(json_file, 'w', encoding='utf-8') as f:
+            json.dump(json_data, f, indent=2)
 
     open_file_with_assoc(txt_file)
     terminate_self(0)
