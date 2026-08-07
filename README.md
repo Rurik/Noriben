@@ -69,6 +69,7 @@ optional arguments:
   --hashtype {MD5,SHA1,SHA256}
                         Specify hash type
   --headless            Do not open results on VM after processing
+  --process_tree        Add an ASCII process tree after created processes
   -t TIMEOUT, --timeout TIMEOUT
                         Number of seconds to collect activity
   --output OUTPUT       Folder to store output files

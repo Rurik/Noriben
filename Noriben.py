@@ -134,13 +134,13 @@
 #
 
 import argparse
-import codecs
 import csv
 import datetime
 import hashlib
 import ipaddress
 import json
 import logging
+import ntpath
 import os
 import re
 import shlex
@@ -246,7 +246,7 @@ def read_config(config_filename):
     config = {}
     try:
         file_config = configparser.ConfigParser(inline_comment_prefixes=('#', ';'))
-        with codecs.open(config_filename, 'r', encoding='utf-8') as f:
+        with open(config_filename, 'r', encoding='utf-8') as f:
             file_config.read_file(f)
 
         config = {}
@@ -906,7 +906,82 @@ def terminate_procmon(procmonexe):
         stdout, stderr = process.communicate()
 
 
-def parse_csv(csv_file, report, timeline):
+def process_name_from_cmdline(cmdline):
+    """Return the executable name at the start of a Windows command line."""
+    cmdline = cmdline.strip()
+    if not cmdline:
+        return '[unknown]'
+
+    if cmdline.startswith('"'):
+        executable = cmdline[1:].split('"', 1)[0]
+    else:
+        executable = cmdline.split(None, 1)[0]
+    return ntpath.basename(executable) or executable
+
+
+def format_process_tree(process_events):
+    """Build an ASCII process tree from Process Create event dictionaries."""
+    nodes = {}
+    node_order = []
+    child_pids = set()
+
+    def get_node(pid, name='[unknown]', cmdline=''):
+        if pid not in nodes:
+            nodes[pid] = {
+                'pid': pid,
+                'name': name,
+                'cmdline': cmdline,
+                'children': []
+            }
+            node_order.append(pid)
+        return nodes[pid]
+
+    for event in process_events:
+        parent_pid = event['pid']
+        child_pid = event['child_pid']
+        parent = get_node(parent_pid, event['process'])
+        parent['name'] = event['process']
+        child = get_node(child_pid, process_name_from_cmdline(event['cmdline']), event['cmdline'])
+        if not child['cmdline']:
+            child['cmdline'] = event['cmdline']
+        if child_pid not in parent['children'] and child_pid != parent_pid:
+            parent['children'].append(child_pid)
+        child_pids.add(child_pid)
+
+    root_pids = [pid for pid in node_order if pid not in child_pids]
+    if not root_pids:
+        root_pids = node_order[:]
+
+    output = []
+    rendered = set()
+
+    def render(pid, prefix='', connector=''):
+        if pid in rendered:
+            return
+        rendered.add(pid)
+        node = nodes[pid]
+        label = '{}:{}'.format(node['name'], node['pid'])
+        if node['cmdline']:
+            label += ' > "{}"'.format(node['cmdline'].replace('"', ''))
+        output.append('{}{}{}'.format(prefix, connector, label))
+
+        children = [child_pid for child_pid in node['children'] if child_pid not in rendered]
+        for index, child_pid in enumerate(children):
+            is_last = index == len(children) - 1
+            child_prefix = prefix
+            if connector:
+                child_prefix += '    ' if connector == '└── ' else '│   '
+            render(child_pid, child_prefix,
+                   '└── ' if is_last else '├── ')
+
+    for root_pid in root_pids:
+        render(root_pid)
+    for pid in node_order:
+        render(pid)
+    return output
+
+
+def parse_csv(csv_file, report, timeline, process_tree=False):
     """
     Given the location of CSV and TXT files, parse the CSV for notable items
 
@@ -914,6 +989,7 @@ def parse_csv(csv_file, report, timeline):
         csv_file: path to csv output to parse
         report: OUT string text containing the entirety of the text report
         timeline: OUT string text containing the entirety of the CSV report
+        process_tree: add an ASCII process tree after the process event list
     """
     log_debug('[*] Processing CSV: {}'.format(csv_file))
 
@@ -1279,6 +1355,16 @@ def parse_csv(csv_file, report, timeline):
     for event in process_output:
         report.append(event)
 
+    if process_tree:
+        report.append('')
+        report.append('Process Tree:')
+        report.append('==================')
+        tree_output = format_process_tree(json_processes)
+        if tree_output:
+            report.extend(tree_output)
+        else:
+            report.append('[No process creation events detected]')
+
     report.append('')
     report.append('File Activity:')
     report.append('==================')
@@ -1381,6 +1467,8 @@ def main():
     parser.add_argument('--yara', help='Folder containing YARA rules', required=False)
     parser.add_argument('--cmd', help='Command line to execute (in quotes)', required=False)
     parser.add_argument('--json', action='store_true', help='Output results in JSON format', required=False)
+    parser.add_argument('--process-tree', action='store_true',
+                        help='Add an ASCII process tree after created processes', required=False)
     parser.add_argument('-d', '--debug', action='store_true', help='Enable debugging', required=False)
     parser.add_argument('--troubleshoot', action='store_true', help='Pause before exiting for troubleshooting',
                         required=False)
@@ -1515,13 +1603,14 @@ def main():
                 print('[!] Error detected. Could not create CSV file: {}'.format(csv_file))
                 terminate_self(5)
 
-            json_data = parse_csv(csv_file, report, timeline)
+            json_data = parse_csv(csv_file, report, timeline, args.process_tree)
 
             print('[*] Saving report to: {}'.format(txt_file))
-            codecs.open(txt_file, 'w', 'utf-8-sig').write('\r\n'.join(report))
+            with open(txt_file, 'w', encoding='utf-8-sig') as f:
+                f.write('\r\n'.join(report))
 
             print('[*] Saving timeline to: {}'.format(timeline_file))
-            # codecs.open(timeline_file, 'w', 'utf-8-sig').write('\r\n'.join(timeline))
+            # open(timeline_file, 'w', encoding='utf-8-sig').write('\r\n'.join(timeline))
             with open(timeline_file, 'w', newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
                 writer.writerows(timeline)
@@ -1550,13 +1639,15 @@ def main():
             timeline_file = os.path.join(config['output_folder'], csv_basename + '_timeline.csv')
             json_file = os.path.join(config['output_folder'], csv_basename + '.json')
 
-            json_data = parse_csv(args.csv, report, timeline)
+            json_data = parse_csv(args.csv, report, timeline, args.process_tree)
 
             print('[*] Saving report to: {}'.format(txt_file))
-            codecs.open(txt_file, 'w', 'utf-8-sig').write('\r\n'.join(report))
+            with open(txt_file, 'w', encoding='utf-8-sig') as f:
+                f.write('\r\n'.join(report))
 
             print('[*] Saving timeline to: {}'.format(timeline_file))
-            codecs.open(timeline_file, 'w', 'utf-8-sig').write('\r\n'.join(timeline))
+            with open(timeline_file, 'w', encoding='utf-8-sig') as f:
+                f.write('\r\n'.join(timeline))
 
             if args.json:
                 print('[*] Saving JSON report to: {}'.format(json_file))
@@ -1657,12 +1748,14 @@ def main():
         terminate_self(7)
 
     # Process CSV file, results in 'report' and 'timeline' output lists
-    json_data = parse_csv(csv_file, report, timeline)
+    json_data = parse_csv(csv_file, report, timeline, args.process_tree)
     print('[*] Saving report to: {}'.format(txt_file))
-    codecs.open(txt_file, 'w', 'utf-8').write('\r\n'.join(report))
+    with open(txt_file, 'w', encoding='utf-8') as f:
+        f.write('\r\n'.join(report))
 
     print('[*] Saving timeline to: {}'.format(timeline_file))
-    codecs.open(timeline_file, 'w', 'utf-8').write('\r\n'.join(timeline))
+    with open(timeline_file, 'w', encoding='utf-8') as f:
+        f.write('\r\n'.join(timeline))
 
     if args.json:
         print('[*] Saving JSON report to: {}'.format(json_file))
