@@ -172,7 +172,25 @@ except ImportError:
     configparser = None
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '2.0.4'
+__VERSION__ = '2.0.5'
+
+# NTSTATUS / common exit codes worth annotating. Add entries freely; keys are
+# unsigned 32-bit ints. Negative Procmon values (e.g. -1) are masked to their
+# unsigned equivalent before lookup.
+NTSTATUS_NAMES = {
+    0x00000001: 'Generic Error',
+    0xC0000005: 'Access Violation',
+    0xC000001D: 'Illegal Instruction',
+    0xC0000022: 'Access Denied',
+    0xC000013A: 'Ctrl+C Exit',
+    0xC0000017: 'No Memory',
+    0xC0000025: 'Noncontinuable Exception',
+    0xC0000094: 'Integer Divide by Zero',
+    0xC00000FD: 'Stack Overflow',
+    0xC0000409: 'Stack Buffer Overrun',
+    0x40010004: 'Debug Terminate Process',
+    0xFFFFFFFF: 'Abnormal Termination',
+}
 use_pmc = False
 use_virustotal = False
 vt_results = {}
@@ -1003,6 +1021,7 @@ def parse_csv(csv_file, report, timeline, process_tree=False):
     json_files = []
     json_registry = []
     json_network = []
+    pid_exits = {}   # child PID (str) → raw exit code int, non-zero only
     if config['yara_folder'] and has_yara:
         yara_rules = yara_import_rules(config['yara_folder'])
     else:
@@ -1319,6 +1338,12 @@ def parse_csv(csv_file, report, timeline, process_tree=False):
                             'server': protocol_replace(server)
                         })
 
+            elif field['Operation'] == 'Process Exit':
+                exit_str = field['Detail'].split('Exit Status: ')[1].split(',')[0].strip()
+                code = int(exit_str)
+                if code != 0:
+                    pid_exits[field['PID']] = code
+
         except IndexError:
             log_debug(original_line)
             log_debug(traceback.format_exc())
@@ -1331,6 +1356,16 @@ def parse_csv(csv_file, report, timeline, process_tree=False):
             if server_host not in remote_servers and not server_host == 'localhost':
                 remote_servers.append(server_host)
     # } End of file input processing
+
+    # Annotate CreateProcess lines with non-zero exit codes collected above.
+    for i, proc in enumerate(json_processes):
+        code = pid_exits.get(proc['child_pid'])
+        if code is not None:
+            unsigned = code & 0xFFFFFFFF
+            label = NTSTATUS_NAMES.get(unsigned, '')
+            annotation = '[Exit: {:#010x}{}]'.format(unsigned, ' - ' + label if label else '')
+            process_output[i] += '\t' + annotation
+            proc['exit_code'] = '{:#010x}'.format(unsigned)
 
     time_parse_csv_end = time.time()
 
@@ -1489,6 +1524,9 @@ def main():
     if args.debug:
         config['debug'] = True
 
+    process_tree = config.get('process_tree', True) or args.process_tree
+    write_json = args.json or config.get('json_output', False) or config.get('debug', False)
+
 
     if not config['virustotal_api_key'] and os.path.exists('virustotal.api'):
         config['virustotal_api_key'] = open('virustotal.api', 'r', encoding='utf-8').readline().strip()
@@ -1603,10 +1641,10 @@ def main():
                 print('[!] Error detected. Could not create CSV file: {}'.format(csv_file))
                 terminate_self(5)
 
-            json_data = parse_csv(csv_file, report, timeline, args.process_tree)
+            json_data = parse_csv(csv_file, report, timeline, process_tree)
 
             print('[*] Saving report to: {}'.format(txt_file))
-            with open(txt_file, 'w', encoding='utf-8-sig') as f:
+            with open(txt_file, 'w', newline='', encoding='utf-8-sig') as f:
                 f.write('\r\n'.join(report))
 
             print('[*] Saving timeline to: {}'.format(timeline_file))
@@ -1615,7 +1653,7 @@ def main():
                 writer = csv.writer(f)
                 writer.writerows(timeline)
 
-            if args.json:
+            if write_json:
                 print('[*] Saving JSON report to: {}'.format(json_file))
                 with open(json_file, 'w', encoding='utf-8') as f:
                     json.dump(json_data, f, indent=2)
@@ -1639,17 +1677,17 @@ def main():
             timeline_file = os.path.join(config['output_folder'], csv_basename + '_timeline.csv')
             json_file = os.path.join(config['output_folder'], csv_basename + '.json')
 
-            json_data = parse_csv(args.csv, report, timeline, args.process_tree)
+            json_data = parse_csv(args.csv, report, timeline, process_tree)
 
             print('[*] Saving report to: {}'.format(txt_file))
-            with open(txt_file, 'w', encoding='utf-8-sig') as f:
+            with open(txt_file, 'w', newline='', encoding='utf-8-sig') as f:
                 f.write('\r\n'.join(report))
 
             print('[*] Saving timeline to: {}'.format(timeline_file))
             with open(timeline_file, 'w', encoding='utf-8-sig') as f:
                 f.write('\r\n'.join(timeline))
 
-            if args.json:
+            if write_json:
                 print('[*] Saving JSON report to: {}'.format(json_file))
                 with open(json_file, 'w', encoding='utf-8') as f:
                     json.dump(json_data, f, indent=2)
@@ -1748,16 +1786,16 @@ def main():
         terminate_self(7)
 
     # Process CSV file, results in 'report' and 'timeline' output lists
-    json_data = parse_csv(csv_file, report, timeline, args.process_tree)
+    json_data = parse_csv(csv_file, report, timeline, process_tree)
     print('[*] Saving report to: {}'.format(txt_file))
-    with open(txt_file, 'w', encoding='utf-8') as f:
+    with open(txt_file, 'w', newline='', encoding='utf-8') as f:
         f.write('\r\n'.join(report))
 
     print('[*] Saving timeline to: {}'.format(timeline_file))
     with open(timeline_file, 'w', encoding='utf-8') as f:
         f.write('\r\n'.join(timeline))
 
-    if args.json:
+    if write_json:
         print('[*] Saving JSON report to: {}'.format(json_file))
         with open(json_file, 'w', encoding='utf-8') as f:
             json.dump(json_data, f, indent=2)
