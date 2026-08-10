@@ -144,6 +144,7 @@ import ntpath
 import os
 import re
 import shlex
+import shutil
 import stat
 import string
 import subprocess
@@ -257,7 +258,7 @@ def read_config(config_filename):
     Returns:
         none
     """
-    global use_virustotal
+    global config, use_virustotal
     global global_approvelist, reg_approvelist, file_approvelist, cmd_approvelist
     global net_approvelist, hash_approvelist
 
@@ -1139,7 +1140,7 @@ def parse_csv(csv_file, report, timeline, process_tree=False):
                                 'note': 'File no longer exists'
                             })
 
-            elif field['Operation'] == 'SetDispositionInformationFile' and field['Result'] == 'SUCCESS':
+            elif field['Operation'] in ('SetDispositionInformationFile', 'SetDispositionInformationEx') and field['Result'] == 'SUCCESS':
                 if not approvelist_scan(file_approvelist, field):
                     path = field['Path']
                     log_debug('[*] DeleteFile: {}'.format(path))
@@ -1302,7 +1303,7 @@ def parse_csv(csv_file, report, timeline, process_tree=False):
                             'server': protocol_replace(server)
                         })
 
-            elif field['Operation'] == 'TCP Send' and field['Result'] == 'SUCCESS':
+            elif field['Operation'] in ('TCP Send', 'TCP Reconnect', 'TCP Connect') and field['Result'] == 'SUCCESS':
                 if not approvelist_scan(net_approvelist, field):
                     server = field['Path'].split('-> ')[1]
                     outputtext = '[TCP] {}:{} > {}'.format(field['Process Name'], field['PID'], protocol_replace(server))
@@ -1718,7 +1719,7 @@ def main():
 
     if exe_cmdline:
         exe_cmdline_base_file = shlex.split(exe_cmdline, posix=False)[0]
-        if not file_exists(exe_cmdline_base_file):
+        if not file_exists(exe_cmdline_base_file) and not shutil.which(exe_cmdline_base_file):
             print('[!] Error: Specified malware executable does not exist: {}'.format(exe_cmdline_base_file))
             terminate_self(6)
 
