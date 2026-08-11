@@ -460,7 +460,7 @@ def generalize_var(path_string):
     if sys.platform in ('linux' ,'darwin'):
         return path_string
 
-    if path_general_list:
+    if not path_general_list:
         generalize_vars_init()  # For edge cases when this isn't previously called.
 
     for item in path_general_list:
