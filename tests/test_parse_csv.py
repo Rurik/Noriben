@@ -33,6 +33,7 @@ def _setup_globals():
     Noriben.reg_approvelist = []
     Noriben.net_approvelist = []
     Noriben.hash_approvelist = []
+    Noriben.dll_approvelist = []
     Noriben.exe_cmdline = ''
     Noriben.time_exec = 0.0
     Noriben.time_process = 0.0
@@ -77,6 +78,7 @@ class ReportStructureTests(unittest.TestCase):
         report, _, _ = _run([])
         text = '\n'.join(report)
         self.assertIn('Processes Created:', text)
+        self.assertIn('Module Loads:', text)
         self.assertIn('File Activity:', text)
         self.assertIn('Registry Activity:', text)
         self.assertIn('Network Traffic:', text)
@@ -432,6 +434,120 @@ class NetworkActivityTests(unittest.TestCase):
         lines = [l for l in report if '[UDP]' in l]
         self.assertEqual(len(lines), 0)
         self.assertEqual(json_data['network'], [])
+
+
+# ---------------------------------------------------------------------------
+# Module Load (Load Image) events
+# ---------------------------------------------------------------------------
+
+class ModuleLoadTests(unittest.TestCase):
+
+    def setUp(self):
+        _setup_globals()
+
+    def _load_image_row(self, process='malware.exe', pid='2000',
+                        path=r'C:\Users\admin\AppData\Roaming\evil.dll',
+                        detail='Image Base: 0x7fff00000000, Image Size: 0x1e000'):
+        return (
+            f'"8:00:05.0 PM","{process}","{pid}","Load Image","{path}","SUCCESS",'
+            f'"{detail}"'
+        )
+
+    def test_load_image_appears_in_report(self):
+        report, _, _ = _run([self._load_image_row()])
+        lines = [l for l in report if '[LoadImage]' in l]
+        self.assertEqual(len(lines), 1)
+        self.assertIn('evil.dll', lines[0])
+        self.assertIn('malware.exe:2000', lines[0])
+
+    def test_load_image_in_json(self):
+        _, _, json_data = _run([self._load_image_row()])
+        self.assertEqual(len(json_data['modules']), 1)
+        mod = json_data['modules'][0]
+        self.assertEqual(mod['operation'], 'LoadImage')
+        self.assertEqual(mod['process'], 'malware.exe')
+        self.assertEqual(mod['pid'], '2000')
+        self.assertIn('evil.dll', mod['path'])
+
+    def test_load_image_in_timeline(self):
+        _, timeline, _ = _run([self._load_image_row()])
+        self.assertTrue(any('LoadImage' in str(t) for t in timeline))
+
+    def test_duplicate_loads_deduplicated(self):
+        row = self._load_image_row()
+        report, _, _ = _run([row, row])
+        lines = [l for l in report if '[LoadImage]' in l]
+        self.assertEqual(len(lines), 1)
+
+    def test_dll_approvelist_suppresses_event(self):
+        Noriben.dll_approvelist = ['evil.dll']
+        report, _, json_data = _run([self._load_image_row()])
+        lines = [l for l in report if '[LoadImage]' in l]
+        self.assertEqual(len(lines), 0)
+        self.assertEqual(json_data['modules'], [])
+
+    def test_system32_path_suppressed_by_default_approvelist(self):
+        Noriben.dll_approvelist = [r'%%WinDir%%\\System32\\', r'System32']
+        row = self._load_image_row(path=r'C:\Windows\System32\ntdll.dll')
+        report, _, json_data = _run([row])
+        lines = [l for l in report if '[LoadImage]' in l]
+        self.assertEqual(len(lines), 0)
+
+    def test_module_loads_section_in_report(self):
+        report, _, _ = _run([self._load_image_row()])
+        text = '\n'.join(report)
+        self.assertIn('Module Loads:', text)
+
+    def test_module_loads_section_present_even_when_empty(self):
+        report, _, _ = _run([])
+        text = '\n'.join(report)
+        self.assertIn('Module Loads:', text)
+
+    def test_failed_load_ignored(self):
+        # Only SUCCESS results should be captured
+        row = (
+            '"8:00:05.1 PM","malware.exe","2000","Load Image",'
+            r'"C:\bad\evil.dll","ACCESS DENIED","Image Base: 0x0"'
+        )
+        report, _, json_data = _run([row])
+        lines = [l for l in report if '[LoadImage]' in l]
+        self.assertEqual(len(lines), 0)
+        self.assertEqual(json_data['modules'], [])
+
+    def test_system32_process_unusual_path_dll_not_suppressed(self):
+        """Regression: dll_approvelist must only filter on the DLL's Path, not on
+        the loading process's Image Path.  A DLL from %TEMP% loaded by
+        powershell.exe (which lives in System32) must NOT be suppressed.
+        """
+        Noriben.dll_approvelist = [r'System32']
+        # Build a CSV that includes the Image Path column (as real Procmon CSVs do).
+        header = ('"Time of Day","Process Name","PID","Operation","Path",'
+                  '"Result","Detail","TID","Image Path","Command Line","Description"\r\n')
+        # Loading process is in System32; the DLL itself is in %TEMP% (unusual path).
+        row = (
+            '"8:00:05.0 PM","powershell.exe","9000","Load Image",'
+            r'"C:\Users\admin\AppData\Local\Temp\NoribenTest\NoribenTest.dll",'
+            '"SUCCESS","Image Base: 0x7fff00000000, Image Size: 0x1000","1234",'
+            r'"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",'
+            '"powershell.exe -File test.ps1","Windows PowerShell"'
+        )
+        import tempfile, os as _os
+        tf = tempfile.NamedTemporaryFile(
+            mode='w', suffix='.csv', delete=False, encoding='utf-8-sig', newline=''
+        )
+        tf.write(header)
+        tf.write(row + '\r\n')
+        tf.close()
+        try:
+            report, _, json_data = [], [], {}
+            json_data = Noriben.parse_csv(tf.name, report, [], False)
+            lines = [l for l in report if '[LoadImage]' in l]
+            self.assertEqual(len(lines), 1,
+                             'DLL from unusual path was incorrectly suppressed because '
+                             'the loading process lives in System32')
+            self.assertIn('NoribenTest.dll', lines[0])
+        finally:
+            _os.unlink(tf.name)
 
 
 if __name__ == '__main__':

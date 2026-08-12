@@ -1,5 +1,5 @@
 # Noriben Unit Tester Script
-# Version 1.1
+# Version 1.2
 #
 # Detonates a controlled, predictable sequence of actions inside a Procmon-
 # monitored Windows VM to produce a known-good CSV for integration testing.
@@ -22,23 +22,23 @@ $ErrorActionPreference = 'SilentlyContinue'
 # -----------------------------------------------------------------------
 # Constants — change these if the defaults collide with your approvelist
 # -----------------------------------------------------------------------
-$TestDir     = "$env:TEMP\NoribenTrigger"
-$TestFile    = "$TestDir\trigger_file.txt"
-$RenameFile  = "$TestDir\trigger_renamed.txt"
-$RegBase     = "HKCU:\Software\NoribenTrigger"
+$TestDir     = "$env:TEMP\NoribenTest"
+$TestFile    = "$TestDir\test_file.txt"
+$RenameFile  = "$TestDir\test_renamed.txt"
+$RegBase     = "HKCU:\Software\NoribenTest"
 $RegKey      = "$RegBase\TestKey"
 $DnsTarget   = "example.com"
 $TcpTarget   = "93.184.216.34"   # example.com — stable, well-known IP
 $TcpPort     = 80
 
-Write-Host "[NoribenTrigger] Starting unit_tester script v1.1"
+Write-Host "[NoribenTest] Starting unit_tester script v1.2"
 
 # -----------------------------------------------------------------------
 # 1. PROCESS CREATE + EXIT CODE 0
 #    Noriben event: [CreateProcess] ... [Child PID: N]
 #    Exit annotation: none (zero exits are suppressed)
 # -----------------------------------------------------------------------
-Write-Host "[NoribenTrigger] 1. Process Create - exit code 0"
+Write-Host "[NoribenTest] 1. Process Create - exit code 0"
 Start-Process -FilePath "cmd.exe" `
               -ArgumentList "/c", "exit 0" `
               -WindowStyle Hidden `
@@ -48,7 +48,7 @@ Start-Process -FilePath "cmd.exe" `
 # 2. PROCESS CREATE + EXIT CODE 1  (non-zero)
 #    Noriben event: [CreateProcess] ... [Child PID: N] [Exit: 0x00000001 - Generic Error]
 # -----------------------------------------------------------------------
-Write-Host "[NoribenTrigger] 2. Process Create - exit code 1"
+Write-Host "[NoribenTest] 2. Process Create - exit code 1"
 Start-Process -FilePath "cmd.exe" `
               -ArgumentList "/c", "exit 1" `
               -WindowStyle Hidden `
@@ -56,54 +56,54 @@ Start-Process -FilePath "cmd.exe" `
 
 # -----------------------------------------------------------------------
 # 3. FILE CREATE
-#    Noriben event: [CreateFile] ...NoribenTrigger\trigger_file.txt
+#    Noriben event: [CreateFile] ...NoribenTest\test_file.txt
 # -----------------------------------------------------------------------
-Write-Host "[NoribenTrigger] 3. File Create"
+Write-Host "[NoribenTest] 3. File Create"
 New-Item -ItemType Directory -Path $TestDir -Force | Out-Null
-Set-Content -Path $TestFile -Value "NoribenTrigger test data"
+Set-Content -Path $TestFile -Value "NoribenTest test data"
 
 # -----------------------------------------------------------------------
 # 4. FILE RENAME
-#    Noriben event: [RenameFile] ...trigger_file.txt -> ...trigger_renamed.txt
+#    Noriben event: [RenameFile] ...test_file.txt -> ...test_renamed.txt
 # -----------------------------------------------------------------------
-Write-Host "[NoribenTrigger] 4. File Rename"
-Rename-Item -Path $TestFile -NewName "trigger_renamed.txt" -Force
+Write-Host "[NoribenTest] 4. File Rename"
+Rename-Item -Path $TestFile -NewName "test_renamed.txt" -Force
 
 # -----------------------------------------------------------------------
 # 5. FILE DELETE
-#    Noriben event: [DeleteFile] ...trigger_renamed.txt
+#    Noriben event: [DeleteFile] ...test_renamed.txt
 #    Note: newer Windows versions use SetDispositionInformationEx (not
 #    SetDispositionInformationFile) — both are handled by parse_csv().
 # -----------------------------------------------------------------------
-Write-Host "[NoribenTrigger] 5. File Delete"
+Write-Host "[NoribenTest] 5. File Delete"
 Remove-Item -Path $RenameFile -Force
 
 # -----------------------------------------------------------------------
 # 6. REGISTRY CREATE KEY
-#    Noriben event: [RegCreateKey] HKCU\Software\NoribenTrigger\TestKey
+#    Noriben event: [RegCreateKey] HKCU\Software\NoribenTest\TestKey
 # -----------------------------------------------------------------------
-Write-Host "[NoribenTrigger] 6. Registry Create Key"
+Write-Host "[NoribenTest] 6. Registry Create Key"
 New-Item -Path $RegKey -Force | Out-Null
 
 # -----------------------------------------------------------------------
 # 7. REGISTRY SET VALUE
-#    Noriben event: [RegSetValue] HKCU\Software\NoribenTrigger\TestKey : TriggerValue
+#    Noriben event: [RegSetValue] HKCU\Software\NoribenTest\TestKey : TestValue
 # -----------------------------------------------------------------------
-Write-Host "[NoribenTrigger] 7. Registry Set Value"
-Set-ItemProperty -Path $RegKey -Name "TriggerValue" -Value "NoribenTrigger"
+Write-Host "[NoribenTest] 7. Registry Set Value"
+Set-ItemProperty -Path $RegKey -Name "TestValue" -Value "NoribenTest"
 
 # -----------------------------------------------------------------------
 # 8. REGISTRY DELETE VALUE
-#    Noriben event: [RegDeleteValue] HKCU\Software\NoribenTrigger\TestKey : TriggerValue
+#    Noriben event: [RegDeleteValue] HKCU\Software\NoribenTest\TestKey : TestValue
 # -----------------------------------------------------------------------
-Write-Host "[NoribenTrigger] 8. Registry Delete Value"
-Remove-ItemProperty -Path $RegKey -Name "TriggerValue" -Force
+Write-Host "[NoribenTest] 8. Registry Delete Value"
+Remove-ItemProperty -Path $RegKey -Name "TestValue" -Force
 
 # -----------------------------------------------------------------------
 # 9. REGISTRY DELETE KEY
-#    Noriben event: [RegDeleteKey] HKCU\Software\NoribenTrigger
+#    Noriben event: [RegDeleteKey] HKCU\Software\NoribenTest
 # -----------------------------------------------------------------------
-Write-Host "[NoribenTrigger] 9. Registry Delete Key"
+Write-Host "[NoribenTest] 9. Registry Delete Key"
 Remove-Item -Path $RegBase -Recurse -Force
 
 # -----------------------------------------------------------------------
@@ -111,7 +111,7 @@ Remove-Item -Path $RegBase -Recurse -Force
 #     Noriben event: [UDP] svchost.exe > DNS_server:53
 #     Also contributes to Unique Hosts
 # -----------------------------------------------------------------------
-Write-Host "[NoribenTrigger] 10. DNS Query"
+Write-Host "[NoribenTest] 10. DNS Query"
 try {
     [System.Net.Dns]::GetHostAddresses($DnsTarget) | Out-Null
 } catch {}
@@ -122,7 +122,7 @@ try {
 #     Procmon logs the connection as TCP Connect/Reconnect + TCP Send/Receive.
 #     Also contributes to Unique Hosts.
 # -----------------------------------------------------------------------
-Write-Host "[NoribenTrigger] 11. TCP Connection"
+Write-Host "[NoribenTest] 11. TCP Connection"
 try {
     $client = New-Object System.Net.Sockets.TcpClient
     $client.Connect($TcpTarget, $TcpPort)
@@ -130,9 +130,30 @@ try {
 } catch {}
 
 # -----------------------------------------------------------------------
+# 12. MODULE LOAD from unusual path
+#     Noriben event: [LoadImage] powershell.exe:PID > %TEMP%\NoribenTest\NoribenTest.dll
+#     Copies a known system DLL to an unusual path, then loads it via the
+#     native LoadLibrary() Win32 API using P/Invoke.  LoadLibrary() causes
+#     a kernel-level image-load notification which Procmon records as a
+#     "Load Image" event — unlike .NET reflection loading, which goes through
+#     the CLR loader and does not generate that event.
+# -----------------------------------------------------------------------
+Write-Host "[NoribenTest] 12. Module Load from unusual path"
+try {
+    # Copy a small, stable system DLL to the test directory (unusual path)
+    $dllDst = "$TestDir\NoribenTest.dll"
+    Copy-Item "$env:SystemRoot\System32\version.dll" $dllDst -Force
+
+    # Call LoadLibrary() natively via P/Invoke to guarantee a Load Image event
+    $sig = '[DllImport("kernel32.dll", SetLastError=true, CharSet=CharSet.Auto)] public static extern IntPtr LoadLibrary(string lpFileName);'
+    $loader = Add-Type -MemberDefinition $sig -Name "NoribenLoader" -Namespace "NoribenTest" -PassThru
+    $loader[0]::LoadLibrary($dllDst) | Out-Null
+} catch {}
+
+# -----------------------------------------------------------------------
 # Cleanup
 # -----------------------------------------------------------------------
 Remove-Item -Path $TestDir -Recurse -Force
 
-Write-Host "[NoribenTrigger] Unit tester script complete"
+Write-Host "[NoribenTest] Unit tester script complete"
 exit 0

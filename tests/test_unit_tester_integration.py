@@ -129,8 +129,8 @@ class UnitTesterFileTests(unittest.TestCase):
     def test_file_events_present(self):
         self.assertGreater(len(self._file_lines()), 0)
 
-    def test_noriben_trigger_dir_in_file_events(self):
-        self.assertTrue(any('NoribenTrigger' in l for l in self._file_lines()))
+    def test_noriben_test_dir_in_file_events(self):
+        self.assertTrue(any('NoribenTest' in l for l in self._file_lines()))
 
     def test_file_create_event_present(self):
         creates = [l for l in self._file_lines() if l.startswith('[CreateFile]')]
@@ -160,9 +160,9 @@ class UnitTesterRegistryTests(unittest.TestCase):
     def test_registry_events_present(self):
         self.assertGreater(len(self._reg_lines()), 0)
 
-    def test_noriben_trigger_key_in_registry_events(self):
-        self.assertTrue(any('NoribenTrigger' in l for l in self._reg_lines()),
-                        'NoribenTrigger registry key not found in:\n' +
+    def test_noriben_test_key_in_registry_events(self):
+        self.assertTrue(any('NoribenTest' in l for l in self._reg_lines()),
+                        'NoribenTest registry key not found in:\n' +
                         '\n'.join(self._reg_lines()))
 
     def test_reg_set_value_present(self):
@@ -201,7 +201,7 @@ class UnitTesterNetworkTests(unittest.TestCase):
                            '\n'.join(self._net_lines()))
 
     def test_dns_udp_traffic_captured(self):
-        # GetHostAddresses("example.com") triggers UDP to :53
+        # GetHostAddresses("example.com") sends UDP to :53
         udp = [l for l in self._net_lines() if l.startswith('[UDP]')]
         self.assertTrue(any(':53' in l for l in udp),
                         'Expected UDP :53 traffic, got:\n' + '\n'.join(udp))
@@ -232,13 +232,59 @@ class UnitTesterNetworkTests(unittest.TestCase):
 
 @unittest.skipUnless(os.path.exists(_UNIT_TESTER_CSV),
                      'unit_tester.csv not present — run Sample/unit_tester.ps1 in a VM first')
+class UnitTesterModuleLoadTests(unittest.TestCase):
+    """Load Image events from unusual (non-system) paths.
+
+    Block 12 of unit_tester.ps1 compiles NoribenTest.dll into %TEMP%\\NoribenTest\\
+    and loads it via reflection, producing a Load Image event outside the standard
+    dll_approvelist paths.  These tests require a CSV generated from the v1.2+
+    unit_tester.ps1; the section-header and json-key tests pass against any CSV.
+    """
+
+    def _module_lines(self):
+        report, _, _ = _parse()
+        return [l for l in report if l.startswith('[LoadImage]')]
+
+    def test_module_loads_section_present(self):
+        report, _, _ = _parse()
+        self.assertTrue(any('Module Loads:' in l for l in report))
+
+    def test_json_modules_key_present(self):
+        _, _, json_data = _parse()
+        self.assertIn('modules', json_data)
+
+    def test_noribentest_dll_load_captured(self):
+        # Requires CSV from unit_tester.ps1 v1.2+ (block 12)
+        self.assertTrue(
+            any('NoribenTest.dll' in l for l in self._module_lines()),
+            'NoribenTest.dll [LoadImage] not found — re-run unit_tester.ps1 in VM:\n'
+            + '\n'.join(self._module_lines() or ['(no [LoadImage] events)'])
+        )
+
+    def test_noribentest_dll_in_json_modules(self):
+        _, _, json_data = _parse()
+        paths = [m['path'] for m in json_data['modules']]
+        self.assertTrue(any('NoribenTest.dll' in p for p in paths),
+                        'NoribenTest.dll not found in json modules:\n' + '\n'.join(paths))
+
+    def test_system32_dlls_not_in_module_loads(self):
+        # dll_approvelist should suppress standard system DLLs
+        self.assertFalse(
+            any(r'\System32\\' in l or '/System32/' in l for l in self._module_lines()),
+            'System32 DLL leaked through dll_approvelist:\n' +
+            '\n'.join(l for l in self._module_lines() if 'System32' in l)
+        )
+
+
+@unittest.skipUnless(os.path.exists(_UNIT_TESTER_CSV),
+                     'unit_tester.csv not present — run Sample/unit_tester.ps1 in a VM first')
 class UnitTesterReportStructureTests(unittest.TestCase):
     """Overall report completeness."""
 
     def test_all_section_headers_present(self):
         report, _, _ = _parse()
         text = '\n'.join(report)
-        for section in ('Processes Created:', 'File Activity:',
+        for section in ('Processes Created:', 'Module Loads:', 'File Activity:',
                         'Registry Activity:', 'Network Traffic:', 'Unique Hosts:'):
             self.assertIn(section, text)
 

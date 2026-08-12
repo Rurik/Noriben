@@ -31,6 +31,7 @@ file_approvelist =
 reg_approvelist =
 net_approvelist =
 hash_approvelist =
+dll_approvelist =
 """
 
 

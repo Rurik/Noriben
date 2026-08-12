@@ -209,6 +209,7 @@ file_approvelist = ''
 cmd_approvelist = ''
 net_approvelist = ''
 hash_approvelist = ''
+dll_approvelist = ''
 path_general_list = []
 
 valid_hash_types = ['MD5', 'SHA1', 'SHA256']
@@ -260,7 +261,7 @@ def read_config(config_filename):
     """
     global config, use_virustotal
     global global_approvelist, reg_approvelist, file_approvelist, cmd_approvelist
-    global net_approvelist, hash_approvelist
+    global net_approvelist, hash_approvelist, dll_approvelist
 
     config = {}
     try:
@@ -283,6 +284,7 @@ def read_config(config_filename):
         cmd_approvelist = file_config.get('Filters', 'cmd_approvelist').replace('\n','').split(',')
         net_approvelist = file_config.get('Filters', 'net_approvelist').replace('\n','').split(',')
         hash_approvelist = file_config.get('Filters', 'hash_approvelist').replace('\n','').split(',')
+        dll_approvelist = file_config.get('Filters', 'dll_approvelist').replace('\n','').split(',')
 
         # Throwing a large one in here to ignore anything that the configured procmon executable creates
         global_approvelist.append(config['procmon'])
@@ -1016,12 +1018,14 @@ def parse_csv(csv_file, report, timeline, process_tree=False):
     file_output = []
     reg_output = []
     net_output = []
+    module_output = []
     error_output = []
     remote_servers = []
     json_processes = []
     json_files = []
     json_registry = []
     json_network = []
+    json_modules = []
     pid_exits = {}   # child PID (str) → raw exit code int, non-zero only
     if config['yara_folder'] and has_yara:
         yara_rules = yara_import_rules(config['yara_folder'])
@@ -1339,6 +1343,26 @@ def parse_csv(csv_file, report, timeline, process_tree=False):
                             'server': protocol_replace(server)
                         })
 
+            elif field['Operation'] == 'Load Image' and field['Result'] == 'SUCCESS':
+                if not approvelist_scan(dll_approvelist, {'Path': field['Path']}):
+                    path = field['Path']
+                    log_debug('[*] LoadImage: {}'.format(path))
+                    if config['generalize_paths']:
+                        path = generalize_var(path)
+                    outputtext = '[LoadImage] {}:{} > {}'.format(field['Process Name'], field['PID'], path)
+                    if outputtext not in module_output:
+                        tl_text = '{},Module,LoadImage,{},{},{}'.format(date_stamp, field['Process Name'],
+                                                                        field['PID'], path)
+                        module_output.append(outputtext)
+                        timeline.append(tl_text)
+                        json_modules.append({
+                            'timestamp': date_stamp,
+                            'operation': 'LoadImage',
+                            'process': field['Process Name'],
+                            'pid': field['PID'],
+                            'path': path
+                        })
+
             elif field['Operation'] == 'Process Exit':
                 exit_str = field['Detail'].split('Exit Status: ')[1].split(',')[0].strip()
                 code = int(exit_str)
@@ -1402,6 +1426,13 @@ def parse_csv(csv_file, report, timeline, process_tree=False):
             report.append('[No process creation events detected]')
 
     report.append('')
+    report.append('Module Loads:')
+    report.append('==================')
+    log_debug('[*] Writing {} Module Load Events results to report'.format(len(module_output)))
+    for event in module_output:
+        report.append(event)
+
+    report.append('')
     report.append('File Activity:')
     report.append('==================')
     log_debug('[*] Writing {} Filesystem Events results to report'.format(len(file_output)))
@@ -1459,6 +1490,7 @@ def parse_csv(csv_file, report, timeline, process_tree=False):
             'analysis_time_seconds': round(time_analyze, 2)
         },
         'processes': json_processes,
+        'modules': json_modules,
         'files': json_files,
         'registry': json_registry,
         'network': json_network,
