@@ -80,6 +80,16 @@ optional arguments:
   -d, --debug           Enable debugging
 </pre>
 
+## Integration Testing with unit_tester.ps1
+
+Run from the Noriben directory in a Windows VM with Procmon module loads enabled:
+
+```powershell
+python.exe Noriben.py -t 60 --cmd "powershell.exe -ExecutionPolicy Bypass -NonInteractive -NoProfile -File tests\unit_tester.ps1"
+```
+
+---
+
 ## Notable contributors
 
 Brian Baskin

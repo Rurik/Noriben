@@ -1425,12 +1425,12 @@ def parse_csv(csv_file, report, timeline, process_tree=False):
         else:
             report.append('[No process creation events detected]')
 
-    report.append('')
-    report.append('Module Loads:')
-    report.append('==================')
     log_debug('[*] Writing {} Module Load Events results to report'.format(len(module_output)))
-    for event in module_output:
-        report.append(event)
+    if module_output:
+        report.append('')
+        report.append('Module Loads:')
+        report.append('==================')
+        report.extend(module_output)
 
     report.append('')
     report.append('File Activity:')

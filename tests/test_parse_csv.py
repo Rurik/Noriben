@@ -78,7 +78,7 @@ class ReportStructureTests(unittest.TestCase):
         report, _, _ = _run([])
         text = '\n'.join(report)
         self.assertIn('Processes Created:', text)
-        self.assertIn('Module Loads:', text)
+        self.assertNotIn('Module Loads:', text)
         self.assertIn('File Activity:', text)
         self.assertIn('Registry Activity:', text)
         self.assertIn('Network Traffic:', text)
@@ -484,6 +484,7 @@ class ModuleLoadTests(unittest.TestCase):
         report, _, json_data = _run([self._load_image_row()])
         lines = [l for l in report if '[LoadImage]' in l]
         self.assertEqual(len(lines), 0)
+        self.assertNotIn('Module Loads:', report)
         self.assertEqual(json_data['modules'], [])
 
     def test_system32_path_suppressed_by_default_approvelist(self):
@@ -498,10 +499,11 @@ class ModuleLoadTests(unittest.TestCase):
         text = '\n'.join(report)
         self.assertIn('Module Loads:', text)
 
-    def test_module_loads_section_present_even_when_empty(self):
-        report, _, _ = _run([])
+    def test_module_loads_section_omitted_when_empty(self):
+        report, _, json_data = _run([])
         text = '\n'.join(report)
-        self.assertIn('Module Loads:', text)
+        self.assertNotIn('Module Loads:', text)
+        self.assertEqual(json_data['modules'], [])
 
     def test_failed_load_ignored(self):
         # Only SUCCESS results should be captured

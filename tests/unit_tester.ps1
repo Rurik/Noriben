@@ -139,16 +139,25 @@ try {
 #     the CLR loader and does not generate that event.
 # -----------------------------------------------------------------------
 Write-Host "[NoribenTest] 12. Module Load from unusual path"
+$ModuleLoadFailed = $false
 try {
     # Copy a small, stable system DLL to the test directory (unusual path)
     $dllDst = "$TestDir\NoribenTest.dll"
-    Copy-Item "$env:SystemRoot\System32\version.dll" $dllDst -Force
+    Copy-Item "$env:SystemRoot\System32\version.dll" $dllDst -Force -ErrorAction Stop
 
     # Call LoadLibrary() natively via P/Invoke to guarantee a Load Image event
     $sig = '[DllImport("kernel32.dll", SetLastError=true, CharSet=CharSet.Auto)] public static extern IntPtr LoadLibrary(string lpFileName);'
-    $loader = Add-Type -MemberDefinition $sig -Name "NoribenLoader" -Namespace "NoribenTest" -PassThru
-    $loader[0]::LoadLibrary($dllDst) | Out-Null
-} catch {}
+    $loader = Add-Type -MemberDefinition $sig -Name "NoribenLoader" -Namespace "NoribenTest" -PassThru -ErrorAction Stop
+    $moduleHandle = $loader[0]::LoadLibrary($dllDst)
+    if ($moduleHandle -eq [IntPtr]::Zero) {
+        $win32Error = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        throw (New-Object System.ComponentModel.Win32Exception -ArgumentList $win32Error)
+    }
+    Write-Host "[NoribenTest] LoadLibrary succeeded: $dllDst"
+} catch {
+    $ModuleLoadFailed = $true
+    Write-Host "[NoribenTest] LoadLibrary failed: $_"
+}
 
 # -----------------------------------------------------------------------
 # Cleanup
@@ -156,4 +165,5 @@ try {
 Remove-Item -Path $TestDir -Recurse -Force
 
 Write-Host "[NoribenTest] Unit tester script complete"
+if ($ModuleLoadFailed) { exit 1 }
 exit 0
