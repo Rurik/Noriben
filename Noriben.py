@@ -8,6 +8,12 @@
 # clean text report and timeline
 #
 # Changelog:
+# Version 2.1.0 - 17 Sep 2026
+#       Added process graph tree in addition to text output
+#       Added DLL Module load tracking
+#       Added exit codes (and meanings) for tracked processes
+#       Added optional JSON output
+#       Added extensive unit testing
 # Version 2.0.4 - 26 Mar 2026
 #       Fixed bug of procmon variable referenced before set
 #       Fixed server hostname parsing
@@ -173,25 +179,8 @@ except ImportError:
     configparser = None
 
 # Below are global internal variables. Do not edit these. ################
-__VERSION__ = '2.0.5'
+__VERSION__ = '2.1.0'
 
-# NTSTATUS / common exit codes worth annotating. Add entries freely; keys are
-# unsigned 32-bit ints. Negative Procmon values (e.g. -1) are masked to their
-# unsigned equivalent before lookup.
-NTSTATUS_NAMES = {
-    0x00000001: 'Generic Error',
-    0xC0000005: 'Access Violation',
-    0xC000001D: 'Illegal Instruction',
-    0xC0000022: 'Access Denied',
-    0xC000013A: 'Ctrl+C Exit',
-    0xC0000017: 'No Memory',
-    0xC0000025: 'Noncontinuable Exception',
-    0xC0000094: 'Integer Divide by Zero',
-    0xC00000FD: 'Stack Overflow',
-    0xC0000409: 'Stack Buffer Overrun',
-    0x40010004: 'Debug Terminate Process',
-    0xFFFFFFFF: 'Abnormal Termination',
-}
 use_pmc = False
 use_virustotal = False
 vt_results = {}
@@ -235,6 +224,22 @@ noriben_errors = {
     50: 'General error'
 }
 
+# Notable NTSTATUS common exit codes.
+# Ref: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-erref
+NTSTATUS_NAMES = {
+    0x00000001: 'Generic Error',
+    0xC0000005: 'Access Violation',
+    0xC000001D: 'Illegal Instruction',
+    0xC0000022: 'Access Denied',
+    0xC000013A: 'Ctrl+C Exit',
+    0xC0000017: 'No Memory',
+    0xC0000025: 'Noncontinuable Exception',
+    0xC0000094: 'Integer Divide by Zero',
+    0xC00000FD: 'Stack Overflow',
+    0xC0000409: 'Stack Buffer Overrun',
+    0x40010004: 'Debug Terminate Process',
+    0xFFFFFFFF: 'Abnormal Termination',
+}
 
 def get_error(code):
     """
@@ -1425,10 +1430,10 @@ def parse_csv(csv_file, report, timeline, process_tree=False):
         else:
             report.append('[No process creation events detected]')
 
-    log_debug('[*] Writing {} Module Load Events results to report'.format(len(module_output)))
+    log_debug('[*] Writing {} DLL Load Events results to report'.format(len(module_output)))
     if module_output:
         report.append('')
-        report.append('Module Loads:')
+        report.append('DLL Loads:')
         report.append('==================')
         report.extend(module_output)
 
