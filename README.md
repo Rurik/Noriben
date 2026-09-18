@@ -69,6 +69,7 @@ optional arguments:
   --hashtype {MD5,SHA1,SHA256}
                         Specify hash type
   --headless            Do not open results on VM after processing
+  --process_tree        Add an ASCII process tree after created processes
   -t TIMEOUT, --timeout TIMEOUT
                         Number of seconds to collect activity
   --output OUTPUT       Folder to store output files
@@ -78,6 +79,16 @@ optional arguments:
   --cmd CMD             Command line to execute (in quotes)
   -d, --debug           Enable debugging
 </pre>
+
+## Integration Testing with unit_tester.ps1
+
+Run from the Noriben directory in a Windows VM with Procmon module loads enabled:
+
+```powershell
+python.exe Noriben.py -t 60 --cmd "powershell.exe -ExecutionPolicy Bypass -NonInteractive -NoProfile -File tests\unit_tester.ps1"
+```
+
+---
 
 ## Notable contributors
 
